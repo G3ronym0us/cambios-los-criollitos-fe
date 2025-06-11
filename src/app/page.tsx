@@ -71,7 +71,7 @@ const ExchangeRatesDashboard = () => {
     try {
       setLoading(true);
       setError(undefined);
-      const response = await fetch('http://localhost:8000/api/rates');
+      const response = await fetch(process.env.NEXT_PUBLIC_API_URL + '/api/rates');
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
