@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import CurrencyCalculator from '../components/CurrencyCalculator';
 
 // Iconos SVG
 const RefreshIcon = ({ className, spinning = false }: { className: string, spinning: boolean }) => (
@@ -33,12 +34,22 @@ const ArrowRightIcon = ({ className }: { className: string }) => (
   </svg>
 );
 
+enum Currency {
+  VES = "VES",
+  COP = "COP",
+  BRL = "BRL",
+  USDT = "USDT",
+  ZELLE = "ZELLE",
+  PAYPAL = "PAYPAL",
+}
+
 interface Rate {
   key: string;
-  from: string;
-  to: string;
+  from_currency: Currency;
+  to_currency: Currency;
   value: number;
   type: string;
+  inverse: boolean;
 }
 
 interface CurrencyConfig {
@@ -51,19 +62,19 @@ interface CurrencyConfig {
 }
 
 const ExchangeRatesDashboard = () => {
-  const [rates, setRates] = useState<Record<string, number>>({});
+  const [rates, setRates] = useState<Rate[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<string>();
   const [error, setError] = useState<string>();
 
   // Configuración de monedas y sus símbolos
   const currencyConfig: CurrencyConfig = {
-    'usdt': { name: 'USDT', symbol: '$', color: 'bg-green-500', textColor: 'text-green-600' },
-    'ves': { name: 'Bolívares', symbol: 'Bs', color: 'bg-yellow-500', textColor: 'text-yellow-600' },
-    'cop': { name: 'Pesos COP', symbol: 'COL$', color: 'bg-blue-500', textColor: 'text-blue-600' },
-    'brl': { name: 'Reales', symbol: 'R$', color: 'bg-purple-500', textColor: 'text-purple-600' },
-    'zelle': { name: 'Zelle', symbol: '$', color: 'bg-indigo-500', textColor: 'text-indigo-600' },
-    'paypal': { name: 'PayPal', symbol: '$', color: 'bg-cyan-500', textColor: 'text-cyan-600' }
+    [Currency.USDT]: { name: 'USDT', symbol: '$', color: 'bg-green-500', textColor: 'text-green-600' },
+    [Currency.VES]: { name: 'Bolívares', symbol: 'Bs', color: 'bg-yellow-500', textColor: 'text-yellow-600' },
+    [Currency.COP]: { name: 'Pesos COP', symbol: 'COL$', color: 'bg-blue-500', textColor: 'text-blue-600' },
+    [Currency.BRL]: { name: 'Reales', symbol: 'R$', color: 'bg-purple-500', textColor: 'text-purple-600' },
+    [Currency.ZELLE]: { name: 'Zelle', symbol: '$', color: 'bg-indigo-500', textColor: 'text-indigo-600' },
+    [Currency.PAYPAL]: { name: 'PayPal', symbol: '$', color: 'bg-cyan-500', textColor: 'text-cyan-600' }
   };
 
   // Función para obtener datos del backend
@@ -127,19 +138,17 @@ const ExchangeRatesDashboard = () => {
       'Conversiones Cruzadas': []
     };
 
-    Object.entries(rates).forEach(([key, value]) => {
-      const [from, , to] = key.split('_');
-      
-      if (from === 'usdt') {
-        categories['USDT'].push({ key, from, to, value, type: 'sell' });
-      } else if (to === 'usdt') {
-        categories['USDT'].push({ key, from, to, value, type: 'buy' });
-      } else if (from === 'zelle') {
-        categories['Zelle'].push({ key, from, to, value, type: 'sell' });
-      } else if (from === 'paypal') {
-        categories['PayPal'].push({ key, from, to, value, type: 'sell' });
+    rates.forEach((rate, index) => {      
+      if (rate.from_currency === Currency.USDT) {
+        categories['USDT'].push({ key: index.toString(), from_currency: rate.from_currency, to_currency: rate.to_currency, value: rate.value, type: 'sell', inverse: rate.inverse });
+      } else if (rate.to_currency === Currency.USDT) {
+        categories['USDT'].push({ key: index.toString(), from_currency: rate.from_currency, to_currency: rate.to_currency, value: rate.value, type: 'buy', inverse: rate.inverse });
+      } else if (rate.from_currency === Currency.ZELLE || rate.to_currency === Currency.ZELLE) {
+        categories['Zelle'].push({ key: index.toString(), from_currency: rate.from_currency, to_currency: rate.to_currency, value: rate.value, type: 'sell', inverse: rate.inverse });
+      } else if (rate.from_currency === Currency.PAYPAL || rate.to_currency === Currency.PAYPAL) {
+        categories['PayPal'].push({ key: index.toString(), from_currency: rate.from_currency, to_currency: rate.to_currency, value: rate.value, type: 'sell', inverse: rate.inverse });
       } else {
-        categories['Conversiones Cruzadas'].push({ key, from, to, value, type: 'cross' });
+        categories['Conversiones Cruzadas'].push({ key: index.toString(), from_currency: rate.from_currency, to_currency: rate.to_currency, value: rate.value, type: 'cross', inverse: rate.inverse });
       }
     });
 
@@ -236,25 +245,7 @@ const ExchangeRatesDashboard = () => {
           </div>
         </div>
 
-        {/* Estadísticas rápidas */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="bg-white rounded-lg p-4 text-center shadow-sm border border-gray-100">
-            <div className="text-lg sm:text-2xl font-bold text-gray-900">{Object.keys(rates).length}</div>
-            <div className="text-xs sm:text-sm text-gray-600">Tasas Totales</div>
-          </div>
-          <div className="bg-white rounded-lg p-4 text-center shadow-sm border border-gray-100">
-            <div className="text-lg sm:text-2xl font-bold text-green-600">{rates.usdt_to_ves ? formatNumber(rates.usdt_to_ves) : 'N/A'}</div>
-            <div className="text-xs sm:text-sm text-gray-600">USDT → VES</div>
-          </div>
-          <div className="bg-white rounded-lg p-4 text-center shadow-sm border border-gray-100">
-            <div className="text-lg sm:text-2xl font-bold text-blue-600">{rates.usdt_to_cop ? formatNumber(rates.usdt_to_cop) : 'N/A'}</div>
-            <div className="text-xs sm:text-sm text-gray-600">USDT → COP</div>
-          </div>
-          <div className="bg-white rounded-lg p-4 text-center shadow-sm border border-gray-100">
-            <div className="text-lg sm:text-2xl font-bold text-purple-600">{rates.usdt_to_brl ? formatNumber(rates.usdt_to_brl) : 'N/A'}</div>
-            <div className="text-xs sm:text-sm text-gray-600">USDT → BRL</div>
-          </div>
-        </div>
+        <CurrencyCalculator rates={rates} />
 
         {/* Tasas por categorías */}
         <div className="space-y-6">
@@ -272,19 +263,19 @@ const ExchangeRatesDashboard = () => {
                 {/* Grid de tasas */}
                 <div className="p-4 sm:p-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {categoryRates.map(({ key, from, to, value, type }) => (
+                    {categoryRates.map(({ key, from_currency, to_currency, value, type, inverse }) => (
                       <div key={key} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all duration-200 hover:border-blue-300">
                         {/* Header del par */}
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-2">
-                            <div className={`w-3 h-3 rounded-full ${getCurrencyColor(from)}`}></div>
+                            <div className={`w-3 h-3 rounded-full ${getCurrencyColor(from_currency)}`}></div>
                             <span className="font-medium text-gray-900 text-sm sm:text-base">
-                              {getCurrencyName(from)}
+                              {getCurrencyName(from_currency)}
                             </span>
                             <ArrowRightIcon className="h-3 w-3 text-gray-400" />
-                            <div className={`w-3 h-3 rounded-full ${getCurrencyColor(to)}`}></div>
+                            <div className={`w-3 h-3 rounded-full ${getCurrencyColor(to_currency)}`}></div>
                             <span className="font-medium text-gray-900 text-sm sm:text-base">
-                              {getCurrencyName(to)}
+                              {getCurrencyName(to_currency)}
                             </span>
                           </div>
                           
@@ -302,7 +293,7 @@ const ExchangeRatesDashboard = () => {
                           </div>
                           
                           <div className="text-xs text-gray-500">
-                            1 {getCurrencyName(from)} = {getCurrencySymbol(to)}{formatNumber(value)} {getCurrencyName(to)}
+                            {inverse ? <span>1 {getCurrencyName(to_currency)} = {getCurrencySymbol(from_currency)}{formatNumber(value)} {getCurrencyName(from_currency)}</span> : <span>1 {getCurrencyName(from_currency)} = {getCurrencySymbol(to_currency)}{formatNumber(value)} {getCurrencyName(to_currency)}</span>}
                           </div>
                         </div>
                       </div>
