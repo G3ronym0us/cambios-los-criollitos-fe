@@ -78,7 +78,7 @@ const CurrencySelector: React.FC<CurrencySelectorProps> = ({
             >
               <option value="">Seleccionar moneda origen</option>
               {availableCurrencies.map((currency) => (
-                <option key={currency} value={currency}>
+                <option key={currency} value={currency} className="text-black">
                   {getCurrencySymbol(currency)} {getCurrencyName(currency)}
                 </option>
               ))}
@@ -112,7 +112,7 @@ const CurrencySelector: React.FC<CurrencySelectorProps> = ({
             >
               <option value="">Seleccionar moneda destino</option>
               {availableCurrencies.map((currency) => (
-                <option key={currency} value={currency}>
+                <option key={currency} value={currency} className="text-black">
                   {getCurrencySymbol(currency)} {getCurrencyName(currency)}
                 </option>
               ))}

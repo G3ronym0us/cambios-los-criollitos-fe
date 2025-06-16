@@ -76,7 +76,7 @@ const CurrencyInputFields: React.FC<CurrencyInputFieldsProps> = ({
           type="number" 
           value={Number(fromAmount).toFixed(Math.min(Math.max(0, (fromAmount?.toString().split('.')[1] || '').length), 2))}
           onChange={(e) => onFromAmountChange(e.target.value)}
-          className="w-full text-2xl font-bold bg-transparent border-0 focus:ring-0 focus:outline-none placeholder-gray-400"
+          className="w-full text-2xl font-bold bg-transparent border-0 focus:ring-0 focus:outline-none placeholder-gray-400 text-black"
           placeholder="0.00"
           min="0"
           step="0.01"
@@ -97,7 +97,7 @@ const CurrencyInputFields: React.FC<CurrencyInputFieldsProps> = ({
           type="number"
           value={Number(toAmount).toFixed(Math.min(Math.max(0, (toAmount?.toString().split('.')[1] || '').length), 2))}
           onChange={(e) => onToAmountChange(e.target.value)}
-          className="w-full text-2xl font-bold bg-transparent border-0 focus:ring-0 focus:outline-none placeholder-gray-400"
+          className="w-full text-2xl font-bold bg-transparent border-0 focus:ring-0 focus:outline-none placeholder-gray-400 text-black"
           placeholder="0.00"
           min="0"
           step="0.01"
