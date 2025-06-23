@@ -22,8 +22,8 @@ const CalculatorIcon = ({ className }: { className: string }) => (
 interface Rate {
   from_currency: string;
   to_currency: string;
-  value: number;
-  inverse: boolean;
+  rate: number;
+  inverse_percentage: boolean;
 }
 
 interface CurrencyConfig {
@@ -101,29 +101,29 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates }) => {
 
     if (directRate) {
       if (toAmount) {
-        const amount = directRate.inverse
-          ? toAmount * directRate.value
-          : toAmount / directRate.value;
+        const amount = directRate.inverse_percentage
+          ? toAmount * directRate.rate
+          : toAmount / directRate.rate;
         setCalculator({
           fromCurrency,
           toCurrency,
           amount: amount,
           result: toAmount,
-          rate: directRate.value,
+          rate: directRate.rate,
         });
         return;
       }
 
       if (fromAmount) {
-        const result = directRate.inverse
-          ? fromAmount / directRate.value
-          : fromAmount * directRate.value;
+        const result = directRate.inverse_percentage
+          ? fromAmount / directRate.rate
+          : fromAmount * directRate.rate;
         setCalculator({
           fromCurrency,
           toCurrency,
           amount: fromAmount,
           result: result,
-          rate: directRate.value,
+          rate: directRate.rate,
         });
         return;
       }
@@ -145,15 +145,15 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates }) => {
 
       if (directRate) {
         if (1) {
-          const result = directRate.inverse
-            ? 1 / directRate.value
-            : 1 * directRate.value;
+          const result = directRate.inverse_percentage
+            ? 1 / directRate.rate
+            : 1 * directRate.rate;
           setCalculator({
             fromCurrency: "ZELLE",
             toCurrency: "VES",
             amount: 1,
             result: result,
-            rate: directRate.value,
+            rate: directRate.rate,
           });
           return;
         }

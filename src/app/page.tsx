@@ -47,9 +47,9 @@ interface Rate {
   key: string;
   from_currency: Currency;
   to_currency: Currency;
-  value: number;
+  rate: number;
   type: string;
-  inverse: boolean;
+  inverse_percentage: boolean;
 }
 
 interface CurrencyConfig {
@@ -140,15 +140,15 @@ const ExchangeRatesDashboard = () => {
 
     rates.forEach((rate, index) => {      
       if (rate.from_currency === Currency.USDT) {
-        categories['USDT'].push({ key: index.toString(), from_currency: rate.from_currency, to_currency: rate.to_currency, value: rate.value, type: 'sell', inverse: rate.inverse });
+        categories['USDT'].push({ key: index.toString(), from_currency: rate.from_currency, to_currency: rate.to_currency, rate: rate.rate, type: 'sell', inverse_percentage: rate.inverse_percentage });
       } else if (rate.to_currency === Currency.USDT) {
-        categories['USDT'].push({ key: index.toString(), from_currency: rate.from_currency, to_currency: rate.to_currency, value: rate.value, type: 'buy', inverse: rate.inverse });
+        categories['USDT'].push({ key: index.toString(), from_currency: rate.from_currency, to_currency: rate.to_currency, rate: rate.rate, type: 'buy', inverse_percentage: rate.inverse_percentage });
       } else if (rate.from_currency === Currency.ZELLE || rate.to_currency === Currency.ZELLE) {
-        categories['Zelle'].push({ key: index.toString(), from_currency: rate.from_currency, to_currency: rate.to_currency, value: rate.value, type: 'sell', inverse: rate.inverse });
+        categories['Zelle'].push({ key: index.toString(), from_currency: rate.from_currency, to_currency: rate.to_currency, rate: rate.rate, type: 'sell', inverse_percentage: rate.inverse_percentage });
       } else if (rate.from_currency === Currency.PAYPAL || rate.to_currency === Currency.PAYPAL) {
-        categories['PayPal'].push({ key: index.toString(), from_currency: rate.from_currency, to_currency: rate.to_currency, value: rate.value, type: 'sell', inverse: rate.inverse });
+        categories['PayPal'].push({ key: index.toString(), from_currency: rate.from_currency, to_currency: rate.to_currency, rate: rate.rate, type: 'sell', inverse_percentage: rate.inverse_percentage });
       } else {
-        categories['Conversiones Cruzadas'].push({ key: index.toString(), from_currency: rate.from_currency, to_currency: rate.to_currency, value: rate.value, type: 'cross', inverse: rate.inverse });
+        categories['Conversiones Cruzadas'].push({ key: index.toString(), from_currency: rate.from_currency, to_currency: rate.to_currency, rate: rate.rate, type: 'cross', inverse_percentage: rate.inverse_percentage });
       }
     });
 
@@ -263,7 +263,7 @@ const ExchangeRatesDashboard = () => {
                 {/* Grid de tasas */}
                 <div className="p-4 sm:p-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {categoryRates.map(({ key, from_currency, to_currency, value, type, inverse }) => (
+                    {categoryRates.map(({ key, from_currency, to_currency, rate, type, inverse_percentage }) => (
                       <div key={key} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all duration-200 hover:border-blue-300">
                         {/* Header del par */}
                         <div className="flex items-center justify-between mb-3">
@@ -288,12 +288,12 @@ const ExchangeRatesDashboard = () => {
                           <div className="flex justify-between items-center">
                             <span className="text-xs sm:text-sm text-gray-600">Tasa:</span>
                             <span className="text-lg sm:text-xl font-bold text-gray-900">
-                              {formatNumber(value)}
+                              {formatNumber(rate)}
                             </span>
                           </div>
                           
                           <div className="text-xs text-gray-500">
-                            {inverse ? <span>1 {getCurrencyName(to_currency)} = {getCurrencySymbol(from_currency)}{formatNumber(value)} {getCurrencyName(from_currency)}</span> : <span>1 {getCurrencyName(from_currency)} = {getCurrencySymbol(to_currency)}{formatNumber(value)} {getCurrencyName(to_currency)}</span>}
+                              {inverse_percentage ? <span>1 {getCurrencyName(to_currency)} = {getCurrencySymbol(from_currency)}{formatNumber(rate)} {getCurrencyName(from_currency)}</span> : <span>1 {getCurrencyName(from_currency)} = {getCurrencySymbol(to_currency)}{formatNumber(rate)} {getCurrencyName(to_currency)}</span>}
                           </div>
                         </div>
                       </div>
