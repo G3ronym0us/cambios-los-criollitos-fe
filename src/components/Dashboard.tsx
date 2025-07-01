@@ -1,37 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import CurrencyCalculator from '../components/CurrencyCalculator';
-import CategorySection from '../components/CategorySection';
-import { Currency, Rate, CurrencyConfig, IconProps } from '@/types/currency';
+import { useAuth } from '@/contexts/AuthContext';
+import { Currency, Rate, CurrencyConfig } from '@/types/currency';
+import { LogOut, RefreshCw, Clock, X, ArrowRight } from 'lucide-react';
+import CategorySection from './CategorySection';
 
-// Iconos SVG
-const RefreshIcon = ({ className, spinning = false }: IconProps) => (
-  <svg className={`${className} ${spinning ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-  </svg>
-);
-
-
-const ClockIcon = ({ className }: { className: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
-
-const ArrowRightIcon = ({ className }: { className: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-  </svg>
-);
-
-const XIcon = ({ className }: { className: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-  </svg>
-);
-
-const ExchangeRatesDashboard = () => {
+export const Dashboard: React.FC = () => {
+  const { user, logout } = useAuth();
   const [rates, setRates] = useState<Rate[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<string>();
@@ -40,7 +16,6 @@ const ExchangeRatesDashboard = () => {
   const [editingRate, setEditingRate] = useState<Rate | null>(null);
   const [modalForm, setModalForm] = useState({ rate: '' });
 
-  // Configuración de monedas y sus símbolos
   const currencyConfig: CurrencyConfig = {
     [Currency.USDT]: { name: 'USDT', symbol: '$', color: 'bg-green-500', textColor: 'text-green-600' },
     [Currency.VES]: { name: 'Bolívares', symbol: 'Bs', color: 'bg-yellow-500', textColor: 'text-yellow-600' },
@@ -50,7 +25,6 @@ const ExchangeRatesDashboard = () => {
     [Currency.PAYPAL]: { name: 'PayPal', symbol: '$', color: 'bg-cyan-500', textColor: 'text-cyan-600' }
   };
 
-  // Función para obtener datos del backend
   const fetchRates = async () => {
     try {
       setLoading(true);
@@ -79,31 +53,24 @@ const ExchangeRatesDashboard = () => {
     }
   };
 
-  // Función para refrescar datos manualmente
   const refreshData = async () => {
     try {
       setLoading(true);
-      // Intentar hacer scraping primero
       await fetch('http://localhost:8000/api/scrape', { method: 'POST' });
       await fetchRates();
     } catch (error) {
       console.error('Error refreshing data:', error);
-      // Si falla el scraping, al menos intentar obtener los datos actuales
       await fetchRates();
     }
   };
 
-  // Cargar datos al iniciar
   useEffect(() => {
     fetchRates();
-    // Refrescar cada 2 minutos
     const interval = setInterval(fetchRates, 2 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Función para formatear las tasas por categorías
   const formatRatesByCategory = () => {
-    
     const categories: Record<string, Rate[]> = {
       'USDT': [],
       'Zelle': [],
@@ -128,7 +95,6 @@ const ExchangeRatesDashboard = () => {
     return categories;
   };
 
-  // Función para formatear números
   const formatNumber = (num: number) => {
     if (!num) {
       return '0.00';
@@ -139,13 +105,11 @@ const ExchangeRatesDashboard = () => {
     });
   };
 
-  // Función para obtener el nombre completo de la moneda
   const getCurrencyName = (code: string) => {
     return currencyConfig[code]?.name || code.toUpperCase();
   };
 
 
-  // Función para obtener color de la moneda
   const getCurrencyColor = (code: string) => {
     return currencyConfig[code]?.color || 'bg-gray-500';
   };
@@ -192,8 +156,8 @@ const ExchangeRatesDashboard = () => {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
         <div className="text-center">
-          <RefreshIcon className="h-12 w-12 text-blue-600 mx-auto mb-4" spinning={true} />
-          <p className="text-xl text-gray-600">Cargando tasas de cambio...</p>
+          <RefreshCw className="h-12 w-12 text-blue-600 mx-auto mb-4 animate-spin" />
+          <p className="text-xl text-gray-600">Cargando dashboard...</p>
         </div>
       </div>
     );
@@ -219,38 +183,60 @@ const ExchangeRatesDashboard = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 sm:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         
-        {/* Header */}
-        <div className="text-center space-y-4">
-          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900">
-            💱 Tasas de Cambio P2P
-          </h1>
-          <p className="text-base sm:text-lg text-gray-600">
-            Tasas actualizadas desde Binance P2P
-          </p>
-          
-          {/* Controles */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+        {/* Header con información del admin */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+                💱 Dashboard de Administrador
+              </h1>
+              <p className="text-gray-600">
+                Bienvenido, {user?.full_name} | {user?.email}
+              </p>
+            </div>
             <button
-              onClick={refreshData}
-              disabled={loading}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg transition-colors w-full sm:w-auto"
+              onClick={logout}
+              className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
             >
-              <RefreshIcon className="h-4 w-4" spinning={loading} />
-              {loading ? 'Actualizando...' : 'Actualizar Tasas'}
+              <LogOut className="h-4 w-4" />
+              Cerrar Sesión
             </button>
-            
-            {lastUpdate && (
-              <div className="flex items-center gap-1 text-sm text-gray-500">
-                <ClockIcon className="h-4 w-4" />
-                <span className="hidden sm:inline">Última actualización:</span>
-                <span className="sm:hidden">Actualizado:</span>
-                <span className="font-medium">{lastUpdate}</span>
-              </div>
-            )}
           </div>
         </div>
 
-        <CurrencyCalculator rates={rates} />
+        {/* Controles */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 mb-1">
+                Tasas de Cambio P2P
+              </h2>
+              <p className="text-gray-600">
+                Datos actualizados desde Binance P2P
+              </p>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+              <button
+                onClick={refreshData}
+                disabled={loading}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg transition-colors w-full sm:w-auto"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                {loading ? 'Actualizando...' : 'Actualizar Tasas'}
+              </button>
+              
+              {lastUpdate && (
+                <div className="flex items-center gap-1 text-sm text-gray-500">
+                  <Clock className="h-4 w-4" />
+                  <span className="hidden sm:inline">Última actualización:</span>
+                  <span className="sm:hidden">Actualizado:</span>
+                  <span className="font-medium">{lastUpdate}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
 
         {/* Tasas por categorías */}
         <div className="space-y-6">
@@ -268,13 +254,13 @@ const ExchangeRatesDashboard = () => {
 
         {/* Footer */}
         <div className="text-center py-6 text-gray-500 text-sm">
-          <p>© 2024 Sistema de Tasas P2P | Datos desde Binance P2P API</p>
+          <p>© 2024 Sistema de Tasas P2P | Panel de Administración</p>
         </div>
       </div>
 
       {/* Modal para editar tasa */}
       {isModalOpen && editingRate && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
             {/* Header del modal */}
             <div className="flex items-center justify-between p-6 border-b">
@@ -285,7 +271,7 @@ const ExchangeRatesDashboard = () => {
                 onClick={handleCloseModal}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
               >
-                <XIcon className="h-6 w-6" />
+                <X className="h-6 w-6" />
               </button>
             </div>
 
@@ -298,7 +284,7 @@ const ExchangeRatesDashboard = () => {
                   <span className="font-medium text-gray-900">
                     {getCurrencyName(editingRate.from_currency)}
                   </span>
-                  <ArrowRightIcon className="h-3 w-3 text-gray-400" />
+                  <ArrowRight className="h-3 w-3 text-gray-400" />
                   <div className={`w-3 h-3 rounded-full ${getCurrencyColor(editingRate.to_currency)}`}></div>
                   <span className="font-medium text-gray-900">
                     {getCurrencyName(editingRate.to_currency)}
@@ -347,5 +333,3 @@ const ExchangeRatesDashboard = () => {
     </div>
   );
 };
-
-export default ExchangeRatesDashboard;
