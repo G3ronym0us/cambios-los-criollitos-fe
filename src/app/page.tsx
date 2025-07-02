@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useAuth } from '@/contexts/AuthContext';
 import CurrencyCalculator from '../components/CurrencyCalculator';
 import CategorySection from '../components/CategorySection';
 import { Currency, Rate, CurrencyConfig, IconProps } from '@/types/currency';
@@ -32,6 +34,7 @@ const XIcon = ({ className }: { className: string }) => (
 );
 
 const ExchangeRatesDashboard = () => {
+  const { user } = useAuth();
   const [rates, setRates] = useState<Rate[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<string>();
@@ -238,6 +241,15 @@ const ExchangeRatesDashboard = () => {
               <RefreshIcon className="h-4 w-4" spinning={loading} />
               {loading ? 'Actualizando...' : 'Actualizar Tasas'}
             </button>
+            
+            {user && (user.role === 'ROOT' || user.role === 'MODERATOR') && (
+              <Link
+                href="/admin"
+                className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors w-full sm:w-auto"
+              >
+                Administración
+              </Link>
+            )}
             
             {lastUpdate && (
               <div className="flex items-center gap-1 text-sm text-gray-500">

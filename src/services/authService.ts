@@ -1,7 +1,7 @@
 import { LoginCredentials, RegisterData, User, AuthResponse, ApiResponse } from '@/types/auth';
 
 export class AuthService {
-    private baseUrl = 'http://localhost:8000';
+    private baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   
     async login(credentials: LoginCredentials): Promise<ApiResponse<{ user: User; tokens: AuthResponse }>> {
       try {
