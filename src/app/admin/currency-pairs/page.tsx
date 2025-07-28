@@ -53,14 +53,6 @@ export default function CurrencyPairsAdminPage() {
   const [selectedPairForManualRate, setSelectedPairForManualRate] = useState<CurrencyPairData | null>(null);
   const [manualRateLoading, setManualRateLoading] = useState(false);
 
-  useEffect(() => {
-    Promise.all([
-      loadCurrencyPairs(),
-      loadCurrencies(),
-      loadStats()
-    ]);
-  }, [filters.activeOnly, filters.monitoredOnly, loadCurrencyPairs]);
-
   const loadCurrencyPairs = useCallback(async () => {
     setLoading(true);
     const result = await adminService.getCurrencyPairs(0, 100, filters.activeOnly, filters.monitoredOnly);
@@ -69,6 +61,14 @@ export default function CurrencyPairsAdminPage() {
     }
     setLoading(false);
   }, [filters.activeOnly, filters.monitoredOnly]);
+
+  useEffect(() => {
+    Promise.all([
+      loadCurrencyPairs(),
+      loadCurrencies(),
+      loadStats()
+    ]);
+  }, [filters.activeOnly, filters.monitoredOnly, loadCurrencyPairs]);
 
   const loadCurrencies = async () => {
     const result = await adminService.getCurrencies();

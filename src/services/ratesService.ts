@@ -1,18 +1,6 @@
 import Cookies from 'js-cookie';
 import { ApiResponse } from '@/types/auth';
-
-export interface ExchangeRateResponse {
-  id: number;
-  from_currency: string;
-  to_currency: string;
-  rate: number;
-  source: string;
-  is_active: boolean;
-  percentage: number | null;
-  inverse_percentage: boolean;
-  created_at: string;
-  updated_at: string | null;
-}
+import { ExchangeRateResponse } from '@/types/currency';
 
 export class RatesService {
   private baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
