@@ -31,3 +31,101 @@ export interface CurrencyAdminResponse {
   per_page: number;
   pages: number;
 }
+
+export interface CurrencyPairData {
+  id: number;
+  pair_symbol: string;
+  from_currency_id: number;
+  to_currency_id: number;
+  from_currency: CurrencyData;
+  to_currency: CurrencyData;
+  display_name: string;
+  description: string;
+  is_active: boolean;
+  is_monitored: boolean;
+  binance_tracked: boolean;
+  banks_to_track: string[] | null;
+  amount_to_track: number | null;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface CreateCurrencyPairData {
+  from_currency_id: number;
+  to_currency_id: number;
+  description: string;
+  is_active?: boolean;
+  is_monitored?: boolean;
+  binance_tracked?: boolean;
+  banks_to_track?: string[] | null;
+  amount_to_track?: number | null;
+}
+
+export interface UpdateCurrencyPairData {
+  description?: string;
+  is_active?: boolean;
+  is_monitored?: boolean;
+  binance_tracked?: boolean;
+  banks_to_track?: string[] | null;
+  amount_to_track?: number | null;
+}
+
+export interface CurrencyPairStatusData {
+  is_active: boolean;
+  is_monitored: boolean;
+  binance_tracked?: boolean;
+  banks_to_track?: string[] | null;
+  amount_to_track?: number | null;
+}
+
+export interface CurrencyPairsResponse {
+  pairs: CurrencyPairData[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
+export interface CurrencyPairStatsResponse {
+  total_pairs: number;
+  active_pairs: number;
+  monitored_pairs: number;
+  pairs_by_currency: Record<string, number>;
+}
+
+export interface BinanceTradeMethod {
+  identifier: string;
+  icon_url: string;
+  name?: string;
+  short_name?: string;
+  bg_color?: string;
+}
+
+export interface BinanceTradeMethodsResponse {
+  fiat_currency: string;
+  trade_methods: BinanceTradeMethod[];
+}
+
+export interface BinanceFilterConditionsResponse {
+  fiat_currency: string;
+  trade_methods: BinanceTradeMethod[];
+}
+
+export interface ManualRateData {
+  id: number;
+  from_currency: string;
+  to_currency: string;
+  rate: number;
+  source: string;
+  is_active: boolean;
+  percentage: number;
+  inverse_percentage: boolean;
+  created_at: string;
+  updated_at: string;
+  manual_rate: number | null;
+  is_manual: boolean;
+  automatic_rate: number | null;
+}
+
+export interface SetManualRateRequest {
+  manual_rate: number;
+}

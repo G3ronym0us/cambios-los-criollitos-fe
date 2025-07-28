@@ -189,6 +189,7 @@ const ExchangeRatesDashboard = () => {
     handleCloseModal();
   };
 
+
   const categorizedRates = formatRatesByCategory();
 
   if (loading && Object.keys(rates).length === 0) {
@@ -356,6 +357,7 @@ const ExchangeRatesDashboard = () => {
           </div>
         </div>
       )}
+
     </div>
   );
 };

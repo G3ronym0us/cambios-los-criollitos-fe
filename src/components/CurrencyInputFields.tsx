@@ -16,6 +16,9 @@ interface CurrencyInputFieldsProps {
   toCurrency: string;
   onFromAmountChange: (value: string) => void;
   onToAmountChange: (value: string) => void;
+  bcvRate?: number;
+  bcvAmount?: string;
+  onBCVAmountChange?: (value: string) => void;
 }
 
 const CurrencyInputFields: React.FC<CurrencyInputFieldsProps> = ({
@@ -24,7 +27,10 @@ const CurrencyInputFields: React.FC<CurrencyInputFieldsProps> = ({
   fromCurrency,
   toCurrency,
   onFromAmountChange,
-  onToAmountChange
+  onToAmountChange,
+  bcvRate,
+  bcvAmount,
+  onBCVAmountChange
 }) => {
   const currencyConfig: CurrencyConfig = {
     'USDT': { name: 'USDT', symbol: '$', color: 'text-green-700', bgColor: 'bg-green-100 border-green-300' },
@@ -51,6 +57,9 @@ const CurrencyInputFields: React.FC<CurrencyInputFieldsProps> = ({
     return currencyConfig[code]?.bgColor || 'bg-gray-100 border-gray-300';
   };
 
+  // Determinar si mostrar campo BCV
+  const shouldShowBCVField = bcvRate && (fromCurrency === 'VES' || toCurrency === 'VES');
+
   if (!fromCurrency || !toCurrency) {
     return (
       <div className="text-center py-8 text-gray-500">
@@ -60,49 +69,83 @@ const CurrencyInputFields: React.FC<CurrencyInputFieldsProps> = ({
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      
-      {/* Campo FROM */}
-      <div className={`p-4 rounded-lg border-2 ${getCurrencyBgColor(fromCurrency)} transition-all hover:shadow-md`}>
-        <div className="flex items-center justify-between mb-2">
-          <label className={`text-sm font-medium ${getCurrencyColor(fromCurrency)}`}>
-            {getCurrencyName(fromCurrency)}
-          </label>
-          <span className={`text-xs font-medium ${getCurrencyColor(fromCurrency)} px-2 py-1 rounded-full bg-white bg-opacity-50`}>
-            {getCurrencySymbol(fromCurrency)}
-          </span>
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        
+        {/* Campo FROM */}
+        <div className={`p-4 rounded-lg border-2 ${getCurrencyBgColor(fromCurrency)} transition-all hover:shadow-md`}>
+          <div className="flex items-center justify-between mb-2">
+            <label className={`text-sm font-medium ${getCurrencyColor(fromCurrency)}`}>
+              {getCurrencyName(fromCurrency)}
+            </label>
+            <span className={`text-xs font-medium ${getCurrencyColor(fromCurrency)} px-2 py-1 rounded-full bg-white bg-opacity-50`}>
+              {getCurrencySymbol(fromCurrency)}
+            </span>
+          </div>
+          <input
+            type="number" 
+            value={Number(fromAmount).toFixed(Math.min(Math.max(0, (fromAmount?.toString().split('.')[1] || '').length), 2))}
+            onChange={(e) => onFromAmountChange(e.target.value)}
+            className="w-full text-2xl font-bold bg-transparent border-0 focus:ring-0 focus:outline-none placeholder-gray-400 text-black"
+            placeholder="0.00"
+            min="0"
+            step="0.01"
+          />
         </div>
-        <input
-          type="number" 
-          value={Number(fromAmount).toFixed(Math.min(Math.max(0, (fromAmount?.toString().split('.')[1] || '').length), 2))}
-          onChange={(e) => onFromAmountChange(e.target.value)}
-          className="w-full text-2xl font-bold bg-transparent border-0 focus:ring-0 focus:outline-none placeholder-gray-400 text-black"
-          placeholder="0.00"
-          min="0"
-          step="0.01"
-        />
+
+        {/* Campo TO */}
+        <div className={`p-4 rounded-lg border-2 ${getCurrencyBgColor(toCurrency)} transition-all hover:shadow-md`}>
+          <div className="flex items-center justify-between mb-2">
+            <label className={`text-sm font-medium ${getCurrencyColor(toCurrency)}`}>
+              {getCurrencyName(toCurrency)}
+            </label>
+            <span className={`text-xs font-medium ${getCurrencyColor(toCurrency)} px-2 py-1 rounded-full bg-white bg-opacity-50`}>
+              {getCurrencySymbol(toCurrency)}
+            </span>
+          </div>
+          <input
+            type="number"
+            value={Number(toAmount).toFixed(Math.min(Math.max(0, (toAmount?.toString().split('.')[1] || '').length), 2))}
+            onChange={(e) => onToAmountChange(e.target.value)}
+            className="w-full text-2xl font-bold bg-transparent border-0 focus:ring-0 focus:outline-none placeholder-gray-400 text-black"
+            placeholder="0.00"
+            min="0"
+            step="0.01"
+          />
+        </div>
       </div>
 
-      {/* Campo TO */}
-      <div className={`p-4 rounded-lg border-2 ${getCurrencyBgColor(toCurrency)} transition-all hover:shadow-md`}>
-        <div className="flex items-center justify-between mb-2">
-          <label className={`text-sm font-medium ${getCurrencyColor(toCurrency)}`}>
-            {getCurrencyName(toCurrency)}
-          </label>
-          <span className={`text-xs font-medium ${getCurrencyColor(toCurrency)} px-2 py-1 rounded-full bg-white bg-opacity-50`}>
-            {getCurrencySymbol(toCurrency)}
-          </span>
+      {/* Campo BCV (solo cuando hay VES involucrado) */}
+      {shouldShowBCVField && (
+        <div className="p-4 rounded-lg border-2 bg-blue-100 border-blue-300 transition-all hover:shadow-md">
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-sm font-medium text-blue-700">
+              Equivalente en $BCV
+            </label>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-blue-600">
+                1 BCV = {bcvRate?.toFixed(2)} VES
+              </span>
+              <span className="text-xs font-medium text-blue-700 px-2 py-1 rounded-full bg-white bg-opacity-50">
+                $BCV
+              </span>
+            </div>
+          </div>
+          <input
+            type="number"
+            value={Number(bcvAmount).toFixed(Math.min(Math.max(0, (bcvAmount?.toString().split('.')[1] || '').length), 2))}
+            onChange={(e) => {
+              if (onBCVAmountChange) {
+                onBCVAmountChange(e.target.value);
+              }
+            }}
+            className="w-full text-2xl font-bold bg-transparent border-0 focus:ring-0 focus:outline-none placeholder-gray-400 text-black"
+            placeholder="0.00"
+            min="0"
+            step="0.01"
+          />
         </div>
-        <input
-          type="number"
-          value={Number(toAmount).toFixed(Math.min(Math.max(0, (toAmount?.toString().split('.')[1] || '').length), 2))}
-          onChange={(e) => onToAmountChange(e.target.value)}
-          className="w-full text-2xl font-bold bg-transparent border-0 focus:ring-0 focus:outline-none placeholder-gray-400 text-black"
-          placeholder="0.00"
-          min="0"
-          step="0.01"
-        />
-      </div>
+      )}
     </div>
   );
 };

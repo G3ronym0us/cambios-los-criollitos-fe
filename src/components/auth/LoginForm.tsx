@@ -72,9 +72,9 @@ export const LoginForm: React.FC = () => {
           text: '¡Bienvenido Administrador!'
         });
         
-        // Redirigir al dashboard después de login exitoso
+        // Redirigir al admin después de login exitoso
         setTimeout(() => {
-          router.push('/dashboard');
+          router.push('/admin');
         }, 1000);
       } else {
         setMessage({

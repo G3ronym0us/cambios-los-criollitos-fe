@@ -8,9 +8,9 @@ export function middleware(request: NextRequest) {
   // Rutas protegidas que requieren autenticación
   const protectedRoutes = ['/dashboard', '/admin'];
 
-  // Si está intentando acceder a login y ya tiene token, redirigir al dashboard
+  // Si está intentando acceder a login y ya tiene token, redirigir al admin
   if (pathname === '/auth/login' && token) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+    return NextResponse.redirect(new URL('/admin', request.url));
   }
 
   // Si está intentando acceder a rutas protegidas sin token, redirigir a login

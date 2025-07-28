@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import CurrencySelector from "./CurrencySelector";
 import CurrencyInputFields from "./CurrencyInputFields";
+import BCVService from "../services/bcvService";
 
 // Iconos SVG
 const CalculatorIcon = ({ className }: { className: string }) => (
@@ -44,6 +45,12 @@ interface CalculatorState {
   toCurrency: string;
   result: number | null;
   rate: number | null;
+  bcvAmount?: string;
+}
+
+interface BCVRate {
+  rate: number;
+  lastUpdated: string;
 }
 
 const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates }) => {
@@ -53,7 +60,11 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates }) => {
     toCurrency: "VES",
     result: null,
     rate: null,
+    bcvAmount: '',
   });
+
+  const [bcvRate, setBcvRate] = useState<BCVRate | null>(null);
+  const bcvService = BCVService.getInstance();
 
   // Configuración de monedas
   const currencyConfig: CurrencyConfig = {
@@ -104,13 +115,14 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates }) => {
         const amount = directRate.inverse_percentage
           ? toAmount * directRate.rate
           : toAmount / directRate.rate;
-        setCalculator({
+        setCalculator((prev) => ({
+          ...prev,
           fromCurrency,
           toCurrency,
           amount: amount,
           result: toAmount,
           rate: directRate.rate,
-        });
+        }));
         return;
       }
 
@@ -118,13 +130,14 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates }) => {
         const result = directRate.inverse_percentage
           ? fromAmount / directRate.rate
           : fromAmount * directRate.rate;
-        setCalculator({
+        setCalculator((prev) => ({
+          ...prev,
           fromCurrency,
           toCurrency,
           amount: fromAmount,
           result: result,
           rate: directRate.rate,
-        });
+        }));
         return;
       }
     }
@@ -137,6 +150,15 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates }) => {
     }));
   };
 
+  // Efecto para cargar tasa BCV
+  useEffect(() => {
+    const loadBCVRate = async () => {
+      const rate = await bcvService.getBCVRate();
+      setBcvRate(rate);
+    };
+    loadBCVRate();
+  }, [bcvService]);
+
   React.useEffect(() => {
     const firstCalculation = () => {
       const directRate = rates.find(
@@ -148,19 +170,31 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates }) => {
           const result = directRate.inverse_percentage
             ? 1 / directRate.rate
             : 1 * directRate.rate;
-          setCalculator({
+          setCalculator((prev) => ({
+            ...prev,
             fromCurrency: "ZELLE",
             toCurrency: "VES",
             amount: 1,
             result: result,
             rate: directRate.rate,
-          });
+          }));
           return;
         }
       }
     };
     firstCalculation();
   }, []);
+
+  // Efecto para actualizar BCV cuando cambia VES
+  React.useEffect(() => {
+    if (calculator.fromCurrency === 'VES' && calculator.amount) {
+      updateBCVFromVES(calculator.amount);
+    } else if (calculator.toCurrency === 'VES' && calculator.result) {
+      updateBCVFromVES(calculator.result);
+    } else {
+      setCalculator((prev) => ({ ...prev, bcvAmount: '' }));
+    }
+  }, [calculator.amount, calculator.result, calculator.fromCurrency, calculator.toCurrency, bcvRate]);
 
   // Función para intercambiar monedas
   const swapCurrencies = () => {
@@ -175,6 +209,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates }) => {
   const getCurrencyName = (code: string) => {
     return currencyConfig[code]?.name || code.toUpperCase();
   };
+
 
   const availableCurrencies = getAvailableCurrencies();
 
@@ -201,6 +236,34 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates }) => {
 
   const handleToCurrencyChange = (currency: string) => {
     calculateConversion(calculator.fromCurrency, currency, calculator.amount);
+  };
+
+  const handleBCVAmountChange = (bcvAmount: string) => {
+    setCalculator((prev) => ({ ...prev, bcvAmount }));
+    
+    if (!bcvRate || !bcvAmount) return;
+    
+    const bcvValue = parseFloat(bcvAmount);
+    if (isNaN(bcvValue)) return;
+
+    const vesValue = bcvValue * bcvRate.rate;
+
+    if (calculator.fromCurrency === 'VES') {
+      calculateConversion(calculator.fromCurrency, calculator.toCurrency, vesValue);
+    } else if (calculator.toCurrency === 'VES') {
+      calculateConversion(calculator.fromCurrency, calculator.toCurrency, undefined, vesValue);
+    }
+  };
+
+  // Función para actualizar BCV cuando cambia la conversión
+  const updateBCVFromVES = (vesAmount?: number) => {
+    if (!bcvRate || !vesAmount) {
+      setCalculator((prev) => ({ ...prev, bcvAmount: '' }));
+      return;
+    }
+    
+    const bcvEquivalent = (vesAmount / bcvRate.rate).toString();
+    setCalculator((prev) => ({ ...prev, bcvAmount: bcvEquivalent }));
   };
 
   return (
@@ -240,9 +303,13 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates }) => {
               toCurrency={calculator.toCurrency}
               onFromAmountChange={handleFromAmountChange}
               onToAmountChange={handleToAmountChange}
+              bcvRate={bcvRate?.rate}
+              bcvAmount={calculator.bcvAmount}
+              onBCVAmountChange={handleBCVAmountChange}
             />
           </div>
         </div>
+
 
         {/* Mensaje si no hay conversión disponible */}
         {calculator.amount &&

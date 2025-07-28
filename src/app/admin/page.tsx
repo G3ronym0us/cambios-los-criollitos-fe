@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { Coins, Users, Settings, BarChart3 } from 'lucide-react';
+import { Coins, Users, Settings, BarChart3, ArrowLeftRight } from 'lucide-react';
 
 export default function AdminDashboard() {
   const adminFeatures = [
@@ -11,6 +11,13 @@ export default function AdminDashboard() {
       icon: Coins,
       href: '/admin/currencies',
       color: 'bg-blue-500',
+    },
+    {
+      title: 'Pares de Monedas',
+      description: 'Gestionar pares de trading y monitoreo',
+      icon: ArrowLeftRight,
+      href: '/admin/currency-pairs',
+      color: 'bg-indigo-500',
     },
     {
       title: 'Gestión de Usuarios',
@@ -45,7 +52,7 @@ export default function AdminDashboard() {
         <p className="text-gray-600">Gestiona todos los aspectos del sistema desde aquí</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {adminFeatures.map((feature) => {
           const IconComponent = feature.icon;
           
