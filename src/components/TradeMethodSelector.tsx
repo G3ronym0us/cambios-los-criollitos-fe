@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, Plus, Loader2 } from 'lucide-react';
+import Image from 'next/image';
 import { AdminService } from '@/services/adminService';
 import { BinanceTradeMethod } from '@/types/admin';
 
@@ -113,9 +114,11 @@ export default function TradeMethodSelector({
               className="bg-blue-100 text-blue-800 px-2 py-1 rounded-md text-sm flex items-center gap-2"
             >
               {methodInfo?.icon_url && (
-                <img 
+                <Image 
                   src={methodInfo.icon_url} 
                   alt={methodInfo.identifier}
+                  width={16}
+                  height={16}
                   className="w-4 h-4 rounded"
                   onError={(e) => {
                     (e.target as HTMLImageElement).style.display = 'none';
@@ -167,9 +170,11 @@ export default function TradeMethodSelector({
                     className="w-full px-3 py-2 text-left hover:bg-gray-100 flex items-center gap-2 text-sm"
                   >
                     {method.icon_url && (
-                      <img 
+                      <Image 
                         src={method.icon_url} 
                         alt={method.identifier}
+                        width={20}
+                        height={20}
                         className="w-5 h-5 rounded"
                         onError={(e) => {
                           (e.target as HTMLImageElement).style.display = 'none';

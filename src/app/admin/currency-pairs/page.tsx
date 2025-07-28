@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { AdminService } from '@/services/adminService';
 import { 
   CurrencyPairData, 
@@ -59,16 +59,16 @@ export default function CurrencyPairsAdminPage() {
       loadCurrencies(),
       loadStats()
     ]);
-  }, [filters.activeOnly, filters.monitoredOnly]);
+  }, [filters.activeOnly, filters.monitoredOnly, loadCurrencyPairs]);
 
-  const loadCurrencyPairs = async () => {
+  const loadCurrencyPairs = useCallback(async () => {
     setLoading(true);
     const result = await adminService.getCurrencyPairs(0, 100, filters.activeOnly, filters.monitoredOnly);
     if (result.success && result.data) {
       setPairs(result.data.pairs);
     }
     setLoading(false);
-  };
+  }, [filters.activeOnly, filters.monitoredOnly]);
 
   const loadCurrencies = async () => {
     const result = await adminService.getCurrencies();
@@ -408,7 +408,7 @@ export default function CurrencyPairsAdminPage() {
         alert(result.error || 'Error al establecer precio manual');
         return false;
       }
-    } catch (error) {
+    } catch {
       alert('Error de conexión al servidor');
       return false;
     } finally {
@@ -434,7 +434,7 @@ export default function CurrencyPairsAdminPage() {
         alert(result.error || 'Error al remover precio manual');
         return false;
       }
-    } catch (error) {
+    } catch {
       alert('Error de conexión al servidor');
       return false;
     } finally {
