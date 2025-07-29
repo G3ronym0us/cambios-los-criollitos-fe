@@ -8,7 +8,7 @@ import {
   UpdateCurrencyPairData,
   CurrencyData
 } from '@/types/admin';
-import { Trash2, Edit, Plus, Eye, EyeOff, ToggleLeft, ToggleRight, TrendingUp, Bitcoin, X, History, Settings } from 'lucide-react';
+import { Trash2, Edit, Plus, Eye, EyeOff, ToggleLeft, ToggleRight, TrendingUp, Bitcoin, X, History, Settings, ArrowLeftRight } from 'lucide-react';
 import TradeMethodSelector from '@/components/TradeMethodSelector';
 import RateHistoryModal from './RateHistoryModal';
 import ManualRateDialog from '@/components/ManualRateDialog';
@@ -444,18 +444,34 @@ export default function CurrencyPairsAdminPage() {
 
 
   if (loading) {
-    return <div className="text-center py-8">Cargando pares de monedas...</div>;
+    return (
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-6 py-12 text-center">
+          <div className="flex flex-col items-center">
+            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              Cargando pares de monedas...
+            </h3>
+            <p className="text-gray-500">
+              Por favor espera mientras obtenemos la información.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div>
       {/* Header with Stats */}
       <div className="mb-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">Gestión de Pares de Monedas</h2>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4 sm:gap-0">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Gestión de Pares de Monedas</h2>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm sm:text-base w-full sm:w-auto justify-center sm:justify-start"
           >
             <Plus size={16} />
             Nuevo Par
@@ -464,31 +480,31 @@ export default function CurrencyPairsAdminPage() {
 
         {/* Stats Cards */}
         {stats && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="bg-white p-4 rounded-lg border shadow-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
+            <div className="bg-white p-3 sm:p-4 rounded-lg border shadow-sm">
               <div className="flex items-center">
-                <TrendingUp className="text-blue-500 mr-2" size={20} />
+                <TrendingUp className="text-blue-500 mr-2" size={18} />
                 <div>
-                  <p className="text-sm text-gray-600">Total Pares</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.total_pairs}</p>
+                  <p className="text-xs sm:text-sm text-gray-600">Total Pares</p>
+                  <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.total_pairs}</p>
                 </div>
               </div>
             </div>
-            <div className="bg-white p-4 rounded-lg border shadow-sm">
+            <div className="bg-white p-3 sm:p-4 rounded-lg border shadow-sm">
               <div className="flex items-center">
-                <ToggleRight className="text-green-500 mr-2" size={20} />
+                <ToggleRight className="text-green-500 mr-2" size={18} />
                 <div>
-                  <p className="text-sm text-gray-600">Pares Activos</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.active_pairs}</p>
+                  <p className="text-xs sm:text-sm text-gray-600">Pares Activos</p>
+                  <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.active_pairs}</p>
                 </div>
               </div>
             </div>
-            <div className="bg-white p-4 rounded-lg border shadow-sm">
+            <div className="bg-white p-3 sm:p-4 rounded-lg border shadow-sm">
               <div className="flex items-center">
-                <Eye className="text-purple-500 mr-2" size={20} />
+                <Eye className="text-purple-500 mr-2" size={18} />
                 <div>
-                  <p className="text-sm text-gray-600">Monitoreados</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.monitored_pairs}</p>
+                  <p className="text-xs sm:text-sm text-gray-600">Monitoreados</p>
+                  <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.monitored_pairs}</p>
                 </div>
               </div>
             </div>
@@ -496,8 +512,8 @@ export default function CurrencyPairsAdminPage() {
         )}
 
         {/* Filters */}
-        <div className="flex gap-4 mb-4">
-          <label className="flex items-center">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4">
+          <label className="flex items-center text-sm">
             <input
               type="checkbox"
               checked={filters.activeOnly}
@@ -506,7 +522,7 @@ export default function CurrencyPairsAdminPage() {
             />
             Solo activos
           </label>
-          <label className="flex items-center">
+          <label className="flex items-center text-sm">
             <input
               type="checkbox"
               checked={filters.monitoredOnly}
@@ -518,138 +534,378 @@ export default function CurrencyPairsAdminPage() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Par
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Descripción
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Activo
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Monitoreado
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Binance
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Acciones
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {pairs.map((pair) => (
-              <tr key={pair.id}>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <div>
-                      <div className="font-medium text-gray-900 flex items-center gap-2">
-                        {pair.display_name}
+      {/* Currency Pairs List */}
+      <div className="space-y-4">
+        {pairs.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-6 py-12 text-center">
+              <div className="flex flex-col items-center">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                  {filters.activeOnly || filters.monitoredOnly ? (
+                    <Eye className="text-gray-400" size={32} />
+                  ) : (
+                    <ArrowLeftRight className="text-gray-400" size={32} />
+                  )}
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  {filters.activeOnly || filters.monitoredOnly 
+                    ? 'No se encontraron pares con estos filtros'
+                    : 'No hay pares de monedas'
+                  }
+                </h3>
+                <p className="text-gray-500 mb-4">
+                  {filters.activeOnly || filters.monitoredOnly 
+                    ? 'Prueba ajustando los filtros o crea un nuevo par de monedas.'
+                    : 'Comienza creando tu primer par de monedas para gestionar las tasas de cambio.'
+                  }
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  {(filters.activeOnly || filters.monitoredOnly) && (
+                    <button
+                      onClick={() => setFilters({ activeOnly: false, monitoredOnly: false })}
+                      className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 flex items-center justify-center sm:justify-start gap-2"
+                    >
+                      <X size={16} />
+                      Limpiar filtros
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center sm:justify-start gap-2"
+                  >
+                    <Plus size={16} />
+                    {filters.activeOnly || filters.monitoredOnly ? 'Crear nuevo par' : 'Crear primer par'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          pairs.map((pair) => (
+            <div key={pair.id} className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200">
+              {/* Mobile Layout */}
+              <div className="block lg:hidden">
+                <div className="p-4 sm:p-6">
+                  {/* Header Section */}
+                  <div className="flex items-start space-x-4 mb-4">
+                    <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                      <span className="text-white font-bold text-sm">
+                        {pair.from_currency.symbol.charAt(0)}{pair.to_currency.symbol.charAt(0)}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="font-semibold text-gray-900 text-base">
+                          {pair.display_name}
+                        </h3>
+                      </div>
+                      <div className="text-sm text-gray-600 mb-2">
+                        <span className="font-medium">{pair.from_currency.name}</span>
+                        <span className="mx-2 text-gray-400">→</span>
+                        <span className="font-medium">{pair.to_currency.name}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1 mb-3">
+                        {pair.is_active && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            ✓ Activo
+                          </span>
+                        )}
+                        {pair.is_monitored && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                            👁 Monitor
+                          </span>
+                        )}
                         {pair.binance_tracked && (
-                          <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full font-medium">
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                             📊 Binance
                           </span>
                         )}
                       </div>
-                      <div className="text-sm text-gray-500">
-                        {pair.from_currency.name} → {pair.to_currency.name}
-                      </div>
-                      {pair.binance_tracked && pair.banks_to_track && pair.amount_to_track && (
-                        <div className="text-xs text-gray-400 mt-1">
-                          <div>Bancos: {pair.banks_to_track.join(', ')}</div>
-                          <div>Monto: ${pair.amount_to_track}</div>
-                        </div>
-                      )}
                     </div>
                   </div>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="text-sm text-gray-900 max-w-xs truncate">
-                    {pair.description}
+
+                  {/* Description */}
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-600 leading-relaxed">
+                      {pair.description}
+                    </p>
                   </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <button
-                    onClick={() => handleToggleActive(pair)}
-                    className="flex items-center"
-                  >
-                    {pair.is_active ? (
-                      <ToggleRight className="text-green-600" size={20} />
-                    ) : (
-                      <ToggleLeft className="text-gray-400" size={20} />
-                    )}
-                  </button>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <button
-                    onClick={() => handleToggleMonitored(pair)}
-                    className="flex items-center"
-                  >
-                    {pair.is_monitored ? (
-                      <Eye className="text-purple-600" size={20} />
-                    ) : (
-                      <EyeOff className="text-gray-400" size={20} />
-                    )}
-                  </button>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <button
-                    onClick={() => handleToggleBinanceTracked(pair)}
-                    className="flex items-center"
-                  >
-                    {pair.binance_tracked ? (
-                      <Bitcoin className="text-orange-500" size={20} />
-                    ) : (
-                      <Bitcoin className="text-gray-400" size={20} />
-                    )}
-                  </button>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => handleOpenManualRateDialog(pair)}
-                      className="text-purple-600 hover:text-purple-900"
-                      title="Gestionar precio manual"
-                    >
-                      <Settings size={16} />
-                    </button>
-                    <button
-                      onClick={() => handleShowHistory(pair)}
-                      className="text-green-600 hover:text-green-900"
-                      title="Ver historial de tasas"
-                    >
-                      <History size={16} />
-                    </button>
-                    <button
-                      onClick={() => openEditModal(pair)}
-                      className="text-blue-600 hover:text-blue-900"
-                    >
-                      <Edit size={16} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(pair.id)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+
+                  {/* Binance Configuration */}
+                  {pair.binance_tracked && pair.banks_to_track && pair.amount_to_track && (
+                    <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Bitcoin className="text-amber-600" size={16} />
+                        <span className="font-medium text-amber-800 text-sm">Configuración Binance P2P</span>
+                      </div>
+                      <div className="text-xs text-amber-700 space-y-1">
+                        <div><span className="font-medium">Métodos:</span> {pair.banks_to_track.join(', ')}</div>
+                        <div><span className="font-medium">Monto:</span> ${pair.amount_to_track}</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Bar */}
+                  <div className="border-t border-gray-100 pt-4">
+                    {/* Status Toggles Row */}
+                    <div className="flex items-center justify-center gap-2 mb-4">
+                      <div className="flex items-center bg-gray-50 rounded-xl p-1">
+                        {/* Active Toggle */}
+                        <button
+                          onClick={() => handleToggleActive(pair)}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                            pair.is_active 
+                              ? 'bg-green-500 text-white shadow-sm' 
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                          title={pair.is_active ? "Desactivar par" : "Activar par"}
+                        >
+                          {pair.is_active ? (
+                            <ToggleRight size={16} />
+                          ) : (
+                            <ToggleLeft size={16} />
+                          )}
+                          <span className="hidden sm:inline">
+                            {pair.is_active ? 'Activo' : 'Inactivo'}
+                          </span>
+                        </button>
+
+                        {/* Monitor Toggle */}
+                        <button
+                          onClick={() => handleToggleMonitored(pair)}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                            pair.is_monitored 
+                              ? 'bg-purple-500 text-white shadow-sm' 
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                          title={pair.is_monitored ? "Dejar de monitorear" : "Iniciar monitoreo"}
+                        >
+                          {pair.is_monitored ? (
+                            <Eye size={16} />
+                          ) : (
+                            <EyeOff size={16} />
+                          )}
+                          <span className="hidden sm:inline">Monitor</span>
+                        </button>
+
+                        {/* Binance Toggle */}
+                        <button
+                          onClick={() => handleToggleBinanceTracked(pair)}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                            pair.binance_tracked 
+                              ? 'bg-orange-500 text-white shadow-sm' 
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                          title={pair.binance_tracked ? "Desactivar Binance P2P" : "Activar Binance P2P"}
+                        >
+                          <Bitcoin size={16} />
+                          <span className="hidden sm:inline">Binance</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons Row */}
+                    <div className="grid grid-cols-4 gap-2">
+                      <button
+                        onClick={() => handleOpenManualRateDialog(pair)}
+                        className="flex flex-col items-center justify-center p-3 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg text-purple-700 hover:text-purple-800 transition-all duration-200 group"
+                        title="Gestionar precio manual"
+                      >
+                        <Settings size={20} className="mb-1 group-hover:scale-110 transition-transform" />
+                        <span className="text-xs font-medium">Precio</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleShowHistory(pair)}
+                        className="flex flex-col items-center justify-center p-3 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg text-green-700 hover:text-green-800 transition-all duration-200 group"
+                        title="Ver historial de tasas"
+                      >
+                        <History size={20} className="mb-1 group-hover:scale-110 transition-transform" />
+                        <span className="text-xs font-medium">Historial</span>
+                      </button>
+
+                      <button
+                        onClick={() => openEditModal(pair)}
+                        className="flex flex-col items-center justify-center p-3 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-blue-700 hover:text-blue-800 transition-all duration-200 group"
+                        title="Editar par"
+                      >
+                        <Edit size={20} className="mb-1 group-hover:scale-110 transition-transform" />
+                        <span className="text-xs font-medium">Editar</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleDelete(pair.id)}
+                        className="flex flex-col items-center justify-center p-3 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg text-red-700 hover:text-red-800 transition-all duration-200 group"
+                        title="Eliminar par"
+                      >
+                        <Trash2 size={20} className="mb-1 group-hover:scale-110 transition-transform" />
+                        <span className="text-xs font-medium">Eliminar</span>
+                      </button>
+                    </div>
                   </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </div>
+              </div>
+
+              {/* Desktop Layout */}
+              <div className="hidden lg:block">
+                <div className="p-6">
+                  <div className="flex items-center justify-between">
+                    {/* Left Section - Currency Info */}
+                    <div className="flex items-center space-x-4 flex-1">
+                      <div className="flex-shrink-0 w-14 h-14 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                        <span className="text-white font-bold text-lg">
+                          {pair.from_currency.symbol.charAt(0)}{pair.to_currency.symbol.charAt(0)}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-2">
+                          <h3 className="font-semibold text-gray-900 text-lg">
+                            {pair.display_name}
+                          </h3>
+                          <div className="flex gap-2">
+                            {pair.is_active && (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                ✓ Activo
+                              </span>
+                            )}
+                            {pair.is_monitored && (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                👁 Monitor
+                              </span>
+                            )}
+                            {pair.binance_tracked && (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                📊 Binance P2P
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-sm text-gray-600 mb-2">
+                          <span className="font-medium">{pair.from_currency.name}</span>
+                          <span className="mx-3 text-gray-400">→</span>
+                          <span className="font-medium">{pair.to_currency.name}</span>
+                        </div>
+                        <p className="text-sm text-gray-500 leading-relaxed max-w-2xl">
+                          {pair.description}
+                        </p>
+                        {pair.binance_tracked && pair.banks_to_track && pair.amount_to_track && (
+                          <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
+                            <div className="flex items-center gap-1">
+                              <span className="font-medium">Métodos:</span>
+                              <span>{pair.banks_to_track.join(', ')}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="font-medium">Monto:</span>
+                              <span>${pair.amount_to_track}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right Section - Controls */}
+                    <div className="flex items-center gap-6 ml-6">
+                      {/* Status Controls */}
+                      <div className="flex items-center bg-gray-50 rounded-xl p-1">
+                        <button
+                          onClick={() => handleToggleActive(pair)}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                            pair.is_active 
+                              ? 'bg-green-500 text-white shadow-sm' 
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                          title={pair.is_active ? "Desactivar par" : "Activar par"}
+                        >
+                          {pair.is_active ? (
+                            <ToggleRight size={18} />
+                          ) : (
+                            <ToggleLeft size={18} />
+                          )}
+                          <span>{pair.is_active ? 'Activo' : 'Inactivo'}</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleToggleMonitored(pair)}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                            pair.is_monitored 
+                              ? 'bg-purple-500 text-white shadow-sm' 
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                          title={pair.is_monitored ? "Dejar de monitorear" : "Iniciar monitoreo"}
+                        >
+                          {pair.is_monitored ? (
+                            <Eye size={18} />
+                          ) : (
+                            <EyeOff size={18} />
+                          )}
+                          <span>Monitor</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleToggleBinanceTracked(pair)}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                            pair.binance_tracked 
+                              ? 'bg-orange-500 text-white shadow-sm' 
+                              : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                          title={pair.binance_tracked ? "Desactivar Binance P2P" : "Activar Binance P2P"}
+                        >
+                          <Bitcoin size={18} />
+                          <span>Binance</span>
+                        </button>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-3 border-l border-gray-200 pl-6">
+                        <button
+                          onClick={() => handleOpenManualRateDialog(pair)}
+                          className="flex items-center gap-2 px-3 py-2 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg text-purple-700 hover:text-purple-800 transition-all duration-200 group"
+                          title="Gestionar precio manual"
+                        >
+                          <Settings size={16} className="group-hover:scale-110 transition-transform" />
+                          <span className="text-sm font-medium">Precio</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleShowHistory(pair)}
+                          className="flex items-center gap-2 px-3 py-2 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg text-green-700 hover:text-green-800 transition-all duration-200 group"
+                          title="Ver historial de tasas"
+                        >
+                          <History size={16} className="group-hover:scale-110 transition-transform" />
+                          <span className="text-sm font-medium">Historial</span>
+                        </button>
+
+                        <button
+                          onClick={() => openEditModal(pair)}
+                          className="flex items-center gap-2 px-3 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-blue-700 hover:text-blue-800 transition-all duration-200 group"
+                          title="Editar par"
+                        >
+                          <Edit size={16} className="group-hover:scale-110 transition-transform" />
+                          <span className="text-sm font-medium">Editar</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleDelete(pair.id)}
+                          className="flex items-center gap-2 px-3 py-2 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg text-red-700 hover:text-red-800 transition-all duration-200 group"
+                          title="Eliminar par"
+                        >
+                          <Trash2 size={16} className="group-hover:scale-110 transition-transform" />
+                          <span className="text-sm font-medium">Eliminar</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {/* Create Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold mb-4">Nuevo Par de Monedas</h3>
             <form onSubmit={handleCreate}>
               <div className="space-y-4">
@@ -808,8 +1064,8 @@ export default function CurrencyPairsAdminPage() {
 
       {/* Edit Modal */}
       {editingPair && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold mb-4">Editar Par de Monedas</h3>
             <form onSubmit={handleUpdate}>
               <div className="space-y-4">
@@ -936,8 +1192,8 @@ export default function CurrencyPairsAdminPage() {
 
       {/* Binance Configuration Modal */}
       {showBinanceModal && pairForBinanceConfig && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">Configurar Binance P2P</h3>
               <button

@@ -42,6 +42,7 @@ export interface AuthContextType {
   login: (credentials: LoginCredentials) => Promise<ApiResponse<User>>;
   register: (userData: RegisterData) => Promise<ApiResponse<User>>;
   logout: () => void;
+  forceLogout: () => void;
   refreshToken: () => Promise<boolean>;
   loading: boolean;
   initializing: boolean;

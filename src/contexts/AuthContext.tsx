@@ -1,9 +1,11 @@
 
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Cookies from 'js-cookie';
 import { AuthService } from '@/services/authService';
+import { httpClient } from '@/utils/httpInterceptor';
 import { 
   AuthContextType, 
   User, 
@@ -32,6 +34,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [initializing, setInitializing] = useState<boolean>(true);
+  const router = useRouter();
 
   // Verificar si hay una sesión activa al cargar la app
   useEffect(() => {
@@ -39,7 +42,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       try {
         const token = Cookies.get('access_token');
         if (token) {
-          const result = await authService.getCurrentUser(token);
+          const result = await authService.getCurrentUser();
           if (result.success && result.data) {
             setUser(result.data);
           } else {
@@ -113,6 +116,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setUser(null);
   };
 
+  const forceLogout = useCallback((): void => {
+    logout();
+    // Solo redirigir si no estamos ya en la página de login
+    if (typeof window !== 'undefined' && !window.location.pathname.includes('/auth/login')) {
+      router.push('/auth/login');
+    }
+  }, [router]);
+
+  // Configurar el handler de 401 en el interceptor HTTP
+  useEffect(() => {
+    httpClient.setUnauthorizedHandler(forceLogout);
+  }, [forceLogout]);
+
   const refreshToken = async (): Promise<boolean> => {
     try {
       const refreshTokenValue = Cookies.get('refresh_token');
@@ -143,6 +159,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     login,
     register,
     logout,
+    forceLogout,
     refreshToken,
     loading,
     initializing,

@@ -1,4 +1,5 @@
 import { LoginCredentials, RegisterData, User, AuthResponse, ApiResponse } from '@/types/auth';
+import { httpClient } from '@/utils/httpInterceptor';
 
 export class AuthService {
     private baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -72,24 +73,13 @@ export class AuthService {
       }
     }
   
-    async getCurrentUser(token: string): Promise<ApiResponse<User>> {
-      try {
-        const response = await fetch(`${this.baseUrl}/auth/me`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-  
-        if (response.ok) {
-          const user: User = await response.json();
-          return { success: true, data: user };
-        }
-        
-        return { success: false, error: 'No se pudo obtener la información del usuario' };
-      } catch (error) {
-        console.error('Error al obtener usuario:', error);
-        return { success: false, error: 'Error de conexión' };
-      }
+    async getCurrentUser(): Promise<ApiResponse<User>> {
+      const result = await httpClient.get<User>('/auth/me');
+      return {
+        success: result.success,
+        data: result.data,
+        error: result.error
+      };
     }
 
     async refreshToken(refreshToken: string): Promise<ApiResponse<{ access_token: string }>> {
