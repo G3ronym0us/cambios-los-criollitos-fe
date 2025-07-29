@@ -114,11 +114,16 @@ export class HttpInterceptor {
 
   async post<T>(endpoint: string, data?: unknown): Promise<HttpResponse<T>> {
     try {
-      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      const options: RequestInit = {
         method: 'POST',
         headers: this.getAuthHeaders(),
-        ...(data && { body: JSON.stringify(data) }),
-      });
+      };
+      
+      if (data) {
+        options.body = JSON.stringify(data);
+      }
+      
+      const response = await fetch(`${this.baseUrl}${endpoint}`, options);
 
       return this.handleResponse<T>(response);
     } catch (error) {
@@ -132,11 +137,16 @@ export class HttpInterceptor {
 
   async put<T>(endpoint: string, data?: unknown): Promise<HttpResponse<T>> {
     try {
-      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      const options: RequestInit = {
         method: 'PUT',
         headers: this.getAuthHeaders(),
-        ...(data && { body: JSON.stringify(data) }),
-      });
+      };
+      
+      if (data) {
+        options.body = JSON.stringify(data);
+      }
+      
+      const response = await fetch(`${this.baseUrl}${endpoint}`, options);
 
       return this.handleResponse<T>(response);
     } catch (error) {
@@ -150,11 +160,16 @@ export class HttpInterceptor {
 
   async patch<T>(endpoint: string, data?: unknown): Promise<HttpResponse<T>> {
     try {
-      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      const options: RequestInit = {
         method: 'PATCH',
         headers: this.getAuthHeaders(),
-        ...(data && { body: JSON.stringify(data) }),
-      });
+      };
+      
+      if (data) {
+        options.body = JSON.stringify(data);
+      }
+      
+      const response = await fetch(`${this.baseUrl}${endpoint}`, options);
 
       return this.handleResponse<T>(response);
     } catch (error) {
