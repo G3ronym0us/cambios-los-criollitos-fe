@@ -11,7 +11,9 @@ import {
   BinanceTradeMethod,
   BinanceTradeMethodsResponse,
   BinanceFilterConditionsResponse,
-  ManualRateData
+  ManualRateData,
+  BasePairData,
+  DerivedPairData
 } from '@/types/admin';
 import { ApiResponse } from '@/types/auth';
 import { httpClient } from '@/utils/httpInterceptor';
@@ -134,6 +136,24 @@ export class AdminService {
 
   async getMonitoredCurrencyPairs(): Promise<ApiResponse<CurrencyPairData[]>> {
     const result = await httpClient.get<CurrencyPairData[]>('/currency-pairs/monitored');
+    return {
+      success: result.success,
+      data: result.data,
+      error: result.error
+    };
+  }
+
+  async getBasePairs(): Promise<ApiResponse<BasePairData[]>> {
+    const result = await httpClient.get<BasePairData[]>('/currency-pairs/base-pairs');
+    return {
+      success: result.success,
+      data: result.data,
+      error: result.error
+    };
+  }
+
+  async getDerivedPairs(basePairId: number): Promise<ApiResponse<DerivedPairData[]>> {
+    const result = await httpClient.get<DerivedPairData[]>(`/currency-pairs/${basePairId}/derived`);
     return {
       success: result.success,
       data: result.data,

@@ -37,8 +37,12 @@ export interface CurrencyPairData {
   pair_symbol: string;
   from_currency_id: number;
   to_currency_id: number;
+  base_pair_id: number | null;
+  derived_percentage: number | null;
+  use_inverse_percentage: boolean;
   from_currency: CurrencyData;
   to_currency: CurrencyData;
+  base_pair: CurrencyPairData | null;
   display_name: string;
   description: string;
   is_active: boolean;
@@ -53,6 +57,9 @@ export interface CurrencyPairData {
 export interface CreateCurrencyPairData {
   from_currency_id: number;
   to_currency_id: number;
+  base_pair_id?: number | null;
+  derived_percentage?: number | null;
+  use_inverse_percentage?: boolean;
   description: string;
   is_active?: boolean;
   is_monitored?: boolean;
@@ -62,6 +69,9 @@ export interface CreateCurrencyPairData {
 }
 
 export interface UpdateCurrencyPairData {
+  base_pair_id?: number | null;
+  derived_percentage?: number | null;
+  use_inverse_percentage?: boolean;
   description?: string;
   is_active?: boolean;
   is_monitored?: boolean;
@@ -128,4 +138,32 @@ export interface ManualRateData {
 
 export interface SetManualRateRequest {
   manual_rate: number;
+}
+
+export interface BasePairData {
+  id: number;
+  pair_symbol: string;
+  from_currency_id: number;
+  to_currency_id: number;
+  base_pair_id: null;
+  derived_percentage: null;
+  use_inverse_percentage: boolean;
+  from_currency: CurrencyData;
+  to_currency: CurrencyData;
+  base_pair: null;
+  display_name: string;
+  is_active: boolean;
+  binance_tracked: boolean;
+  banks_to_track: string[] | null;
+  amount_to_track: number | null;
+}
+
+export interface DerivedPairData {
+  id: number;
+  pair_symbol: string;
+  base_pair_id: number;
+  derived_percentage: number;
+  use_inverse_percentage: boolean;
+  display_name: string;
+  is_active: boolean;
 }

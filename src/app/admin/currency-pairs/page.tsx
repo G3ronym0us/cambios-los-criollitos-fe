@@ -18,12 +18,16 @@ const adminService = new AdminService();
 export default function CurrencyPairsAdminPage() {
   const [pairs, setPairs] = useState<CurrencyPairData[]>([]);
   const [currencies, setCurrencies] = useState<CurrencyData[]>([]);
+  const [basePairs, setBasePairs] = useState<CurrencyPairData[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingPair, setEditingPair] = useState<CurrencyPairData | null>(null);
   const [formData, setFormData] = useState<CreateCurrencyPairData>({
     from_currency_id: 0,
     to_currency_id: 0,
+    base_pair_id: null,
+    derived_percentage: null,
+    use_inverse_percentage: false,
     description: '',
     is_active: true,
     is_monitored: true,
@@ -66,6 +70,7 @@ export default function CurrencyPairsAdminPage() {
     Promise.all([
       loadCurrencyPairs(),
       loadCurrencies(),
+      loadBasePairs(),
       loadStats()
     ]);
   }, [filters.activeOnly, filters.monitoredOnly, loadCurrencyPairs]);
@@ -74,6 +79,13 @@ export default function CurrencyPairsAdminPage() {
     const result = await adminService.getCurrencies();
     if (result.success && result.data) {
       setCurrencies(result.data.currencies);
+    }
+  };
+
+  const loadBasePairs = async () => {
+    const result = await adminService.getBasePairs();
+    if (result.success && result.data) {
+      setBasePairs(result.data);
     }
   };
 
@@ -121,6 +133,9 @@ export default function CurrencyPairsAdminPage() {
     }
     
     const updateData: UpdateCurrencyPairData = {
+      base_pair_id: formData.base_pair_id,
+      derived_percentage: formData.derived_percentage,
+      use_inverse_percentage: formData.use_inverse_percentage,
       description: formData.description,
       is_active: formData.is_active,
       is_monitored: formData.is_monitored,
@@ -141,6 +156,17 @@ export default function CurrencyPairsAdminPage() {
   };
 
   const handleDelete = async (id: number) => {
+    // Check if this is a base pair with derived pairs
+    const pairToDelete = pairs.find(p => p.id === id);
+    if (pairToDelete && !pairToDelete.base_pair_id) {
+      // This is a potential base pair, check for derived pairs
+      const derivedPairs = pairs.filter(p => p.base_pair_id === id);
+      if (derivedPairs.length > 0) {
+        alert(`No se puede eliminar este par base porque tiene ${derivedPairs.length} par(es) derivado(s). Elimine primero los pares derivados: ${derivedPairs.map(p => p.display_name).join(', ')}`);
+        return;
+      }
+    }
+    
     if (confirm('¿Estás seguro de que quieres eliminar este par de monedas?')) {
       const result = await adminService.deleteCurrencyPair(id);
       if (result.success) {
@@ -267,6 +293,9 @@ export default function CurrencyPairsAdminPage() {
     setFormData({
       from_currency_id: 0,
       to_currency_id: 0,
+      base_pair_id: null,
+      derived_percentage: null,
+      use_inverse_percentage: false,
       description: '',
       is_active: true,
       is_monitored: true,
@@ -361,6 +390,9 @@ export default function CurrencyPairsAdminPage() {
     setFormData({
       from_currency_id: pair.from_currency_id,
       to_currency_id: pair.to_currency_id,
+      base_pair_id: pair.base_pair_id,
+      derived_percentage: pair.derived_percentage,
+      use_inverse_percentage: pair.use_inverse_percentage,
       description: pair.description,
       is_active: pair.is_active,
       is_monitored: pair.is_monitored,
@@ -620,6 +652,16 @@ export default function CurrencyPairsAdminPage() {
                             📊 Binance
                           </span>
                         )}
+                        {pair.base_pair_id && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            🔗 Derivado
+                          </span>
+                        )}
+                        {!pair.base_pair_id && pair.binance_tracked && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            🏗 Base
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -629,6 +671,18 @@ export default function CurrencyPairsAdminPage() {
                     <p className="text-sm text-gray-600 leading-relaxed">
                       {pair.description}
                     </p>
+                    
+                    {/* Base Pair Relationship Info */}
+                    {pair.base_pair_id && pair.base_pair && (
+                      <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
+                        <div className="text-xs text-blue-700">
+                          <div><span className="font-medium">Par base:</span> {pair.base_pair.display_name}</div>
+                          {pair.derived_percentage && (
+                            <div><span className="font-medium">Porcentaje:</span> {pair.derived_percentage}% {pair.use_inverse_percentage ? '(inverso)' : ''}</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Binance Configuration */}
@@ -778,6 +832,16 @@ export default function CurrencyPairsAdminPage() {
                                 📊 Binance P2P
                               </span>
                             )}
+                            {pair.base_pair_id && (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                🔗 Derivado
+                              </span>
+                            )}
+                            {!pair.base_pair_id && pair.binance_tracked && (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                🏗 Base
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="text-sm text-gray-600 mb-2">
@@ -788,6 +852,23 @@ export default function CurrencyPairsAdminPage() {
                         <p className="text-sm text-gray-500 leading-relaxed max-w-2xl">
                           {pair.description}
                         </p>
+                        
+                        {/* Base Pair Relationship Info */}
+                        {pair.base_pair_id && pair.base_pair && (
+                          <div className="mt-2 flex items-center gap-4 text-xs text-blue-600">
+                            <div className="flex items-center gap-1">
+                              <span className="font-medium">Par base:</span>
+                              <span>{pair.base_pair.display_name}</span>
+                            </div>
+                            {pair.derived_percentage && (
+                              <div className="flex items-center gap-1">
+                                <span className="font-medium">Porcentaje:</span>
+                                <span>{pair.derived_percentage}% {pair.use_inverse_percentage ? '(inverso)' : ''}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
                         {pair.binance_tracked && pair.banks_to_track && pair.amount_to_track && (
                           <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
                             <div className="flex items-center gap-1">
@@ -945,6 +1026,71 @@ export default function CurrencyPairsAdminPage() {
                     ))}
                   </select>
                 </div>
+                
+                {/* Base Pair Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Par Base (Opcional)
+                  </label>
+                  <select
+                    value={formData.base_pair_id || ''}
+                    onChange={(e) => setFormData({ ...formData, base_pair_id: e.target.value ? parseInt(e.target.value) : null })}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2"
+                  >
+                    <option value="">Sin par base</option>
+                    {basePairs.map((pair) => (
+                      <option key={pair.id} value={pair.id}>
+                        {pair.display_name} - {pair.description}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Seleccione un par base para crear un par derivado
+                  </p>
+                </div>
+
+                {/* Derived Percentage */}
+                {formData.base_pair_id && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Porcentaje Derivado (%)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={formData.derived_percentage || ''}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          derived_percentage: e.target.value ? parseFloat(e.target.value) : null
+                        })}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2"
+                        placeholder="5.50"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Porcentaje a aplicar sobre la tasa del par base (0-100%)
+                      </p>
+                    </div>
+
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={formData.use_inverse_percentage || false}
+                        onChange={(e) => setFormData({ ...formData, use_inverse_percentage: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <label className="text-sm font-medium text-gray-700">
+                        Usar porcentaje inverso
+                      </label>
+                      <span className="text-xs text-gray-500 ml-2">
+                        (Aplicar porcentaje en dirección contraria)
+                      </span>
+                    </div>
+                  </>
+                )}
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Descripción
@@ -1073,6 +1219,71 @@ export default function CurrencyPairsAdminPage() {
                   <p className="text-sm text-gray-600">Par:</p>
                   <p className="font-medium">{editingPair.display_name}</p>
                 </div>
+                
+                {/* Base Pair Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Par Base (Opcional)
+                  </label>
+                  <select
+                    value={formData.base_pair_id || ''}
+                    onChange={(e) => setFormData({ ...formData, base_pair_id: e.target.value ? parseInt(e.target.value) : null })}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2"
+                  >
+                    <option value="">Sin par base</option>
+                    {basePairs.map((pair) => (
+                      <option key={pair.id} value={pair.id}>
+                        {pair.display_name} - {pair.description}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Seleccione un par base para crear un par derivado
+                  </p>
+                </div>
+
+                {/* Derived Percentage */}
+                {formData.base_pair_id && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Porcentaje Derivado (%)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={formData.derived_percentage || ''}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          derived_percentage: e.target.value ? parseFloat(e.target.value) : null
+                        })}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2"
+                        placeholder="5.50"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Porcentaje a aplicar sobre la tasa del par base (0-100%)
+                      </p>
+                    </div>
+
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={formData.use_inverse_percentage || false}
+                        onChange={(e) => setFormData({ ...formData, use_inverse_percentage: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <label className="text-sm font-medium text-gray-700">
+                        Usar porcentaje inverso
+                      </label>
+                      <span className="text-xs text-gray-500 ml-2">
+                        (Aplicar porcentaje en dirección contraria)
+                      </span>
+                    </div>
+                  </>
+                )}
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Descripción
