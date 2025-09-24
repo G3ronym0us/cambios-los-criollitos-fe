@@ -99,9 +99,6 @@ const ExchangeRatesDashboard = () => {
   // Cargar datos al iniciar
   useEffect(() => {
     fetchRates();
-    // Refrescar cada 2 minutos
-    const interval = setInterval(fetchRates, 2 * 60 * 1000);
-    return () => clearInterval(interval);
   }, []);
 
   // Función para formatear las tasas por categorías
