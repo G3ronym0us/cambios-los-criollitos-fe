@@ -152,10 +152,14 @@ export interface BasePairData {
   to_currency: CurrencyData;
   base_pair: null;
   display_name: string;
+  description: string;
   is_active: boolean;
+  is_monitored: boolean;
   binance_tracked: boolean;
   banks_to_track: string[] | null;
   amount_to_track: number | null;
+  created_at: string;
+  updated_at?: string;
 }
 
 export interface DerivedPairData {
