@@ -3,6 +3,12 @@ export enum CurrencyType {
   FIAT = 'FIAT'
 }
 
+export enum PairType {
+  BASE = 'BASE',
+  DERIVED = 'DERIVED',
+  CROSS = 'CROSS'
+}
+
 export interface CurrencyData {
   id: number;
   name: string;
@@ -50,6 +56,7 @@ export interface CurrencyPairData {
   binance_tracked: boolean;
   banks_to_track: string[] | null;
   amount_to_track: number | null;
+  pair_type: PairType;
   created_at: string;
   updated_at?: string;
 }
@@ -66,6 +73,7 @@ export interface CreateCurrencyPairData {
   binance_tracked?: boolean;
   banks_to_track?: string[] | null;
   amount_to_track?: number | null;
+  pair_type?: PairType;
 }
 
 export interface UpdateCurrencyPairData {
@@ -78,6 +86,7 @@ export interface UpdateCurrencyPairData {
   binance_tracked?: boolean;
   banks_to_track?: string[] | null;
   amount_to_track?: number | null;
+  pair_type?: PairType;
 }
 
 export interface CurrencyPairStatusData {
@@ -158,6 +167,7 @@ export interface BasePairData {
   binance_tracked: boolean;
   banks_to_track: string[] | null;
   amount_to_track: number | null;
+  pair_type: PairType;
   created_at: string;
   updated_at?: string;
 }
@@ -170,4 +180,5 @@ export interface DerivedPairData {
   use_inverse_percentage: boolean;
   display_name: string;
   is_active: boolean;
+  pair_type: PairType;
 }

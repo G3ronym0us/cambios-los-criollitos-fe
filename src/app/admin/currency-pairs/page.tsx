@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { AdminService } from '@/services/adminService';
-import { 
-  CurrencyPairData, 
-  CreateCurrencyPairData, 
+import {
+  CurrencyPairData,
+  CreateCurrencyPairData,
   UpdateCurrencyPairData,
-  CurrencyData
+  CurrencyData,
+  PairType
 } from '@/types/admin';
 import { Trash2, Edit, Plus, Eye, EyeOff, ToggleLeft, ToggleRight, TrendingUp, Bitcoin, X, History, Settings, ArrowLeftRight } from 'lucide-react';
 import TradeMethodSelector from '@/components/TradeMethodSelector';
@@ -34,6 +35,7 @@ export default function CurrencyPairsAdminPage() {
     binance_tracked: false,
     banks_to_track: [],
     amount_to_track: null,
+    pair_type: PairType.BASE,
   });
   const [stats, setStats] = useState<{
     total_pairs: number;
@@ -142,6 +144,7 @@ export default function CurrencyPairsAdminPage() {
       binance_tracked: formData.binance_tracked,
       banks_to_track: formData.banks_to_track,
       amount_to_track: formData.amount_to_track,
+      pair_type: formData.pair_type,
     };
     
     const result = await adminService.updateCurrencyPair(editingPair.id, updateData);
@@ -302,6 +305,7 @@ export default function CurrencyPairsAdminPage() {
       binance_tracked: false,
       banks_to_track: [],
       amount_to_track: null,
+      pair_type: PairType.BASE,
     });
   };
 
@@ -309,14 +313,27 @@ export default function CurrencyPairsAdminPage() {
   const getFiatCurrencyFromPair = (fromCurrencyId: number, toCurrencyId: number): string | null => {
     const fromCurrency = currencies.find(c => c.id === fromCurrencyId);
     const toCurrency = currencies.find(c => c.id === toCurrencyId);
-    
+
     if (fromCurrency?.currency_type === 'FIAT') {
       return fromCurrency.symbol;
     } else if (toCurrency?.currency_type === 'FIAT') {
       return toCurrency.symbol;
     }
-    
+
     return null;
+  };
+
+  const getPairTypeLabel = (pairType: PairType): { label: string; color: string; icon: string } => {
+    switch (pairType) {
+      case PairType.BASE:
+        return { label: 'Base', color: 'bg-green-100 text-green-800', icon: '🏗' };
+      case PairType.DERIVED:
+        return { label: 'Derivado', color: 'bg-blue-100 text-blue-800', icon: '🔗' };
+      case PairType.CROSS:
+        return { label: 'Cruzado', color: 'bg-purple-100 text-purple-800', icon: '🔀' };
+      default:
+        return { label: 'Base', color: 'bg-gray-100 text-gray-800', icon: '❓' };
+    }
   };
 
   // Validate trade methods against Binance API
@@ -399,6 +416,7 @@ export default function CurrencyPairsAdminPage() {
       binance_tracked: pair.binance_tracked,
       banks_to_track: pair.banks_to_track || [],
       amount_to_track: pair.amount_to_track,
+      pair_type: pair.pair_type,
     });
   };
 
@@ -652,16 +670,9 @@ export default function CurrencyPairsAdminPage() {
                             📊 Binance
                           </span>
                         )}
-                        {pair.base_pair_id && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            🔗 Derivado
-                          </span>
-                        )}
-                        {!pair.base_pair_id && pair.binance_tracked && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            🏗 Base
-                          </span>
-                        )}
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPairTypeLabel(pair.pair_type).color}`}>
+                          {getPairTypeLabel(pair.pair_type).icon} {getPairTypeLabel(pair.pair_type).label}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -832,16 +843,9 @@ export default function CurrencyPairsAdminPage() {
                                 📊 Binance P2P
                               </span>
                             )}
-                            {pair.base_pair_id && (
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                🔗 Derivado
-                              </span>
-                            )}
-                            {!pair.base_pair_id && pair.binance_tracked && (
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                🏗 Base
-                              </span>
-                            )}
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPairTypeLabel(pair.pair_type).color}`}>
+                              {getPairTypeLabel(pair.pair_type).icon} {getPairTypeLabel(pair.pair_type).label}
+                            </span>
                           </div>
                         </div>
                         <div className="text-sm text-gray-600 mb-2">
@@ -1026,35 +1030,58 @@ export default function CurrencyPairsAdminPage() {
                     ))}
                   </select>
                 </div>
-                
-                {/* Base Pair Selection */}
+
+                {/* Pair Type Selection */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Par Base (Opcional)
+                    Tipo de Par
                   </label>
                   <select
-                    value={formData.base_pair_id || ''}
-                    onChange={(e) => setFormData({ ...formData, base_pair_id: e.target.value ? parseInt(e.target.value) : null })}
+                    value={formData.pair_type}
+                    onChange={(e) => setFormData({ ...formData, pair_type: e.target.value as PairType })}
                     className="w-full border border-gray-300 rounded-md px-3 py-2"
+                    required
                   >
-                    <option value="">Sin par base</option>
-                    {basePairs.map((pair) => (
-                      <option key={pair.id} value={pair.id}>
-                        {pair.display_name} - {pair.description}
-                      </option>
-                    ))}
+                    <option value={PairType.BASE}>🏗 Base - Par obtenido directamente de Binance (FIAT-CRYPTO)</option>
+                    <option value={PairType.DERIVED}>🔗 Derivado - Par derivado de un base con porcentaje (ej: Zelle, PayPal)</option>
+                    <option value={PairType.CROSS}>🔀 Cruzado - Par cruzado entre dos FIATs usando USDT como intermediario</option>
                   </select>
                   <p className="text-xs text-gray-500 mt-1">
-                    Seleccione un par base para crear un par derivado
+                    Seleccione el tipo de par según su método de cálculo
                   </p>
                 </div>
 
-                {/* Derived Percentage */}
-                {formData.base_pair_id && (
+                {/* Base Pair Selection - Solo para tipo DERIVED */}
+                {formData.pair_type === PairType.DERIVED && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Par Base <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={formData.base_pair_id || ''}
+                      onChange={(e) => setFormData({ ...formData, base_pair_id: e.target.value ? parseInt(e.target.value) : null })}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2"
+                      required
+                    >
+                      <option value="">Seleccione un par base...</option>
+                      {basePairs.map((pair) => (
+                        <option key={pair.id} value={pair.id}>
+                          {pair.display_name} - {pair.description}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Par base desde el cual se derivará este par
+                    </p>
+                  </div>
+                )}
+
+                {/* Derived/Cross Percentage */}
+                {(formData.pair_type === PairType.DERIVED && formData.base_pair_id) || formData.pair_type === PairType.CROSS ? (
                   <>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Porcentaje Derivado (%)
+                        {formData.pair_type === PairType.DERIVED ? 'Porcentaje Derivado (%)' : 'Porcentaje Ajuste (%) - Opcional'}
                       </label>
                       <input
                         type="number"
@@ -1070,7 +1097,9 @@ export default function CurrencyPairsAdminPage() {
                         placeholder="5.50"
                       />
                       <p className="text-xs text-gray-500 mt-1">
-                        Porcentaje a aplicar sobre la tasa del par base (0-100%)
+                        {formData.pair_type === PairType.DERIVED
+                          ? 'Porcentaje a aplicar sobre la tasa del par base (0-100%)'
+                          : 'Porcentaje a aplicar sobre la tasa cruzada calculada (0-100%)'}
                       </p>
                     </div>
 
@@ -1089,7 +1118,7 @@ export default function CurrencyPairsAdminPage() {
                       </span>
                     </div>
                   </>
-                )}
+                ) : null}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1219,35 +1248,58 @@ export default function CurrencyPairsAdminPage() {
                   <p className="text-sm text-gray-600">Par:</p>
                   <p className="font-medium">{editingPair.display_name}</p>
                 </div>
-                
-                {/* Base Pair Selection */}
+
+                {/* Pair Type Selection */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Par Base (Opcional)
+                    Tipo de Par
                   </label>
                   <select
-                    value={formData.base_pair_id || ''}
-                    onChange={(e) => setFormData({ ...formData, base_pair_id: e.target.value ? parseInt(e.target.value) : null })}
+                    value={formData.pair_type}
+                    onChange={(e) => setFormData({ ...formData, pair_type: e.target.value as PairType })}
                     className="w-full border border-gray-300 rounded-md px-3 py-2"
+                    required
                   >
-                    <option value="">Sin par base</option>
-                    {basePairs.map((pair) => (
-                      <option key={pair.id} value={pair.id}>
-                        {pair.display_name} - {pair.description}
-                      </option>
-                    ))}
+                    <option value={PairType.BASE}>🏗 Base - Par obtenido directamente de Binance (FIAT-CRYPTO)</option>
+                    <option value={PairType.DERIVED}>🔗 Derivado - Par derivado de un base con porcentaje (ej: Zelle, PayPal)</option>
+                    <option value={PairType.CROSS}>🔀 Cruzado - Par cruzado entre dos FIATs usando USDT como intermediario</option>
                   </select>
                   <p className="text-xs text-gray-500 mt-1">
-                    Seleccione un par base para crear un par derivado
+                    Seleccione el tipo de par según su método de cálculo
                   </p>
                 </div>
 
-                {/* Derived Percentage */}
-                {formData.base_pair_id && (
+                {/* Base Pair Selection - Solo para tipo DERIVED */}
+                {formData.pair_type === PairType.DERIVED && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Par Base <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={formData.base_pair_id || ''}
+                      onChange={(e) => setFormData({ ...formData, base_pair_id: e.target.value ? parseInt(e.target.value) : null })}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2"
+                      required
+                    >
+                      <option value="">Seleccione un par base...</option>
+                      {basePairs.map((pair) => (
+                        <option key={pair.id} value={pair.id}>
+                          {pair.display_name} - {pair.description}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Par base desde el cual se derivará este par
+                    </p>
+                  </div>
+                )}
+
+                {/* Derived/Cross Percentage */}
+                {(formData.pair_type === PairType.DERIVED && formData.base_pair_id) || formData.pair_type === PairType.CROSS ? (
                   <>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Porcentaje Derivado (%)
+                        {formData.pair_type === PairType.DERIVED ? 'Porcentaje Derivado (%)' : 'Porcentaje Ajuste (%) - Opcional'}
                       </label>
                       <input
                         type="number"
@@ -1263,7 +1315,9 @@ export default function CurrencyPairsAdminPage() {
                         placeholder="5.50"
                       />
                       <p className="text-xs text-gray-500 mt-1">
-                        Porcentaje a aplicar sobre la tasa del par base (0-100%)
+                        {formData.pair_type === PairType.DERIVED
+                          ? 'Porcentaje a aplicar sobre la tasa del par base (0-100%)'
+                          : 'Porcentaje a aplicar sobre la tasa cruzada calculada (0-100%)'}
                       </p>
                     </div>
 
@@ -1282,7 +1336,7 @@ export default function CurrencyPairsAdminPage() {
                       </span>
                     </div>
                   </>
-                )}
+                ) : null}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
