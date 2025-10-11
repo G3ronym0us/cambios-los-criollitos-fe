@@ -21,8 +21,12 @@ import { httpClient } from '@/utils/httpInterceptor';
 export class AdminService {
 
   async getCurrencies(page: number = 1, per_page: number = 10): Promise<ApiResponse<CurrencyAdminResponse>> {
+    console.log('[AdminService.getCurrencies] Called with page:', page, 'per_page:', per_page);
+    console.log('[AdminService.getCurrencies] httpClient instance:', httpClient);
     const endpoint = `/currencies?page=${page}&per_page=${per_page}`;
+    console.log('[AdminService.getCurrencies] Endpoint:', endpoint);
     const result = await httpClient.get<CurrencyAdminResponse>(endpoint);
+    console.log('[AdminService.getCurrencies] Result:', result);
     return {
       success: result.success,
       data: result.data,

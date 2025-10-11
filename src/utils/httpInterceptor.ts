@@ -14,6 +14,9 @@ export class HttpInterceptor {
 
   constructor() {
     this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    console.log('[HttpInterceptor] Constructor called');
+    console.log('[HttpInterceptor] NEXT_PUBLIC_API_URL:', process.env.NEXT_PUBLIC_API_URL);
+    console.log('[HttpInterceptor] Final baseUrl:', this.baseUrl);
   }
 
   static getInstance(): HttpInterceptor {
