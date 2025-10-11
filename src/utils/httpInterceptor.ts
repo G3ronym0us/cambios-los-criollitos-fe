@@ -97,14 +97,23 @@ export class HttpInterceptor {
 
   async get<T>(endpoint: string): Promise<HttpResponse<T>> {
     try {
-      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      const url = `${this.baseUrl}${endpoint}`;
+      console.log('[HttpInterceptor] GET request:', url);
+      console.log('[HttpInterceptor] Base URL:', this.baseUrl);
+      console.log('[HttpInterceptor] Headers:', this.getAuthHeaders());
+
+      const response = await fetch(url, {
         method: 'GET',
         headers: this.getAuthHeaders(),
       });
 
-      return this.handleResponse<T>(response);
+      console.log('[HttpInterceptor] Response status:', response.status);
+      const result = await this.handleResponse<T>(response);
+      console.log('[HttpInterceptor] Final result:', result);
+
+      return result;
     } catch (error) {
-      console.error('Network error in GET request:', error);
+      console.error('[HttpInterceptor] Network error in GET request:', error);
       return {
         success: false,
         error: 'Error de conexión al servidor'

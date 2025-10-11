@@ -29,6 +29,7 @@ export default function TradeMethodSelector({
   const [showDropdown, setShowDropdown] = useState(false);
 
   useEffect(() => {
+    console.log('[TradeMethodSelector] useEffect triggered - fiatCurrency:', fiatCurrency);
     if (fiatCurrency) {
       fetchTradeMethods();
     } else {
@@ -37,18 +38,25 @@ export default function TradeMethodSelector({
   }, [fiatCurrency]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchTradeMethods = async () => {
+    console.log('[TradeMethodSelector] fetchTradeMethods called for currency:', fiatCurrency);
     setLoading(true);
     setError('');
-    
+
     try {
+      console.log('[TradeMethodSelector] Making API call to getBinanceTradeMethodsByUrl');
       const result = await adminService.getBinanceTradeMethodsByUrl(fiatCurrency);
+      console.log('[TradeMethodSelector] API response:', result);
+
       if (result.success && result.data) {
+        console.log('[TradeMethodSelector] Success - methods loaded:', result.data.length);
         setAvailableMethods(result.data);
       } else {
+        console.error('[TradeMethodSelector] Error from API:', result.error);
         setError(result.error || 'Error al cargar métodos de pago');
         setAvailableMethods([]);
       }
-    } catch {
+    } catch (err) {
+      console.error('[TradeMethodSelector] Catch error:', err);
       setError('Error de conexión');
       setAvailableMethods([]);
     } finally {
