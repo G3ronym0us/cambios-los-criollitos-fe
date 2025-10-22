@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Currency, Rate, CurrencyConfig } from '@/types/currency';
 import { LogOut, RefreshCw, Clock, X, ArrowRight } from 'lucide-react';
-import CategorySection from './CategorySection';
 
 export const Dashboard: React.FC = () => {
   const { user, logout } = useAuth();
@@ -70,31 +69,6 @@ export const Dashboard: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const formatRatesByCategory = () => {
-    const categories: Record<string, Rate[]> = {
-      'USDT': [],
-      'Zelle': [],
-      'PayPal': [],
-      'Conversiones Cruzadas': []
-    };
-
-    rates.forEach((rate, index) => {      
-      if (rate.from_currency === Currency.USDT) {
-        categories['USDT'].push({ key: index.toString(), from_currency: rate.from_currency, to_currency: rate.to_currency, rate: rate.rate, type: 'sell', inverse_percentage: rate.inverse_percentage });
-      } else if (rate.to_currency === Currency.USDT) {
-        categories['USDT'].push({ key: index.toString(), from_currency: rate.from_currency, to_currency: rate.to_currency, rate: rate.rate, type: 'buy', inverse_percentage: rate.inverse_percentage });
-      } else if (rate.from_currency === Currency.ZELLE || rate.to_currency === Currency.ZELLE) {
-        categories['Zelle'].push({ key: index.toString(), from_currency: rate.from_currency, to_currency: rate.to_currency, rate: rate.rate, type: 'sell', inverse_percentage: rate.inverse_percentage });
-      } else if (rate.from_currency === Currency.PAYPAL || rate.to_currency === Currency.PAYPAL) {
-        categories['PayPal'].push({ key: index.toString(), from_currency: rate.from_currency, to_currency: rate.to_currency, rate: rate.rate, type: 'sell', inverse_percentage: rate.inverse_percentage });
-      } else {
-        categories['Conversiones Cruzadas'].push({ key: index.toString(), from_currency: rate.from_currency, to_currency: rate.to_currency, rate: rate.rate, type: 'cross', inverse_percentage: rate.inverse_percentage });
-      }
-    });
-
-    return categories;
-  };
-
   const formatNumber = (num: number) => {
     if (!num) {
       return '0.00';
@@ -112,13 +86,6 @@ export const Dashboard: React.FC = () => {
 
   const getCurrencyColor = (code: string) => {
     return currencyConfig[code]?.color || 'bg-gray-500';
-  };
-
-  // Función para abrir modal de edición
-  const handleEditRate = (rate: Rate) => {
-    setEditingRate(rate);
-    setModalForm({ rate: rate.rate.toString() });
-    setIsModalOpen(true);
   };
 
   // Función para cerrar modal
@@ -150,7 +117,6 @@ export const Dashboard: React.FC = () => {
     handleCloseModal();
   };
 
-  const categorizedRates = formatRatesByCategory();
 
   if (loading && Object.keys(rates).length === 0) {
     return (
@@ -238,19 +204,7 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Tasas por categorías */}
-        <div className="space-y-6">
-          {Object.entries(categorizedRates).map(([categoryName, categoryRates]) => (
-            <CategorySection
-              key={categoryName}
-              categoryName={categoryName}
-              categoryRates={categoryRates}
-              currencyConfig={currencyConfig}
-              showEditButton={true}
-              onEditRate={handleEditRate}
-            />
-          ))}
-        </div>
+        
 
         {/* Footer */}
         <div className="text-center py-6 text-gray-500 text-sm">

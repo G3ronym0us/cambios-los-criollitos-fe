@@ -1,5 +1,4 @@
-import React from 'react';
-
+'use client'
 interface CurrencyConfig {
   [key: string]: {
     name: string;
@@ -32,6 +31,7 @@ const CurrencyInputFields: React.FC<CurrencyInputFieldsProps> = ({
   bcvAmount,
   onBCVAmountChange
 }) => {
+
   const currencyConfig: CurrencyConfig = {
     'USDT': { name: 'USDT', symbol: '$', color: 'text-green-700', bgColor: 'bg-green-100 border-green-300' },
     'VES': { name: 'Bolívares', symbol: 'Bs', color: 'text-yellow-700', bgColor: 'bg-yellow-100 border-yellow-300' },
@@ -83,13 +83,13 @@ const CurrencyInputFields: React.FC<CurrencyInputFieldsProps> = ({
             </span>
           </div>
           <input
-            type="number" 
-            value={Number(fromAmount).toFixed(Math.min(Math.max(0, (fromAmount?.toString().split('.')[1] || '').length), 2))}
+            type="number"
+            value={fromAmount || ''}
             onChange={(e) => onFromAmountChange(e.target.value)}
             className="w-full text-2xl font-bold bg-transparent border-0 focus:ring-0 focus:outline-none placeholder-gray-400 text-black"
             placeholder="0.00"
             min="0"
-            step="0.01"
+            step="any"
           />
         </div>
 
@@ -105,12 +105,12 @@ const CurrencyInputFields: React.FC<CurrencyInputFieldsProps> = ({
           </div>
           <input
             type="number"
-            value={Number(toAmount).toFixed(Math.min(Math.max(0, (toAmount?.toString().split('.')[1] || '').length), 2))}
+            value={toAmount || ''}
             onChange={(e) => onToAmountChange(e.target.value)}
             className="w-full text-2xl font-bold bg-transparent border-0 focus:ring-0 focus:outline-none placeholder-gray-400 text-black"
             placeholder="0.00"
             min="0"
-            step="0.01"
+            step="any"
           />
         </div>
       </div>
@@ -133,7 +133,7 @@ const CurrencyInputFields: React.FC<CurrencyInputFieldsProps> = ({
           </div>
           <input
             type="number"
-            value={Number(bcvAmount).toFixed(Math.min(Math.max(0, (bcvAmount?.toString().split('.')[1] || '').length), 2))}
+            value={bcvAmount || ''}
             onChange={(e) => {
               if (onBCVAmountChange) {
                 onBCVAmountChange(e.target.value);
@@ -142,7 +142,7 @@ const CurrencyInputFields: React.FC<CurrencyInputFieldsProps> = ({
             className="w-full text-2xl font-bold bg-transparent border-0 focus:ring-0 focus:outline-none placeholder-gray-400 text-black"
             placeholder="0.00"
             min="0"
-            step="0.01"
+            step="any"
           />
         </div>
       )}

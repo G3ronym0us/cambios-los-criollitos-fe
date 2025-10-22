@@ -71,12 +71,21 @@ export class HttpInterceptor {
         let errorMessage = 'Error del servidor';
         try {
           const errorData = await response.json();
+
+          // Si es una advertencia de transacción similar, devolver el JSON completo
+          if (errorData.requires_confirmation && errorData.similar_transaction) {
+            return {
+              success: false,
+              error: JSON.stringify(errorData)
+            };
+          }
+
           errorMessage = errorData.detail || errorData.message || errorMessage;
         } catch {
           // Si no se puede parsear el error, usar el status
           errorMessage = `Error ${response.status}: ${response.statusText}`;
         }
-        
+
         return {
           success: false,
           error: errorMessage

@@ -1,12 +1,21 @@
 import { LucideIcon } from 'lucide-react';
 
 export interface User {
-  id: number;
+  uuid: string;
+  username: string;
   email: string;
-  full_name: string;
-  role: 'USER' | 'MODERATOR' | 'ROOT';
+  full_name?: string;
+  role: 'user' | 'moderator' | 'root';
+  role_display?: string;
+  is_active: boolean;
   is_verified: boolean;
+  can_receive_commission: boolean;
+  phone_number?: string;
+  bio?: string;
+  avatar_url?: string;
+  last_login?: string;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface LoginCredentials {

@@ -10,7 +10,7 @@ export enum PairType {
 }
 
 export interface CurrencyData {
-  id: number;
+  uuid: string;
   name: string;
   symbol: string;
   description: string;
@@ -39,11 +39,11 @@ export interface CurrencyAdminResponse {
 }
 
 export interface CurrencyPairData {
-  id: number;
+  uuid: string;
   pair_symbol: string;
-  from_currency_id: number;
-  to_currency_id: number;
-  base_pair_id: number | null;
+  from_currency_uuid: string;
+  to_currency_uuid: string;
+  base_pair_uuid?: string;
   derived_percentage: number | null;
   use_inverse_percentage: boolean;
   from_currency: CurrencyData;
@@ -62,9 +62,9 @@ export interface CurrencyPairData {
 }
 
 export interface CreateCurrencyPairData {
-  from_currency_id: number;
-  to_currency_id: number;
-  base_pair_id?: number | null;
+  from_currency_uuid: string;
+  to_currency_uuid: string;
+  base_pair_uuid?: string;
   derived_percentage?: number | null;
   use_inverse_percentage?: boolean;
   description: string;
@@ -77,7 +77,7 @@ export interface CreateCurrencyPairData {
 }
 
 export interface UpdateCurrencyPairData {
-  base_pair_id?: number | null;
+  base_pair_uuid?: string | null;
   derived_percentage?: number | null;
   use_inverse_percentage?: boolean;
   description?: string;
@@ -129,32 +129,11 @@ export interface BinanceFilterConditionsResponse {
   trade_methods: BinanceTradeMethod[];
 }
 
-export interface ManualRateData {
-  id: number;
-  from_currency: string;
-  to_currency: string;
-  rate: number;
-  source: string;
-  is_active: boolean;
-  percentage: number;
-  inverse_percentage: boolean;
-  created_at: string;
-  updated_at: string;
-  manual_rate: number | null;
-  is_manual: boolean;
-  automatic_rate: number | null;
-}
-
-export interface SetManualRateRequest {
-  manual_rate: number;
-}
-
 export interface BasePairData {
-  id: number;
+  uuid: string;
   pair_symbol: string;
-  from_currency_id: number;
-  to_currency_id: number;
-  base_pair_id: null;
+  from_currency_uuid: string;
+  to_currency_uuid: string;
   derived_percentage: null;
   use_inverse_percentage: boolean;
   from_currency: CurrencyData;
@@ -165,6 +144,7 @@ export interface BasePairData {
   is_active: boolean;
   is_monitored: boolean;
   binance_tracked: boolean;
+  is_manual: boolean;
   banks_to_track: string[] | null;
   amount_to_track: number | null;
   pair_type: PairType;

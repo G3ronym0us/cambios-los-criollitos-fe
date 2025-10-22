@@ -46,7 +46,7 @@ export default function CurrenciesAdminPage() {
     e.preventDefault();
     if (!editingCurrency) return;
     
-    const result = await adminService.updateCurrency(editingCurrency.id, formData);
+    const result = await adminService.updateCurrency(editingCurrency.uuid, formData);
     if (result.success) {
       setEditingCurrency(null);
       resetForm();
@@ -54,9 +54,9 @@ export default function CurrenciesAdminPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (uuid: string) => {
     if (confirm('¿Estás seguro de que quieres eliminar esta moneda?')) {
-      const result = await adminService.deleteCurrency(id);
+      const result = await adminService.deleteCurrency(uuid);
       if (result.success) {
         loadCurrencies();
       }
@@ -120,7 +120,7 @@ export default function CurrenciesAdminPage() {
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {currencies.map((currency) => (
-              <tr key={currency.id}>
+              <tr key={currency.uuid}>
                 <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                   <div className="text-sm font-medium text-gray-900">{currency.name}</div>
                   <div className="text-xs text-gray-500 sm:hidden">{currency.symbol}</div>
@@ -146,7 +146,7 @@ export default function CurrenciesAdminPage() {
                       <Edit size={16} />
                     </button>
                     <button
-                      onClick={() => handleDelete(currency.id)}
+                      onClick={() => handleDelete(currency.uuid)}
                       className="text-red-600 hover:text-red-900"
                     >
                       <Trash2 size={16} />

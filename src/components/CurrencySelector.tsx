@@ -1,4 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
+import CurrencyChip from "./currency/CurrencyChip";
+import CurrencyDropdown from "./currency/CurrencyDropdown";
 
 // Icono de intercambio
 const SwapIcon = ({ className }: { className: string }) => (
@@ -17,14 +19,6 @@ const SwapIcon = ({ className }: { className: string }) => (
   </svg>
 );
 
-interface CurrencyConfig {
-  [key: string]: {
-    name: string;
-    symbol: string;
-    color: string;
-  };
-}
-
 interface CurrencySelectorProps {
   fromCurrency: string;
   toCurrency: string;
@@ -42,97 +36,61 @@ const CurrencySelector: React.FC<CurrencySelectorProps> = ({
   onToCurrencyChange,
   onSwap,
 }) => {
-  const currencyConfig: CurrencyConfig = {
-    USDT: { name: "USDT", symbol: "$", color: "bg-green-500" },
-    VES: { name: "Bolívares", symbol: "Bs", color: "bg-yellow-500" },
-    COP: { name: "Pesos COP", symbol: "COL$", color: "bg-blue-500" },
-    BRL: { name: "Reales", symbol: "R$", color: "bg-purple-500" },
-    ZELLE: { name: "Zelle", symbol: "$", color: "bg-indigo-500" },
-    PAYPAL: { name: "PayPal", symbol: "$", color: "bg-cyan-500" },
-  };
-
-  const getCurrencyName = (code: string) => {
-    return currencyConfig[code]?.name || code.toUpperCase();
-  };
-
-  const getCurrencySymbol = (code: string) => {
-    return currencyConfig[code]?.symbol || "";
-  };
+  const [showFromDropdown, setShowFromDropdown] = useState(false);
+  const [showToDropdown, setShowToDropdown] = useState(false);
 
   return (
-    <div className="mb-6">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">
-        Seleccionar Monedas
-      </h3>
-      <div className="grid grid-cols-[80%_20%]">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
-          {/* Moneda origen */}
-          <div className="lg:col-span-5">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              De
-            </label>
-            <select
-              value={fromCurrency}
-              onChange={(e) => onFromCurrencyChange(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg"
-            >
-              <option value="">Seleccionar moneda origen</option>
-              {availableCurrencies.map((currency) => (
-                <option key={currency} value={currency} className="text-black">
-                  {getCurrencySymbol(currency)} {getCurrencyName(currency)}
-                </option>
-              ))}
-            </select>
-          </div>
+    <div className="mb-4">
+      {/* Contenedor principal con chips clickeables */}
+      <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-3 sm:p-4 border-2 border-blue-200">
+        <div className="flex items-center justify-center gap-2">
+          {/* Chip moneda origen */}
+          <CurrencyChip
+            currency={fromCurrency}
+            label="De"
+            onClick={() => setShowFromDropdown(true)}
+            isPlaceholder={!fromCurrency}
+          />
 
-          {/* Botón intercambiar */}
-          <div className="hidden lg:flex lg:col-span-2 justify-center">
-            <button
-              onClick={onSwap}
-              disabled={!fromCurrency || !toCurrency}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-100 hover:bg-blue-200 disabled:bg-gray-100 disabled:opacity-50 text-blue-700 disabled:text-gray-400 rounded-lg transition-colors"
-              title="Intercambiar monedas"
-            >
-              <SwapIcon className="h-4 w-4" />
-              <span className="text-sm font-medium hidden sm:block">
-                Intercambiar
-              </span>
-            </button>
-          </div>
-
-          {/* Moneda destino */}
-          <div className="lg:col-span-5">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              A
-            </label>
-            <select
-              value={toCurrency}
-              onChange={(e) => onToCurrencyChange(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg"
-            >
-              <option value="">Seleccionar moneda destino</option>
-              {availableCurrencies.map((currency) => (
-                <option key={currency} value={currency} className="text-black">
-                  {getCurrencySymbol(currency)} {getCurrencyName(currency)}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="flex justify-center lg:hidden">
+          {/* Botón intercambiar - ENTRE las monedas */}
           <button
             onClick={onSwap}
             disabled={!fromCurrency || !toCurrency}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-100 hover:bg-blue-200 disabled:bg-gray-100 disabled:opacity-50 text-blue-700 disabled:text-gray-400 rounded-lg transition-colors"
+            className="p-1.5 sm:p-2 bg-white hover:bg-blue-50 text-blue-600 rounded-lg transition-all shadow-sm border border-blue-200 hover:border-blue-300 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
             title="Intercambiar monedas"
           >
-            <SwapIcon className="h-4 w-4" />
-            <span className="text-sm font-medium hidden sm:block">
-              Intercambiar
-            </span>
+            <SwapIcon className="h-4 w-4 sm:h-5 sm:w-5" />
           </button>
+
+          {/* Chip moneda destino */}
+          <CurrencyChip
+            currency={toCurrency}
+            label="A"
+            onClick={() => setShowToDropdown(true)}
+            isPlaceholder={!toCurrency}
+          />
         </div>
       </div>
+
+      {/* Dropdown para moneda origen */}
+      <CurrencyDropdown
+        isOpen={showFromDropdown}
+        currencies={availableCurrencies}
+        selectedCurrency={fromCurrency}
+        onSelect={onFromCurrencyChange}
+        onClose={() => setShowFromDropdown(false)}
+        title="Seleccionar moneda origen"
+      />
+
+      {/* Dropdown para moneda destino */}
+      <CurrencyDropdown
+        isOpen={showToDropdown}
+        currencies={availableCurrencies}
+        selectedCurrency={toCurrency}
+        onSelect={onToCurrencyChange}
+        onClose={() => setShowToDropdown(false)}
+        title="Seleccionar moneda destino"
+      />
     </div>
   );
 };

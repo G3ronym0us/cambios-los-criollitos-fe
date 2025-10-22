@@ -7,7 +7,7 @@ interface ManualRateDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onSetRate: (rate: number) => Promise<boolean>;
-  onRemoveRate: () => Promise<boolean>;
+  onRemoveRate: () => void;
   fromCurrency: string;
   toCurrency: string;
   currentRate?: number;
@@ -48,11 +48,12 @@ export default function ManualRateDialog({
 
   const handleRemoveRate = async () => {
     setShowConfirmRemove(false);
-    const success = await onRemoveRate();
+    await onRemoveRate();
+    /*
     if (success) {
       setSuccessMessage('Precio manual removido correctamente');
       setShowSuccess(true);
-    }
+    }*/
   };
 
   const handleClose = () => {

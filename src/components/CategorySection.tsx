@@ -36,7 +36,6 @@ const CategorySection: React.FC<CategorySectionProps> = ({
               rate={rate}
               currencyConfig={currencyConfig}
               showEditButton={showEditButton}
-              categoryName={categoryName}
               onEdit={onEditRate}
             />
           ))}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ExchangeRateResponse } from '@/types/currency';
 import { ratesService } from '@/services/ratesService';
+import { CurrencyPairData, PairType } from '@/types/admin';
 
 const XIcon = ({ className }: { className: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -48,17 +49,13 @@ const RobotIcon = ({ className }: { className: string }) => (
 interface RateHistoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  fromCurrency: string;
-  toCurrency: string;
-  pairDisplayName: string;
+  selectedPair: CurrencyPairData
 }
 
 const RateHistoryModal: React.FC<RateHistoryModalProps> = ({
   isOpen,
   onClose,
-  fromCurrency,
-  toCurrency,
-  pairDisplayName
+  selectedPair
 }) => {
   const [rates, setRates] = useState<ExchangeRateResponse[]>([]);
   const [loading, setLoading] = useState(false);
@@ -66,15 +63,15 @@ const RateHistoryModal: React.FC<RateHistoryModalProps> = ({
   const [limit, setLimit] = useState(10);
 
   const fetchRateHistory = useCallback(async () => {
-    if (!fromCurrency || !toCurrency) return;
+    console.log(selectedPair);
+    if (!selectedPair) return;
 
     setLoading(true);
     setError(null);
 
     try {
       const response = await ratesService.getLatestRatesByCurrencies(
-        fromCurrency,
-        toCurrency,
+        selectedPair.uuid,
         limit
       );
 
@@ -88,13 +85,13 @@ const RateHistoryModal: React.FC<RateHistoryModalProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [fromCurrency, toCurrency, limit]);
+  }, [selectedPair, limit]);
 
   useEffect(() => {
-    if (isOpen && fromCurrency && toCurrency) {
+    if (isOpen && selectedPair) {
       fetchRateHistory();
     }
-  }, [isOpen, fromCurrency, toCurrency, limit, fetchRateHistory]);
+  }, [isOpen, selectedPair, limit, fetchRateHistory]);
 
   const formatNumber = (num: number) => {
     return num.toLocaleString('es-ES', {
@@ -115,31 +112,27 @@ const RateHistoryModal: React.FC<RateHistoryModalProps> = ({
     return code === 'USDT' ? '$' : code === 'VES' ? 'Bs' : code === 'COP' ? 'COL$' : code === 'BRL' ? 'R$' : '$';
   };
 
-  const getSourceIcon = (source: string) => {
-    switch (source) {
-      case 'binance_p2p':
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case PairType.BASE:
         return <DatabaseIcon className="h-4 w-4 text-green-600" />;
-      case 'binance_p2p_derived':
+      case PairType.DERIVED:
         return <DatabaseIcon className="h-4 w-4 text-blue-600" />;
-      case 'binance_p2p_cross':
+      case PairType.CROSS:
         return <DatabaseIcon className="h-4 w-4 text-purple-600" />;
-      case 'manual':
-        return <DatabaseIcon className="h-4 w-4 text-orange-600" />;
       default:
         return <DatabaseIcon className="h-4 w-4 text-gray-600" />;
     }
   };
 
-  const getSourceColor = (source: string) => {
-    switch (source) {
-      case 'binance_p2p':
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case PairType.BASE:
         return 'bg-green-100 text-green-800 border-green-200';
-      case 'binance_p2p_derived':
+      case PairType.DERIVED:
         return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'binance_p2p_cross':
+      case PairType.CROSS:
         return 'bg-purple-100 text-purple-800 border-purple-200';
-      case 'manual':
-        return 'bg-orange-100 text-orange-800 border-orange-200';
       default:
         return 'bg-gray-100 text-gray-800 border-gray-200';
     }
@@ -172,10 +165,10 @@ const RateHistoryModal: React.FC<RateHistoryModalProps> = ({
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-gray-900 text-lg">
-                {pairDisplayName}
+                {selectedPair.display_name}
               </span>
               <span className="text-gray-500 text-sm">
-                ({getCurrencyName(fromCurrency)} → {getCurrencyName(toCurrency)})
+                ({getCurrencyName(selectedPair.from_currency.name)} → {getCurrencyName(selectedPair.to_currency.name)})
               </span>
             </div>
           </div>
@@ -235,19 +228,19 @@ const RateHistoryModal: React.FC<RateHistoryModalProps> = ({
                 <div className="text-center">
                   <p className="text-sm text-gray-600">Tasa Actual</p>
                   <p className="text-xl font-bold text-gray-900">
-                    {formatNumber(rates[0]?.rate)} {getCurrencySymbol(toCurrency)}
+                    {formatNumber(rates[0]?.rate)} {getCurrencySymbol(selectedPair.to_currency.symbol)}
                   </p>
                 </div>
                 <div className="text-center">
                   <p className="text-sm text-gray-600">Tasa Más Alta</p>
                   <p className="text-xl font-bold text-green-600">
-                    {formatNumber(Math.max(...rates.map(r => r.rate)))} {getCurrencySymbol(toCurrency)}
+                    {formatNumber(Math.max(...rates.map(r => r.rate)))} {getCurrencySymbol(selectedPair.to_currency.symbol)}
                   </p>
                 </div>
                 <div className="text-center">
                   <p className="text-sm text-gray-600">Tasa Más Baja</p>
                   <p className="text-xl font-bold text-red-600">
-                    {formatNumber(Math.min(...rates.map(r => r.rate)))} {getCurrencySymbol(toCurrency)}
+                    {formatNumber(Math.min(...rates.map(r => r.rate)))} {getCurrencySymbol(selectedPair.to_currency.symbol)}
                   </p>
                 </div>
               </div>
@@ -258,7 +251,7 @@ const RateHistoryModal: React.FC<RateHistoryModalProps> = ({
                   const trend = getRateTrend(index);
                   return (
                     <div
-                      key={rate.id}
+                      key={rate.uuid}
                       className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                     >
                       <div className="flex flex-col gap-3">
@@ -270,13 +263,13 @@ const RateHistoryModal: React.FC<RateHistoryModalProps> = ({
                             <span className="text-xl font-bold text-gray-900">
                               {formatNumber(rate.rate)}
                             </span>
-                            <span className="text-gray-600">{getCurrencySymbol(toCurrency)}</span>
+                            <span className="text-gray-600">{getCurrencySymbol(selectedPair.to_currency.symbol)}</span>
                           </div>
                           
-                          <div className={`px-2 py-1 rounded-full text-xs border ${getSourceColor(rate.source)}`}>
+                          <div className={`px-2 py-1 rounded-full text-xs border ${getTypeColor(rate.pair_type)}`}>
                             <div className="flex items-center gap-1">
-                              {getSourceIcon(rate.source)}
-                              {rate.source.replace('_', ' ').toUpperCase()}
+                              {getTypeIcon(rate.pair_type)}
+                              {rate.pair_type.replace('_', ' ').toUpperCase()}
                             </div>
                           </div>
 
@@ -296,7 +289,7 @@ const RateHistoryModal: React.FC<RateHistoryModalProps> = ({
                                 <SettingsIcon className="h-3 w-3 text-orange-600" />
                                 <span className="text-orange-700 font-medium">Manual:</span>
                                 <span className="font-semibold text-orange-800">
-                                  {formatNumber(rate.manual_rate)} {getCurrencySymbol(toCurrency)}
+                                  {formatNumber(rate.manual_rate)} {getCurrencySymbol(selectedPair.to_currency.symbol)}
                                 </span>
                                 <span className="px-1.5 py-0.5 rounded text-xs bg-orange-100 text-orange-800 border border-orange-200 font-medium">
                                   ACTIVO
@@ -313,7 +306,7 @@ const RateHistoryModal: React.FC<RateHistoryModalProps> = ({
                                 <RobotIcon className="h-3 w-3 text-gray-500" />
                                 <span className="text-gray-600 font-medium">Automático:</span>
                                 <span className="text-gray-700">
-                                  {formatNumber(rate.automatic_rate)} {getCurrencySymbol(toCurrency)}
+                                  {formatNumber(rate.automatic_rate)} {getCurrencySymbol(selectedPair.to_currency.symbol)}
                                 </span>
                               </div>
                             </div>

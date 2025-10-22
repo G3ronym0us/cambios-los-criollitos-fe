@@ -1,23 +1,21 @@
 import React from 'react';
 import { Rate, CurrencyConfig } from '@/types/currency';
-import { TrendingUp, TrendingDown, ArrowRight, Edit } from 'lucide-react';
+import { TrendingUp, TrendingDown, ArrowRight, Edit, Edit3 } from 'lucide-react';
 
 interface RateCardProps {
   rate: Rate;
   currencyConfig?: CurrencyConfig;
   showEditButton?: boolean;
-  categoryName?: string;
   onEdit?: (rate: Rate) => void;
 }
 
-const RateCard: React.FC<RateCardProps> = ({ 
-  rate, 
-  currencyConfig = {}, 
-  showEditButton = false, 
-  categoryName = '',
-  onEdit 
+const RateCard: React.FC<RateCardProps> = ({
+  rate,
+  currencyConfig = {},
+  showEditButton = false,
+  onEdit
 }) => {
-  const { from_currency, to_currency, rate: rateValue, type, inverse_percentage } = rate;
+  const { from_currency, to_currency, rate: rateValue, type, inverse_percentage, is_manual } = rate;
 
   const getCurrencyName = (code: string) => {
     return currencyConfig[code]?.name || code.toUpperCase();
@@ -48,7 +46,9 @@ const RateCard: React.FC<RateCardProps> = ({
   };
 
   return (
-    <div className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all duration-200 hover:border-blue-300">
+    <div className={`border rounded-lg p-4 hover:shadow-md transition-all duration-200 ${
+      is_manual ? 'border-purple-300 bg-purple-50' : 'border-gray-200 hover:border-blue-300'
+    }`}>
       {/* Header del par */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
@@ -62,22 +62,36 @@ const RateCard: React.FC<RateCardProps> = ({
             {getCurrencyName(to_currency)}
           </span>
         </div>
-        
+
         <div className="flex items-center gap-2">
-          {/* Mostrar botón de edición solo para tasas USDT */}
-          {showEditButton && (categoryName === 'USDT') && (
+          {/* Mostrar botón de edición en todos los pares */}
+          {showEditButton && onEdit && (
             <button
               onClick={handleEdit}
-              className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-              title="Editar tasa manualmente"
+              className={`p-1 rounded transition-colors ${
+                is_manual
+                  ? 'text-purple-600 hover:text-purple-700 hover:bg-purple-100'
+                  : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'
+              }`}
+              title={is_manual ? "Gestionar tasa manual" : "Activar modo manual"}
             >
-              <Edit className="h-4 w-4" />
+              {is_manual ? <Edit3 className="h-4 w-4" /> : <Edit className="h-4 w-4" />}
             </button>
           )}
           {type === 'buy' && <TrendingUp className="h-4 w-4 text-green-500" />}
           {type === 'sell' && <TrendingDown className="h-4 w-4 text-red-500" />}
         </div>
       </div>
+
+      {/* Badge de modo manual */}
+      {is_manual && (
+        <div className="mb-3">
+          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+            <Edit3 className="h-3 w-3" />
+            Modo Manual
+          </span>
+        </div>
+      )}
       
       {/* Valor */}
       <div className="space-y-2">

@@ -1,18 +1,35 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { AdminService } from '@/services/adminService';
+import { useState, useEffect, useCallback } from "react";
+import { AdminService } from "@/services/adminService";
 import {
   CurrencyPairData,
   CreateCurrencyPairData,
   UpdateCurrencyPairData,
   CurrencyData,
-  PairType
-} from '@/types/admin';
-import { Trash2, Edit, Plus, Eye, EyeOff, ToggleLeft, ToggleRight, TrendingUp, Bitcoin, X, History, Settings, ArrowLeftRight } from 'lucide-react';
-import TradeMethodSelector from '@/components/TradeMethodSelector';
-import RateHistoryModal from './RateHistoryModal';
-import ManualRateDialog from '@/components/ManualRateDialog';
+  PairType,
+} from "@/types/admin";
+import {
+  Trash2,
+  Edit,
+  Plus,
+  Eye,
+  EyeOff,
+  ToggleLeft,
+  ToggleRight,
+  TrendingUp,
+  Bitcoin,
+  X,
+  History,
+  Settings,
+  ArrowLeftRight,
+  DollarSign,
+} from "lucide-react";
+import TradeMethodSelector from "@/components/TradeMethodSelector";
+import RateHistoryModal from "./RateHistoryModal";
+import ManualRateDialog from "@/components/ManualRateDialog";
+import CreateCurrencyPairModal from "@/components/admin/CreateCurrencyPairModal";
+import EditCurrencyPairModal from "@/components/admin/EditCurrencyPairModal";
 
 const adminService = new AdminService();
 
@@ -23,20 +40,6 @@ export default function CurrencyPairsAdminPage() {
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingPair, setEditingPair] = useState<CurrencyPairData | null>(null);
-  const [formData, setFormData] = useState<CreateCurrencyPairData>({
-    from_currency_id: 0,
-    to_currency_id: 0,
-    base_pair_id: null,
-    derived_percentage: null,
-    use_inverse_percentage: false,
-    description: '',
-    is_active: true,
-    is_monitored: true,
-    binance_tracked: false,
-    banks_to_track: [],
-    amount_to_track: null,
-    pair_type: PairType.BASE,
-  });
   const [stats, setStats] = useState<{
     total_pairs: number;
     active_pairs: number;
@@ -51,17 +54,25 @@ export default function CurrencyPairsAdminPage() {
     banks_to_track: [] as string[],
     amount_to_track: null as number | null,
   });
-  const [pairForBinanceConfig, setPairForBinanceConfig] = useState<CurrencyPairData | null>(null);
-  const [error, setError] = useState<string>('');
+  const [pairForBinanceConfig, setPairForBinanceConfig] =
+    useState<CurrencyPairData | null>(null);
+  const [error, setError] = useState<string>("");
   const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [selectedPairForHistory, setSelectedPairForHistory] = useState<CurrencyPairData | null>(null);
+  const [selectedPairForHistory, setSelectedPairForHistory] =
+    useState<CurrencyPairData | null>(null);
   const [showManualRateDialog, setShowManualRateDialog] = useState(false);
-  const [selectedPairForManualRate, setSelectedPairForManualRate] = useState<CurrencyPairData | null>(null);
+  const [selectedPairForManualRate, setSelectedPairForManualRate] =
+    useState<CurrencyPairData | null>(null);
   const [manualRateLoading, setManualRateLoading] = useState(false);
 
   const loadCurrencyPairs = useCallback(async () => {
     setLoading(true);
-    const result = await adminService.getCurrencyPairs(0, 100, filters.activeOnly, filters.monitoredOnly);
+    const result = await adminService.getCurrencyPairs(
+      0,
+      100,
+      filters.activeOnly,
+      filters.monitoredOnly
+    );
     if (result.success && result.data) {
       setPairs(result.data.pairs);
     }
@@ -73,7 +84,7 @@ export default function CurrencyPairsAdminPage() {
       loadCurrencyPairs(),
       loadCurrencies(),
       loadBasePairs(),
-      loadStats()
+      loadStats(),
     ]);
   }, [filters.activeOnly, filters.monitoredOnly, loadCurrencyPairs]);
 
@@ -87,6 +98,8 @@ export default function CurrencyPairsAdminPage() {
   const loadBasePairs = async () => {
     const result = await adminService.getBasePairs();
     if (result.success && result.data) {
+      // El backend ya filtra por pair_type=BASE, is_active=true,
+      // y (binance_tracked=true OR has_manual_rates)
       setBasePairs(result.data);
     }
   };
@@ -97,97 +110,76 @@ export default function CurrencyPairsAdminPage() {
       setStats({
         total_pairs: result.data.total_pairs,
         active_pairs: result.data.active_pairs,
-        monitored_pairs: result.data.monitored_pairs
+        monitored_pairs: result.data.monitored_pairs,
       });
     }
   };
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (formData.from_currency_id === formData.to_currency_id) {
-      alert('Las monedas de origen y destino deben ser diferentes');
-      return;
-    }
-    
-    const isValid = await validateBinanceForm();
-    if (!isValid) {
-      return;
-    }
-    
+  const handleCreate = async (formData: CreateCurrencyPairData) => {
     const result = await adminService.createCurrencyPair(formData);
     if (result.success) {
       setShowCreateModal(false);
-      resetForm();
+      setError("");
       loadCurrencyPairs();
       loadStats();
     } else {
-      alert(result.error || 'Error al crear el par');
+      alert(result.error || "Error al crear el par");
     }
   };
 
-  const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleUpdate = async (updateData: UpdateCurrencyPairData) => {
     if (!editingPair) return;
-    
-    const isValid = await validateBinanceForm();
-    if (!isValid) {
-      return;
-    }
-    
-    const updateData: UpdateCurrencyPairData = {
-      base_pair_id: formData.base_pair_id,
-      derived_percentage: formData.derived_percentage,
-      use_inverse_percentage: formData.use_inverse_percentage,
-      description: formData.description,
-      is_active: formData.is_active,
-      is_monitored: formData.is_monitored,
-      binance_tracked: formData.binance_tracked,
-      banks_to_track: formData.banks_to_track,
-      amount_to_track: formData.amount_to_track,
-      pair_type: formData.pair_type,
-    };
-    
-    const result = await adminService.updateCurrencyPair(editingPair.id, updateData);
+
+    const result = await adminService.updateCurrencyPair(
+      editingPair.uuid,
+      updateData
+    );
     if (result.success) {
       setEditingPair(null);
-      resetForm();
+      setError("");
       loadCurrencyPairs();
       loadStats();
     } else {
-      alert(result.error || 'Error al actualizar el par');
+      alert(result.error || "Error al actualizar el par");
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (uuid: string) => {
     // Check if this is a base pair with derived pairs
-    const pairToDelete = pairs.find(p => p.id === id);
-    if (pairToDelete && !pairToDelete.base_pair_id) {
+    const pairToDelete = pairs.find((p) => p.uuid === uuid);
+    if (pairToDelete && !pairToDelete.base_pair_uuid) {
       // This is a potential base pair, check for derived pairs
-      const derivedPairs = pairs.filter(p => p.base_pair_id === id);
+      const derivedPairs = pairs.filter((p) => p.base_pair_uuid === uuid);
       if (derivedPairs.length > 0) {
-        alert(`No se puede eliminar este par base porque tiene ${derivedPairs.length} par(es) derivado(s). Elimine primero los pares derivados: ${derivedPairs.map(p => p.display_name).join(', ')}`);
+        alert(
+          `No se puede eliminar este par base porque tiene ${
+            derivedPairs.length
+          } par(es) derivado(s). Elimine primero los pares derivados: ${derivedPairs
+            .map((p) => p.display_name)
+            .join(", ")}`
+        );
         return;
       }
     }
-    
-    if (confirm('¿Estás seguro de que quieres eliminar este par de monedas?')) {
-      const result = await adminService.deleteCurrencyPair(id);
+
+    if (confirm("¿Estás seguro de que quieres eliminar este par de monedas?")) {
+      const result = await adminService.deleteCurrencyPair(uuid);
       if (result.success) {
         loadCurrencyPairs();
         loadStats();
       } else {
-        alert(result.error || 'Error al eliminar el par');
+        alert(result.error || "Error al eliminar el par");
       }
     }
   };
 
   const handleToggleActive = async (pair: CurrencyPairData) => {
-    const result = await adminService.updateCurrencyPairStatus(pair.id, {
+    const result = await adminService.updateCurrencyPairStatus(pair.uuid, {
       is_active: !pair.is_active,
       is_monitored: pair.is_monitored,
       binance_tracked: pair.binance_tracked,
       banks_to_track: pair.banks_to_track,
-      amount_to_track: pair.amount_to_track
+      amount_to_track: pair.amount_to_track,
     });
     if (result.success) {
       loadCurrencyPairs();
@@ -196,12 +188,12 @@ export default function CurrencyPairsAdminPage() {
   };
 
   const handleToggleMonitored = async (pair: CurrencyPairData) => {
-    const result = await adminService.updateCurrencyPairStatus(pair.id, {
+    const result = await adminService.updateCurrencyPairStatus(pair.uuid, {
       is_active: pair.is_active,
       is_monitored: !pair.is_monitored,
       binance_tracked: pair.binance_tracked,
       banks_to_track: pair.banks_to_track,
-      amount_to_track: pair.amount_to_track
+      amount_to_track: pair.amount_to_track,
     });
     if (result.success) {
       loadCurrencyPairs();
@@ -212,16 +204,17 @@ export default function CurrencyPairsAdminPage() {
   const handleToggleBinanceTracked = (pair: CurrencyPairData) => {
     if (!pair.binance_tracked) {
       // Validar tipos de moneda antes de abrir modal
-      const validTypes = (
-        (pair.from_currency.currency_type === 'FIAT' && pair.to_currency.currency_type === 'CRYPTO') ||
-        (pair.from_currency.currency_type === 'CRYPTO' && pair.to_currency.currency_type === 'FIAT')
-      );
-      
+      const validTypes =
+        (pair.from_currency.currency_type === "FIAT" &&
+          pair.to_currency.currency_type === "CRYPTO") ||
+        (pair.from_currency.currency_type === "CRYPTO" &&
+          pair.to_currency.currency_type === "FIAT");
+
       if (!validTypes) {
-        alert('Los pares de Binance deben ser entre monedas FIAT y CRYPTO');
+        alert("Los pares de Binance deben ser entre monedas FIAT y CRYPTO");
         return;
       }
-      
+
       // Abrir modal para configurar Binance
       setPairForBinanceConfig(pair);
       setBinanceConfig({
@@ -236,51 +229,55 @@ export default function CurrencyPairsAdminPage() {
   };
 
   const handleUpdateBinanceStatus = async (
-    pair: CurrencyPairData, 
-    binance_tracked: boolean, 
-    banks_to_track: string[] | null, 
+    pair: CurrencyPairData,
+    binance_tracked: boolean,
+    banks_to_track: string[] | null,
     amount_to_track: number | null
   ) => {
-    const result = await adminService.updateCurrencyPairStatus(pair.id, {
+    const result = await adminService.updateCurrencyPairStatus(pair.uuid, {
       is_active: pair.is_active,
       is_monitored: pair.is_monitored,
       binance_tracked,
       banks_to_track,
-      amount_to_track
+      amount_to_track,
     });
     if (result.success) {
       loadCurrencyPairs();
       loadStats();
     } else {
-      alert(result.error || 'Error al actualizar la configuración');
+      alert(result.error || "Error al actualizar la configuración");
     }
   };
 
   const handleSaveBinanceConfig = async () => {
-    setError('');
-    
+    setError("");
+
     // Validaciones básicas
     if (!binanceConfig.banks_to_track.length) {
-      setError('Debe seleccionar al menos un método de pago');
+      setError("Debe seleccionar al menos un método de pago");
       return;
     }
-    
+
     if (!binanceConfig.amount_to_track || binanceConfig.amount_to_track <= 0) {
-      setError('El monto debe ser mayor a 0');
+      setError("El monto debe ser mayor a 0");
       return;
     }
-    
+
     // Validación contra API de Binance
     if (pairForBinanceConfig) {
-      const fiatCurrency = pairForBinanceConfig.from_currency.currency_type === 'FIAT' 
-        ? pairForBinanceConfig.from_currency.symbol 
-        : pairForBinanceConfig.to_currency.symbol;
-      
-      const isValid = await validateTradeMethodsWithBinance(fiatCurrency, binanceConfig.banks_to_track);
+      const fiatCurrency =
+        pairForBinanceConfig.from_currency.currency_type === "FIAT"
+          ? pairForBinanceConfig.from_currency.symbol
+          : pairForBinanceConfig.to_currency.symbol;
+
+      const isValid = await validateTradeMethodsWithBinance(
+        fiatCurrency,
+        binanceConfig.banks_to_track
+      );
       if (!isValid) {
         return;
       }
-      
+
       handleUpdateBinanceStatus(
         pairForBinanceConfig,
         true,
@@ -292,132 +289,157 @@ export default function CurrencyPairsAdminPage() {
     }
   };
 
-  const resetForm = () => {
-    setFormData({
-      from_currency_id: 0,
-      to_currency_id: 0,
-      base_pair_id: null,
-      derived_percentage: null,
-      use_inverse_percentage: false,
-      description: '',
-      is_active: true,
-      is_monitored: true,
-      binance_tracked: false,
-      banks_to_track: [],
-      amount_to_track: null,
-      pair_type: PairType.BASE,
-    });
-  };
-
   // Helper functions
-  const getFiatCurrencyFromPair = (fromCurrencyId: number, toCurrencyId: number): string | null => {
-    const fromCurrency = currencies.find(c => c.id === fromCurrencyId);
-    const toCurrency = currencies.find(c => c.id === toCurrencyId);
+  const getFiatCurrencyFromPair = (
+    fromCurrencyUuid: string,
+    toCurrencyUuid: string
+  ): string | null => {
+    const fromCurrency = currencies.find((c) => c.uuid === fromCurrencyUuid);
+    const toCurrency = currencies.find((c) => c.uuid === toCurrencyUuid);
 
-    if (fromCurrency?.currency_type === 'FIAT') {
+    if (fromCurrency?.currency_type === "FIAT") {
       return fromCurrency.symbol;
-    } else if (toCurrency?.currency_type === 'FIAT') {
+    } else if (toCurrency?.currency_type === "FIAT") {
       return toCurrency.symbol;
     }
 
     return null;
   };
 
-  const getPairTypeLabel = (pairType: PairType): { label: string; color: string; icon: string } => {
-    switch (pairType) {
-      case PairType.BASE:
-        return { label: 'Base', color: 'bg-green-100 text-green-800', icon: '🏗' };
-      case PairType.DERIVED:
-        return { label: 'Derivado', color: 'bg-blue-100 text-blue-800', icon: '🔗' };
-      case PairType.CROSS:
-        return { label: 'Cruzado', color: 'bg-purple-100 text-purple-800', icon: '🔀' };
+  const getPairTypeLabel = (
+    pairType: PairType
+  ): { label: string; color: string; icon: string } => {
+    // Normalizar el valor a mayúsculas para comparación
+    const normalizedType = (pairType as string).toUpperCase();
+
+    switch (normalizedType) {
+      case "BASE":
+        return {
+          label: "Base",
+          color: "bg-green-100 text-green-800",
+          icon: "🏗",
+        };
+      case "DERIVED":
+        return {
+          label: "Derivado",
+          color: "bg-blue-100 text-blue-800",
+          icon: "🔗",
+        };
+      case "CROSS":
+        return {
+          label: "Cruzado",
+          color: "bg-purple-100 text-purple-800",
+          icon: "🔀",
+        };
       default:
-        return { label: 'Base', color: 'bg-gray-100 text-gray-800', icon: '❓' };
+        console.warn("Tipo de par desconocido:", pairType);
+        return {
+          label: "Desconocido",
+          color: "bg-gray-100 text-gray-800",
+          icon: "❓",
+        };
     }
   };
 
   // Validate trade methods against Binance API
-  const validateTradeMethodsWithBinance = async (fiatCurrency: string, selectedMethods: string[]): Promise<boolean> => {
+  const validateTradeMethodsWithBinance = async (
+    fiatCurrency: string,
+    selectedMethods: string[]
+  ): Promise<boolean> => {
     try {
-      const result = await adminService.getBinanceTradeMethodsByUrl(fiatCurrency);
+      const result = await adminService.getBinanceTradeMethodsByUrl(
+        fiatCurrency
+      );
       if (result.success && result.data) {
-        const validMethods = result.data.map(method => method.identifier);
-        const invalidMethods = selectedMethods.filter(method => !validMethods.includes(method));
-        
+        const validMethods = result.data.map((method) => method.identifier);
+        const invalidMethods = selectedMethods.filter(
+          (method) => !validMethods.includes(method)
+        );
+
         if (invalidMethods.length > 0) {
-          setError(`Métodos de pago inválidos para ${fiatCurrency}: ${invalidMethods.join(', ')}`);
+          setError(
+            `Métodos de pago inválidos para ${fiatCurrency}: ${invalidMethods.join(
+              ", "
+            )}`
+          );
           return false;
         }
         return true;
       } else {
         // If we can't fetch from Binance, allow the form to proceed with a warning
-        console.warn('Could not validate trade methods with Binance:', result.error);
+        console.warn(
+          "Could not validate trade methods with Binance:",
+          result.error
+        );
         return true;
       }
     } catch (err) {
-      console.error('Error validating trade methods:', err);
+      console.error("Error validating trade methods:", err);
       return true; // Allow to proceed if validation fails
     }
   };
 
-  const validateBinanceForm = async (): Promise<boolean> => {
-    setError('');
-    
+  const validateBinanceForm = async (
+    formData: CreateCurrencyPairData | UpdateCurrencyPairData
+  ): Promise<boolean> => {
+    setError("");
+
     if (formData.binance_tracked) {
-      // Validar tipos de moneda
-      const fromCurrency = currencies.find(c => c.id === formData.from_currency_id);
-      const toCurrency = currencies.find(c => c.id === formData.to_currency_id);
-      
-      const validTypes = (
-        (fromCurrency?.currency_type === 'FIAT' && toCurrency?.currency_type === 'CRYPTO') ||
-        (fromCurrency?.currency_type === 'CRYPTO' && toCurrency?.currency_type === 'FIAT')
-      );
-      
-      if (!validTypes) {
-        setError('Los pares de Binance deben ser entre monedas FIAT y CRYPTO');
-        return false;
+      // Validar tipos de moneda solo si tenemos from_currency_uuid y to_currency_uuid (CreateCurrencyPairData)
+      if ("from_currency_uuid" in formData && "to_currency_uuid" in formData) {
+        const fromCurrency = currencies.find(
+          (c) => c.uuid === formData.from_currency_uuid
+        );
+        const toCurrency = currencies.find(
+          (c) => c.uuid === formData.to_currency_uuid
+        );
+
+        const validTypes =
+          (fromCurrency?.currency_type === "FIAT" &&
+            toCurrency?.currency_type === "CRYPTO") ||
+          (fromCurrency?.currency_type === "CRYPTO" &&
+            toCurrency?.currency_type === "FIAT");
+
+        if (!validTypes) {
+          setError(
+            "Los pares de Binance deben ser entre monedas FIAT y CRYPTO"
+          );
+          return false;
+        }
       }
-      
+
       // Validar campos requeridos
       if (!formData.banks_to_track?.length) {
-        setError('Debe seleccionar al menos un método de pago');
+        setError("Debe seleccionar al menos un método de pago");
         return false;
       }
-      
+
       if (!formData.amount_to_track || formData.amount_to_track <= 0) {
-        setError('El monto debe ser mayor a 0');
+        setError("El monto debe ser mayor a 0");
         return false;
       }
-      
+
       // Validate against Binance API
-      const fiatCurrency = getFiatCurrencyFromPair(formData.from_currency_id, formData.to_currency_id);
+      let fiatCurrency: string | null = null;
+      if ("from_currency_uuid" in formData && "to_currency_uuid" in formData) {
+        fiatCurrency = getFiatCurrencyFromPair(
+          formData.from_currency_uuid,
+          formData.to_currency_uuid
+        );
+      }
+
       if (fiatCurrency) {
-        const isValid = await validateTradeMethodsWithBinance(fiatCurrency, formData.banks_to_track);
+        const isValid = await validateTradeMethodsWithBinance(
+          fiatCurrency,
+          formData.banks_to_track
+        );
         if (!isValid) {
           return false;
         }
       }
     }
-    
-    return true;
-  };
 
-  const openEditModal = (pair: CurrencyPairData) => {
-    setEditingPair(pair);
-    setFormData({
-      from_currency_id: pair.from_currency_id,
-      to_currency_id: pair.to_currency_id,
-      base_pair_id: pair.base_pair_id,
-      derived_percentage: pair.derived_percentage,
-      use_inverse_percentage: pair.use_inverse_percentage,
-      description: pair.description,
-      is_active: pair.is_active,
-      is_monitored: pair.is_monitored,
-      binance_tracked: pair.binance_tracked,
-      banks_to_track: pair.banks_to_track || [],
-      amount_to_track: pair.amount_to_track,
-      pair_type: pair.pair_type,
-    });
+    return true;
   };
 
   const handleShowHistory = (pair: CurrencyPairData) => {
@@ -441,57 +463,43 @@ export default function CurrencyPairsAdminPage() {
 
   const handleSetManualRate = async (rate: number): Promise<boolean> => {
     if (!selectedPairForManualRate) return false;
-    
+
     setManualRateLoading(true);
     try {
       const result = await adminService.setManualRate(
-        selectedPairForManualRate.from_currency.symbol,
-        selectedPairForManualRate.to_currency.symbol,
+        selectedPairForManualRate.uuid,
         rate
       );
-      
+
       if (result.success) {
         setSelectedPairForManualRate(null);
         // Could refresh data here if needed
         return true;
       } else {
-        alert(result.error || 'Error al establecer precio manual');
+        alert(result.error || "Error al establecer precio manual");
         return false;
       }
     } catch {
-      alert('Error de conexión al servidor');
+      alert("Error de conexión al servidor");
       return false;
     } finally {
       setManualRateLoading(false);
     }
   };
 
-  const handleRemoveManualRate = async (): Promise<boolean> => {
+  const handleRemoveManualRate = async () => {
     if (!selectedPairForManualRate) return false;
-    
+
     setManualRateLoading(true);
     try {
-      const result = await adminService.removeManualRate(
-        selectedPairForManualRate.from_currency.symbol,
-        selectedPairForManualRate.to_currency.symbol
-      );
-      
-      if (result.success) {
-        setSelectedPairForManualRate(null);
-        // Could refresh data here if needed
-        return true;
-      } else {
-        alert(result.error || 'Error al remover precio manual');
-        return false;
-      }
+      // TODO
     } catch {
-      alert('Error de conexión al servidor');
+      alert("Error de conexión al servidor");
       return false;
     } finally {
       setManualRateLoading(false);
     }
   };
-
 
   if (loading) {
     return (
@@ -518,7 +526,9 @@ export default function CurrencyPairsAdminPage() {
       {/* Header with Stats */}
       <div className="mb-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4 sm:gap-0">
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Gestión de Pares de Monedas</h2>
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
+            Gestión de Pares de Monedas
+          </h2>
           <button
             onClick={() => setShowCreateModal(true)}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm sm:text-base w-full sm:w-auto justify-center sm:justify-start"
@@ -535,8 +545,12 @@ export default function CurrencyPairsAdminPage() {
               <div className="flex items-center">
                 <TrendingUp className="text-blue-500 mr-2" size={18} />
                 <div>
-                  <p className="text-xs sm:text-sm text-gray-600">Total Pares</p>
-                  <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.total_pairs}</p>
+                  <p className="text-xs sm:text-sm text-gray-600">
+                    Total Pares
+                  </p>
+                  <p className="text-xl sm:text-2xl font-bold text-gray-900">
+                    {stats.total_pairs}
+                  </p>
                 </div>
               </div>
             </div>
@@ -544,8 +558,12 @@ export default function CurrencyPairsAdminPage() {
               <div className="flex items-center">
                 <ToggleRight className="text-green-500 mr-2" size={18} />
                 <div>
-                  <p className="text-xs sm:text-sm text-gray-600">Pares Activos</p>
-                  <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.active_pairs}</p>
+                  <p className="text-xs sm:text-sm text-gray-600">
+                    Pares Activos
+                  </p>
+                  <p className="text-xl sm:text-2xl font-bold text-gray-900">
+                    {stats.active_pairs}
+                  </p>
                 </div>
               </div>
             </div>
@@ -553,8 +571,12 @@ export default function CurrencyPairsAdminPage() {
               <div className="flex items-center">
                 <Eye className="text-purple-500 mr-2" size={18} />
                 <div>
-                  <p className="text-xs sm:text-sm text-gray-600">Monitoreados</p>
-                  <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.monitored_pairs}</p>
+                  <p className="text-xs sm:text-sm text-gray-600">
+                    Monitoreados
+                  </p>
+                  <p className="text-xl sm:text-2xl font-bold text-gray-900">
+                    {stats.monitored_pairs}
+                  </p>
                 </div>
               </div>
             </div>
@@ -567,7 +589,9 @@ export default function CurrencyPairsAdminPage() {
             <input
               type="checkbox"
               checked={filters.activeOnly}
-              onChange={(e) => setFilters({ ...filters, activeOnly: e.target.checked })}
+              onChange={(e) =>
+                setFilters({ ...filters, activeOnly: e.target.checked })
+              }
               className="mr-2"
             />
             Solo activos
@@ -576,7 +600,9 @@ export default function CurrencyPairsAdminPage() {
             <input
               type="checkbox"
               checked={filters.monitoredOnly}
-              onChange={(e) => setFilters({ ...filters, monitoredOnly: e.target.checked })}
+              onChange={(e) =>
+                setFilters({ ...filters, monitoredOnly: e.target.checked })
+              }
               className="mr-2"
             />
             Solo monitoreados
@@ -598,21 +624,21 @@ export default function CurrencyPairsAdminPage() {
                   )}
                 </div>
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  {filters.activeOnly || filters.monitoredOnly 
-                    ? 'No se encontraron pares con estos filtros'
-                    : 'No hay pares de monedas'
-                  }
+                  {filters.activeOnly || filters.monitoredOnly
+                    ? "No se encontraron pares con estos filtros"
+                    : "No hay pares de monedas"}
                 </h3>
                 <p className="text-gray-500 mb-4">
-                  {filters.activeOnly || filters.monitoredOnly 
-                    ? 'Prueba ajustando los filtros o crea un nuevo par de monedas.'
-                    : 'Comienza creando tu primer par de monedas para gestionar las tasas de cambio.'
-                  }
+                  {filters.activeOnly || filters.monitoredOnly
+                    ? "Prueba ajustando los filtros o crea un nuevo par de monedas."
+                    : "Comienza creando tu primer par de monedas para gestionar las tasas de cambio."}
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3">
                   {(filters.activeOnly || filters.monitoredOnly) && (
                     <button
-                      onClick={() => setFilters({ activeOnly: false, monitoredOnly: false })}
+                      onClick={() =>
+                        setFilters({ activeOnly: false, monitoredOnly: false })
+                      }
                       className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 flex items-center justify-center sm:justify-start gap-2"
                     >
                       <X size={16} />
@@ -624,7 +650,9 @@ export default function CurrencyPairsAdminPage() {
                     className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center sm:justify-start gap-2"
                   >
                     <Plus size={16} />
-                    {filters.activeOnly || filters.monitoredOnly ? 'Crear nuevo par' : 'Crear primer par'}
+                    {filters.activeOnly || filters.monitoredOnly
+                      ? "Crear nuevo par"
+                      : "Crear primer par"}
                   </button>
                 </div>
               </div>
@@ -632,7 +660,10 @@ export default function CurrencyPairsAdminPage() {
           </div>
         ) : (
           pairs.map((pair) => (
-            <div key={pair.id} className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200">
+            <div
+              key={pair.uuid}
+              className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200"
+            >
               {/* Mobile Layout */}
               <div className="block lg:hidden">
                 <div className="p-4 sm:p-6">
@@ -640,7 +671,8 @@ export default function CurrencyPairsAdminPage() {
                   <div className="flex items-start space-x-4 mb-4">
                     <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
                       <span className="text-white font-bold text-sm">
-                        {pair.from_currency.symbol.charAt(0)}{pair.to_currency.symbol.charAt(0)}
+                        {pair.from_currency.symbol.charAt(0)}
+                        {pair.to_currency.symbol.charAt(0)}
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
@@ -648,30 +680,22 @@ export default function CurrencyPairsAdminPage() {
                         <h3 className="font-semibold text-gray-900 text-base">
                           {pair.display_name}
                         </h3>
+                        <span
+                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                            getPairTypeLabel(pair.pair_type).color
+                          }`}
+                        >
+                          {getPairTypeLabel(pair.pair_type).icon}{" "}
+                          {getPairTypeLabel(pair.pair_type).label}
+                        </span>
                       </div>
                       <div className="text-sm text-gray-600 mb-2">
-                        <span className="font-medium">{pair.from_currency.name}</span>
+                        <span className="font-medium">
+                          {pair.from_currency.name}
+                        </span>
                         <span className="mx-2 text-gray-400">→</span>
-                        <span className="font-medium">{pair.to_currency.name}</span>
-                      </div>
-                      <div className="flex flex-wrap gap-1 mb-3">
-                        {pair.is_active && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            ✓ Activo
-                          </span>
-                        )}
-                        {pair.is_monitored && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                            👁 Monitor
-                          </span>
-                        )}
-                        {pair.binance_tracked && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                            📊 Binance
-                          </span>
-                        )}
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPairTypeLabel(pair.pair_type).color}`}>
-                          {getPairTypeLabel(pair.pair_type).icon} {getPairTypeLabel(pair.pair_type).label}
+                        <span className="font-medium">
+                          {pair.to_currency.name}
                         </span>
                       </div>
                     </div>
@@ -682,33 +706,50 @@ export default function CurrencyPairsAdminPage() {
                     <p className="text-sm text-gray-600 leading-relaxed">
                       {pair.description}
                     </p>
-                    
+
                     {/* Base Pair Relationship Info */}
-                    {pair.base_pair_id && pair.base_pair && (
-                      <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
-                        <div className="text-xs text-blue-700">
-                          <div><span className="font-medium">Par base:</span> {pair.base_pair.display_name}</div>
-                          {pair.derived_percentage && (
-                            <div><span className="font-medium">Porcentaje:</span> {pair.derived_percentage}% {pair.use_inverse_percentage ? '(inverso)' : ''}</div>
-                          )}
-                        </div>
+                    <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
+                      <div className="text-xs text-blue-700">
+                        {pair.base_pair && (
+                          <div>
+                            <span className="font-medium">Par base:</span>{" "}
+                            {pair.base_pair.display_name}
+                          </div>
+                        )}
+                        {pair.derived_percentage && (
+                          <div>
+                            <span className="font-medium">Porcentaje:</span>{" "}
+                            {pair.derived_percentage}%{" "}
+                            {pair.use_inverse_percentage ? "(inverso)" : ""}
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
 
                   {/* Binance Configuration */}
-                  {pair.binance_tracked && pair.banks_to_track && pair.amount_to_track && (
-                    <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Bitcoin className="text-amber-600" size={16} />
-                        <span className="font-medium text-amber-800 text-sm">Configuración Binance P2P</span>
+                  {pair.binance_tracked &&
+                    pair.banks_to_track &&
+                    pair.amount_to_track && (
+                      <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Bitcoin className="text-amber-600" size={16} />
+                          <span className="font-medium text-amber-800 text-sm">
+                            Configuración Binance P2P
+                          </span>
+                        </div>
+                        <div className="text-xs text-amber-700 space-y-1">
+                          <div>
+                            <span className="font-medium">Métodos:</span>{" "}
+                            {pair.banks_to_track.join(", ")}
+                          </div>
+                          <div>
+                            <span className="font-medium">Monto:</span> $
+                            {pair.amount_to_track}
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-xs text-amber-700 space-y-1">
-                        <div><span className="font-medium">Métodos:</span> {pair.banks_to_track.join(', ')}</div>
-                        <div><span className="font-medium">Monto:</span> ${pair.amount_to_track}</div>
-                      </div>
-                    </div>
-                  )}
+                    )}
 
                   {/* Action Bar */}
                   <div className="border-t border-gray-100 pt-4">
@@ -719,11 +760,13 @@ export default function CurrencyPairsAdminPage() {
                         <button
                           onClick={() => handleToggleActive(pair)}
                           className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                            pair.is_active 
-                              ? 'bg-green-500 text-white shadow-sm' 
-                              : 'text-gray-600 hover:bg-gray-100'
+                            pair.is_active
+                              ? "bg-green-500 text-white shadow-sm"
+                              : "text-gray-600 hover:bg-gray-100"
                           }`}
-                          title={pair.is_active ? "Desactivar par" : "Activar par"}
+                          title={
+                            pair.is_active ? "Desactivar par" : "Activar par"
+                          }
                         >
                           {pair.is_active ? (
                             <ToggleRight size={16} />
@@ -731,7 +774,7 @@ export default function CurrencyPairsAdminPage() {
                             <ToggleLeft size={16} />
                           )}
                           <span className="hidden sm:inline">
-                            {pair.is_active ? 'Activo' : 'Inactivo'}
+                            {pair.is_active ? "Activo" : "Inactivo"}
                           </span>
                         </button>
 
@@ -739,11 +782,15 @@ export default function CurrencyPairsAdminPage() {
                         <button
                           onClick={() => handleToggleMonitored(pair)}
                           className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                            pair.is_monitored 
-                              ? 'bg-purple-500 text-white shadow-sm' 
-                              : 'text-gray-600 hover:bg-gray-100'
+                            pair.is_monitored
+                              ? "bg-purple-500 text-white shadow-sm"
+                              : "text-gray-600 hover:bg-gray-100"
                           }`}
-                          title={pair.is_monitored ? "Dejar de monitorear" : "Iniciar monitoreo"}
+                          title={
+                            pair.is_monitored
+                              ? "Dejar de monitorear"
+                              : "Iniciar monitoreo"
+                          }
                         >
                           {pair.is_monitored ? (
                             <Eye size={16} />
@@ -757,11 +804,15 @@ export default function CurrencyPairsAdminPage() {
                         <button
                           onClick={() => handleToggleBinanceTracked(pair)}
                           className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                            pair.binance_tracked 
-                              ? 'bg-orange-500 text-white shadow-sm' 
-                              : 'text-gray-600 hover:bg-gray-100'
+                            pair.binance_tracked
+                              ? "bg-orange-500 text-white shadow-sm"
+                              : "text-gray-600 hover:bg-gray-100"
                           }`}
-                          title={pair.binance_tracked ? "Desactivar Binance P2P" : "Activar Binance P2P"}
+                          title={
+                            pair.binance_tracked
+                              ? "Desactivar Binance P2P"
+                              : "Activar Binance P2P"
+                          }
                         >
                           <Bitcoin size={16} />
                           <span className="hidden sm:inline">Binance</span>
@@ -770,13 +821,32 @@ export default function CurrencyPairsAdminPage() {
                     </div>
 
                     {/* Action Buttons Row */}
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        onClick={() =>
+                          (window.location.href = `/admin/currency-pairs/${
+                            pair.uuid || `pair-${pair.uuid}`
+                          }/configs`)
+                        }
+                        className="flex flex-col items-center justify-center p-3 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg text-amber-700 hover:text-amber-800 transition-all duration-200 group"
+                        title="Configuraciones de comisión"
+                      >
+                        <DollarSign
+                          size={20}
+                          className="mb-1 group-hover:scale-110 transition-transform"
+                        />
+                        <span className="text-xs font-medium">Comisiones</span>
+                      </button>
+
                       <button
                         onClick={() => handleOpenManualRateDialog(pair)}
                         className="flex flex-col items-center justify-center p-3 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg text-purple-700 hover:text-purple-800 transition-all duration-200 group"
                         title="Gestionar precio manual"
                       >
-                        <Settings size={20} className="mb-1 group-hover:scale-110 transition-transform" />
+                        <Settings
+                          size={20}
+                          className="mb-1 group-hover:scale-110 transition-transform"
+                        />
                         <span className="text-xs font-medium">Precio</span>
                       </button>
 
@@ -785,25 +855,34 @@ export default function CurrencyPairsAdminPage() {
                         className="flex flex-col items-center justify-center p-3 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg text-green-700 hover:text-green-800 transition-all duration-200 group"
                         title="Ver historial de tasas"
                       >
-                        <History size={20} className="mb-1 group-hover:scale-110 transition-transform" />
+                        <History
+                          size={20}
+                          className="mb-1 group-hover:scale-110 transition-transform"
+                        />
                         <span className="text-xs font-medium">Historial</span>
                       </button>
 
                       <button
-                        onClick={() => openEditModal(pair)}
+                        onClick={() => setEditingPair(pair)}
                         className="flex flex-col items-center justify-center p-3 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-blue-700 hover:text-blue-800 transition-all duration-200 group"
                         title="Editar par"
                       >
-                        <Edit size={20} className="mb-1 group-hover:scale-110 transition-transform" />
+                        <Edit
+                          size={20}
+                          className="mb-1 group-hover:scale-110 transition-transform"
+                        />
                         <span className="text-xs font-medium">Editar</span>
                       </button>
 
                       <button
-                        onClick={() => handleDelete(pair.id)}
+                        onClick={() => handleDelete(pair.uuid)}
                         className="flex flex-col items-center justify-center p-3 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg text-red-700 hover:text-red-800 transition-all duration-200 group"
                         title="Eliminar par"
                       >
-                        <Trash2 size={20} className="mb-1 group-hover:scale-110 transition-transform" />
+                        <Trash2
+                          size={20}
+                          className="mb-1 group-hover:scale-110 transition-transform"
+                        />
                         <span className="text-xs font-medium">Eliminar</span>
                       </button>
                     </div>
@@ -814,109 +893,113 @@ export default function CurrencyPairsAdminPage() {
               {/* Desktop Layout */}
               <div className="hidden lg:block">
                 <div className="p-6">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-start gap-6">
                     {/* Left Section - Currency Info */}
-                    <div className="flex items-center space-x-4 flex-1">
+                    <div className="flex items-start space-x-4 flex-1 min-w-0">
                       <div className="flex-shrink-0 w-14 h-14 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
                         <span className="text-white font-bold text-lg">
-                          {pair.from_currency.symbol.charAt(0)}{pair.to_currency.symbol.charAt(0)}
+                          {pair.from_currency.symbol.charAt(0)}
+                          {pair.to_currency.symbol.charAt(0)}
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 mb-2">
+                        <div className="flex items-center gap-2 mb-2">
                           <h3 className="font-semibold text-gray-900 text-lg">
                             {pair.display_name}
                           </h3>
-                          <div className="flex gap-2">
-                            {pair.is_active && (
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                ✓ Activo
-                              </span>
-                            )}
-                            {pair.is_monitored && (
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                                👁 Monitor
-                              </span>
-                            )}
-                            {pair.binance_tracked && (
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                                📊 Binance P2P
-                              </span>
-                            )}
-                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPairTypeLabel(pair.pair_type).color}`}>
-                              {getPairTypeLabel(pair.pair_type).icon} {getPairTypeLabel(pair.pair_type).label}
-                            </span>
-                          </div>
+                          <span
+                            className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                              getPairTypeLabel(pair.pair_type).color
+                            }`}
+                          >
+                            {getPairTypeLabel(pair.pair_type).icon}{" "}
+                            {getPairTypeLabel(pair.pair_type).label}
+                          </span>
                         </div>
                         <div className="text-sm text-gray-600 mb-2">
-                          <span className="font-medium">{pair.from_currency.name}</span>
+                          <span className="font-medium">
+                            {pair.from_currency.name}
+                          </span>
                           <span className="mx-3 text-gray-400">→</span>
-                          <span className="font-medium">{pair.to_currency.name}</span>
+                          <span className="font-medium">
+                            {pair.to_currency.name}
+                          </span>
                         </div>
-                        <p className="text-sm text-gray-500 leading-relaxed max-w-2xl">
+                        <p className="text-sm text-gray-500 leading-relaxed">
                           {pair.description}
                         </p>
-                        
+
                         {/* Base Pair Relationship Info */}
-                        {pair.base_pair_id && pair.base_pair && (
-                          <div className="mt-2 flex items-center gap-4 text-xs text-blue-600">
+                        <div className="mt-2 flex items-center gap-4 text-xs text-blue-600">
+                          {pair.base_pair && (
                             <div className="flex items-center gap-1">
                               <span className="font-medium">Par base:</span>
                               <span>{pair.base_pair.display_name}</span>
                             </div>
-                            {pair.derived_percentage && (
+                          )}
+                          {pair.derived_percentage && (
+                            <div className="flex items-center gap-1">
+                              <span className="font-medium">Porcentaje:</span>
+                              <span>
+                                {pair.derived_percentage}%{" "}
+                                {pair.use_inverse_percentage ? "(inverso)" : ""}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        {pair.binance_tracked &&
+                          pair.banks_to_track &&
+                          pair.amount_to_track && (
+                            <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
                               <div className="flex items-center gap-1">
-                                <span className="font-medium">Porcentaje:</span>
-                                <span>{pair.derived_percentage}% {pair.use_inverse_percentage ? '(inverso)' : ''}</span>
+                                <span className="font-medium">Métodos:</span>
+                                <span>{pair.banks_to_track.join(", ")}</span>
                               </div>
-                            )}
-                          </div>
-                        )}
-                        
-                        {pair.binance_tracked && pair.banks_to_track && pair.amount_to_track && (
-                          <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
-                            <div className="flex items-center gap-1">
-                              <span className="font-medium">Métodos:</span>
-                              <span>{pair.banks_to_track.join(', ')}</span>
+                              <div className="flex items-center gap-1">
+                                <span className="font-medium">Monto:</span>
+                                <span>${pair.amount_to_track}</span>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-1">
-                              <span className="font-medium">Monto:</span>
-                              <span>${pair.amount_to_track}</span>
-                            </div>
-                          </div>
-                        )}
+                          )}
                       </div>
                     </div>
 
                     {/* Right Section - Controls */}
-                    <div className="flex items-center gap-6 ml-6">
+                    <div className="flex-shrink-0 flex flex-col gap-4">
                       {/* Status Controls */}
                       <div className="flex items-center bg-gray-50 rounded-xl p-1">
                         <button
                           onClick={() => handleToggleActive(pair)}
-                          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                            pair.is_active 
-                              ? 'bg-green-500 text-white shadow-sm' 
-                              : 'text-gray-600 hover:bg-gray-100'
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                            pair.is_active
+                              ? "bg-green-500 text-white shadow-sm"
+                              : "text-gray-600 hover:bg-gray-100"
                           }`}
-                          title={pair.is_active ? "Desactivar par" : "Activar par"}
+                          title={
+                            pair.is_active ? "Desactivar par" : "Activar par"
+                          }
                         >
                           {pair.is_active ? (
                             <ToggleRight size={18} />
                           ) : (
                             <ToggleLeft size={18} />
                           )}
-                          <span>{pair.is_active ? 'Activo' : 'Inactivo'}</span>
+                          <span>{pair.is_active ? "Activo" : "Inactivo"}</span>
                         </button>
 
                         <button
                           onClick={() => handleToggleMonitored(pair)}
-                          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                            pair.is_monitored 
-                              ? 'bg-purple-500 text-white shadow-sm' 
-                              : 'text-gray-600 hover:bg-gray-100'
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                            pair.is_monitored
+                              ? "bg-purple-500 text-white shadow-sm"
+                              : "text-gray-600 hover:bg-gray-100"
                           }`}
-                          title={pair.is_monitored ? "Dejar de monitorear" : "Iniciar monitoreo"}
+                          title={
+                            pair.is_monitored
+                              ? "Dejar de monitorear"
+                              : "Iniciar monitoreo"
+                          }
                         >
                           {pair.is_monitored ? (
                             <Eye size={18} />
@@ -928,12 +1011,16 @@ export default function CurrencyPairsAdminPage() {
 
                         <button
                           onClick={() => handleToggleBinanceTracked(pair)}
-                          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                            pair.binance_tracked 
-                              ? 'bg-orange-500 text-white shadow-sm' 
-                              : 'text-gray-600 hover:bg-gray-100'
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                            pair.binance_tracked
+                              ? "bg-orange-500 text-white shadow-sm"
+                              : "text-gray-600 hover:bg-gray-100"
                           }`}
-                          title={pair.binance_tracked ? "Desactivar Binance P2P" : "Activar Binance P2P"}
+                          title={
+                            pair.binance_tracked
+                              ? "Desactivar Binance P2P"
+                              : "Activar Binance P2P"
+                          }
                         >
                           <Bitcoin size={18} />
                           <span>Binance</span>
@@ -941,42 +1028,78 @@ export default function CurrencyPairsAdminPage() {
                       </div>
 
                       {/* Action Buttons */}
-                      <div className="flex items-center gap-3 border-l border-gray-200 pl-6">
+                      <div className="flex flex-col gap-2">
                         <button
-                          onClick={() => handleOpenManualRateDialog(pair)}
-                          className="flex items-center gap-2 px-3 py-2 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg text-purple-700 hover:text-purple-800 transition-all duration-200 group"
-                          title="Gestionar precio manual"
+                          onClick={() =>
+                            (window.location.href = `/admin/currency-pairs/${
+                              pair.uuid || `pair-${pair.uuid}`
+                            }/configs`)
+                          }
+                          className="flex items-center justify-center gap-2 px-3 py-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg text-amber-700 hover:text-amber-800 transition-all duration-200 group"
+                          title="Configuraciones de comisión"
                         >
-                          <Settings size={16} className="group-hover:scale-110 transition-transform" />
-                          <span className="text-sm font-medium">Precio</span>
+                          <DollarSign
+                            size={16}
+                            className="group-hover:scale-110 transition-transform"
+                          />
+                          <span className="text-sm font-medium">
+                            Comisiones
+                          </span>
                         </button>
 
-                        <button
-                          onClick={() => handleShowHistory(pair)}
-                          className="flex items-center gap-2 px-3 py-2 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg text-green-700 hover:text-green-800 transition-all duration-200 group"
-                          title="Ver historial de tasas"
-                        >
-                          <History size={16} className="group-hover:scale-110 transition-transform" />
-                          <span className="text-sm font-medium">Historial</span>
-                        </button>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={() => handleOpenManualRateDialog(pair)}
+                            className="flex items-center justify-center gap-2 px-3 py-2 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg text-purple-700 hover:text-purple-800 transition-all duration-200 group"
+                            title="Gestionar precio manual"
+                          >
+                            <Settings
+                              size={16}
+                              className="group-hover:scale-110 transition-transform"
+                            />
+                            <span className="text-sm font-medium">Precio</span>
+                          </button>
 
-                        <button
-                          onClick={() => openEditModal(pair)}
-                          className="flex items-center gap-2 px-3 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-blue-700 hover:text-blue-800 transition-all duration-200 group"
-                          title="Editar par"
-                        >
-                          <Edit size={16} className="group-hover:scale-110 transition-transform" />
-                          <span className="text-sm font-medium">Editar</span>
-                        </button>
+                          <button
+                            onClick={() => handleShowHistory(pair)}
+                            className="flex items-center justify-center gap-2 px-3 py-2 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg text-green-700 hover:text-green-800 transition-all duration-200 group"
+                            title="Ver historial de tasas"
+                          >
+                            <History
+                              size={16}
+                              className="group-hover:scale-110 transition-transform"
+                            />
+                            <span className="text-sm font-medium">
+                              Historial
+                            </span>
+                          </button>
 
-                        <button
-                          onClick={() => handleDelete(pair.id)}
-                          className="flex items-center gap-2 px-3 py-2 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg text-red-700 hover:text-red-800 transition-all duration-200 group"
-                          title="Eliminar par"
-                        >
-                          <Trash2 size={16} className="group-hover:scale-110 transition-transform" />
-                          <span className="text-sm font-medium">Eliminar</span>
-                        </button>
+                          <button
+                            onClick={() => setEditingPair(pair)}
+                            className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-blue-700 hover:text-blue-800 transition-all duration-200 group"
+                            title="Editar par"
+                          >
+                            <Edit
+                              size={16}
+                              className="group-hover:scale-110 transition-transform"
+                            />
+                            <span className="text-sm font-medium">Editar</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleDelete(pair.uuid)}
+                            className="flex items-center justify-center gap-2 px-3 py-2 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg text-red-700 hover:text-red-800 transition-all duration-200 group"
+                            title="Eliminar par"
+                          >
+                            <Trash2
+                              size={16}
+                              className="group-hover:scale-110 transition-transform"
+                            />
+                            <span className="text-sm font-medium">
+                              Eliminar
+                            </span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -988,472 +1111,30 @@ export default function CurrencyPairsAdminPage() {
       </div>
 
       {/* Create Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold mb-4">Nuevo Par de Monedas</h3>
-            <form onSubmit={handleCreate}>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Moneda de Origen
-                  </label>
-                  <select
-                    value={formData.from_currency_id}
-                    onChange={(e) => setFormData({ ...formData, from_currency_id: parseInt(e.target.value) })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2"
-                    required
-                  >
-                    <option value={0}>Seleccionar moneda...</option>
-                    {currencies.map((currency) => (
-                      <option key={currency.id} value={currency.id}>
-                        {currency.name} ({currency.symbol}) - {currency.currency_type}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Moneda de Destino
-                  </label>
-                  <select
-                    value={formData.to_currency_id}
-                    onChange={(e) => setFormData({ ...formData, to_currency_id: parseInt(e.target.value) })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2"
-                    required
-                  >
-                    <option value={0}>Seleccionar moneda...</option>
-                    {currencies.map((currency) => (
-                      <option key={currency.id} value={currency.id}>
-                        {currency.name} ({currency.symbol}) - {currency.currency_type}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Pair Type Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Tipo de Par
-                  </label>
-                  <select
-                    value={formData.pair_type}
-                    onChange={(e) => setFormData({ ...formData, pair_type: e.target.value as PairType })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2"
-                    required
-                  >
-                    <option value={PairType.BASE}>🏗 Base - Par obtenido directamente de Binance (FIAT-CRYPTO)</option>
-                    <option value={PairType.DERIVED}>🔗 Derivado - Par derivado de un base con porcentaje (ej: Zelle, PayPal)</option>
-                    <option value={PairType.CROSS}>🔀 Cruzado - Par cruzado entre dos FIATs usando USDT como intermediario</option>
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Seleccione el tipo de par según su método de cálculo
-                  </p>
-                </div>
-
-                {/* Base Pair Selection - Solo para tipo DERIVED */}
-                {formData.pair_type === PairType.DERIVED && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Par Base <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.base_pair_id || ''}
-                      onChange={(e) => setFormData({ ...formData, base_pair_id: e.target.value ? parseInt(e.target.value) : null })}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2"
-                      required
-                    >
-                      <option value="">Seleccione un par base...</option>
-                      {basePairs.map((pair) => (
-                        <option key={pair.id} value={pair.id}>
-                          {pair.display_name} - {pair.description}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Par base desde el cual se derivará este par
-                    </p>
-                  </div>
-                )}
-
-                {/* Derived/Cross Percentage */}
-                {(formData.pair_type === PairType.DERIVED && formData.base_pair_id) || formData.pair_type === PairType.CROSS ? (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        {formData.pair_type === PairType.DERIVED ? 'Porcentaje Derivado (%)' : 'Porcentaje Ajuste (%) - Opcional'}
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        value={formData.derived_percentage || ''}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          derived_percentage: e.target.value ? parseFloat(e.target.value) : null
-                        })}
-                        className="w-full border border-gray-300 rounded-md px-3 py-2"
-                        placeholder="5.50"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        {formData.pair_type === PairType.DERIVED
-                          ? 'Porcentaje a aplicar sobre la tasa del par base (0-100%)'
-                          : 'Porcentaje a aplicar sobre la tasa cruzada calculada (0-100%)'}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={formData.use_inverse_percentage || false}
-                        onChange={(e) => setFormData({ ...formData, use_inverse_percentage: e.target.checked })}
-                        className="mr-2"
-                      />
-                      <label className="text-sm font-medium text-gray-700">
-                        Usar porcentaje inverso
-                      </label>
-                      <span className="text-xs text-gray-500 ml-2">
-                        (Aplicar porcentaje en dirección contraria)
-                      </span>
-                    </div>
-                  </>
-                ) : null}
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Descripción
-                  </label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2"
-                    rows={3}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={formData.is_active}
-                      onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                      className="mr-2"
-                    />
-                    <label className="text-sm font-medium text-gray-700">
-                      Par activo
-                    </label>
-                  </div>
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={formData.is_monitored}
-                      onChange={(e) => setFormData({ ...formData, is_monitored: e.target.checked })}
-                      className="mr-2"
-                    />
-                    <label className="text-sm font-medium text-gray-700">
-                      Monitorear para scraping
-                    </label>
-                  </div>
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={formData.binance_tracked}
-                      onChange={(e) => setFormData({ ...formData, binance_tracked: e.target.checked })}
-                      className="mr-2"
-                    />
-                    <label className="text-sm font-medium text-gray-700">
-                      Rastreado en Binance P2P
-                    </label>
-                  </div>
-                </div>
-                
-                {/* Campos adicionales para Binance */}
-                {formData.binance_tracked && (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Métodos de Pago de Binance <span className="text-red-500">*</span>
-                      </label>
-                      {getFiatCurrencyFromPair(formData.from_currency_id, formData.to_currency_id) ? (
-                        <TradeMethodSelector
-                          selectedMethods={formData.banks_to_track || []}
-                          onChange={(methods) => setFormData({ ...formData, banks_to_track: methods })}
-                          fiatCurrency={getFiatCurrencyFromPair(formData.from_currency_id, formData.to_currency_id) || ''}
-                          className="w-full"
-                        />
-                      ) : (
-                        <div className="border border-gray-300 rounded-md p-3 bg-gray-50">
-                          <p className="text-sm text-gray-500">
-                            Seleccione las monedas de origen y destino primero
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Monto a Trackear <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        value={formData.amount_to_track || ''}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          amount_to_track: e.target.value ? parseFloat(e.target.value) : null
-                        })}
-                        className="w-full border border-gray-300 rounded-md px-3 py-2"
-                        placeholder="0.00"
-                      />
-                    </div>
-                  </>
-                )}
-                
-                {error && (
-                  <div className="text-red-600 text-sm bg-red-50 p-3 rounded-md">
-                    {error}
-                  </div>
-                )}
-              </div>
-              <div className="flex justify-end space-x-2 mt-6">
-                <button
-                  type="button"
-                  onClick={() => { setShowCreateModal(false); resetForm(); }}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                >
-                  Crear
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <CreateCurrencyPairModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSubmit={handleCreate}
+        currencies={currencies}
+        basePairs={basePairs}
+        error={error}
+        setError={setError}
+        validateBinanceForm={validateBinanceForm}
+        getFiatCurrencyFromPair={getFiatCurrencyFromPair}
+      />
 
       {/* Edit Modal */}
-      {editingPair && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold mb-4">Editar Par de Monedas</h3>
-            <form onSubmit={handleUpdate}>
-              <div className="space-y-4">
-                <div className="bg-gray-50 p-3 rounded-md">
-                  <p className="text-sm text-gray-600">Par:</p>
-                  <p className="font-medium">{editingPair.display_name}</p>
-                </div>
-
-                {/* Pair Type Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Tipo de Par
-                  </label>
-                  <select
-                    value={formData.pair_type}
-                    onChange={(e) => setFormData({ ...formData, pair_type: e.target.value as PairType })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2"
-                    required
-                  >
-                    <option value={PairType.BASE}>🏗 Base - Par obtenido directamente de Binance (FIAT-CRYPTO)</option>
-                    <option value={PairType.DERIVED}>🔗 Derivado - Par derivado de un base con porcentaje (ej: Zelle, PayPal)</option>
-                    <option value={PairType.CROSS}>🔀 Cruzado - Par cruzado entre dos FIATs usando USDT como intermediario</option>
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Seleccione el tipo de par según su método de cálculo
-                  </p>
-                </div>
-
-                {/* Base Pair Selection - Solo para tipo DERIVED */}
-                {formData.pair_type === PairType.DERIVED && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Par Base <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.base_pair_id || ''}
-                      onChange={(e) => setFormData({ ...formData, base_pair_id: e.target.value ? parseInt(e.target.value) : null })}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2"
-                      required
-                    >
-                      <option value="">Seleccione un par base...</option>
-                      {basePairs.map((pair) => (
-                        <option key={pair.id} value={pair.id}>
-                          {pair.display_name} - {pair.description}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Par base desde el cual se derivará este par
-                    </p>
-                  </div>
-                )}
-
-                {/* Derived/Cross Percentage */}
-                {(formData.pair_type === PairType.DERIVED && formData.base_pair_id) || formData.pair_type === PairType.CROSS ? (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        {formData.pair_type === PairType.DERIVED ? 'Porcentaje Derivado (%)' : 'Porcentaje Ajuste (%) - Opcional'}
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        value={formData.derived_percentage || ''}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          derived_percentage: e.target.value ? parseFloat(e.target.value) : null
-                        })}
-                        className="w-full border border-gray-300 rounded-md px-3 py-2"
-                        placeholder="5.50"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        {formData.pair_type === PairType.DERIVED
-                          ? 'Porcentaje a aplicar sobre la tasa del par base (0-100%)'
-                          : 'Porcentaje a aplicar sobre la tasa cruzada calculada (0-100%)'}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={formData.use_inverse_percentage || false}
-                        onChange={(e) => setFormData({ ...formData, use_inverse_percentage: e.target.checked })}
-                        className="mr-2"
-                      />
-                      <label className="text-sm font-medium text-gray-700">
-                        Usar porcentaje inverso
-                      </label>
-                      <span className="text-xs text-gray-500 ml-2">
-                        (Aplicar porcentaje en dirección contraria)
-                      </span>
-                    </div>
-                  </>
-                ) : null}
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Descripción
-                  </label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2"
-                    rows={3}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={formData.is_active}
-                      onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                      className="mr-2"
-                    />
-                    <label className="text-sm font-medium text-gray-700">
-                      Par activo
-                    </label>
-                  </div>
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={formData.is_monitored}
-                      onChange={(e) => setFormData({ ...formData, is_monitored: e.target.checked })}
-                      className="mr-2"
-                    />
-                    <label className="text-sm font-medium text-gray-700">
-                      Monitorear para scraping
-                    </label>
-                  </div>
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={formData.binance_tracked}
-                      onChange={(e) => setFormData({ ...formData, binance_tracked: e.target.checked })}
-                      className="mr-2"
-                    />
-                    <label className="text-sm font-medium text-gray-700">
-                      Rastreado en Binance P2P
-                    </label>
-                  </div>
-                </div>
-                
-                {/* Campos adicionales para Binance */}
-                {formData.binance_tracked && (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Métodos de Pago de Binance <span className="text-red-500">*</span>
-                      </label>
-                      {getFiatCurrencyFromPair(formData.from_currency_id, formData.to_currency_id) ? (
-                        <TradeMethodSelector
-                          selectedMethods={formData.banks_to_track || []}
-                          onChange={(methods) => setFormData({ ...formData, banks_to_track: methods })}
-                          fiatCurrency={getFiatCurrencyFromPair(formData.from_currency_id, formData.to_currency_id) || ''}
-                          className="w-full"
-                        />
-                      ) : (
-                        <div className="border border-gray-300 rounded-md p-3 bg-gray-50">
-                          <p className="text-sm text-gray-500">
-                            Este par no tiene moneda FIAT válida para Binance
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Monto a Trackear <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        value={formData.amount_to_track || ''}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          amount_to_track: e.target.value ? parseFloat(e.target.value) : null
-                        })}
-                        className="w-full border border-gray-300 rounded-md px-3 py-2"
-                        placeholder="0.00"
-                      />
-                    </div>
-                  </>
-                )}
-                
-                {error && (
-                  <div className="text-red-600 text-sm bg-red-50 p-3 rounded-md">
-                    {error}
-                  </div>
-                )}
-              </div>
-              <div className="flex justify-end space-x-2 mt-6">
-                <button
-                  type="button"
-                  onClick={() => { setEditingPair(null); resetForm(); }}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                >
-                  Actualizar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <EditCurrencyPairModal
+        isOpen={!!editingPair}
+        onClose={() => setEditingPair(null)}
+        onSubmit={handleUpdate}
+        editingPair={editingPair}
+        basePairs={basePairs}
+        error={error}
+        setError={setError}
+        validateBinanceForm={validateBinanceForm}
+        getFiatCurrencyFromPair={getFiatCurrencyFromPair}
+      />
 
       {/* Binance Configuration Modal */}
       {showBinanceModal && pairForBinanceConfig && (
@@ -1468,29 +1149,40 @@ export default function CurrencyPairsAdminPage() {
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="space-y-4">
               <div className="bg-blue-50 p-3 rounded-md">
                 <p className="text-sm text-blue-700">
                   <strong>Par:</strong> {pairForBinanceConfig.display_name}
                 </p>
                 <p className="text-xs text-blue-600 mt-1">
-                  {pairForBinanceConfig.from_currency.name} ({pairForBinanceConfig.from_currency.currency_type}) 
-                  → {pairForBinanceConfig.to_currency.name} ({pairForBinanceConfig.to_currency.currency_type})
+                  {pairForBinanceConfig.from_currency.name} (
+                  {pairForBinanceConfig.from_currency.currency_type}) →{" "}
+                  {pairForBinanceConfig.to_currency.name} (
+                  {pairForBinanceConfig.to_currency.currency_type})
                 </p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Métodos de Pago de Binance <span className="text-red-500">*</span>
+                  Métodos de Pago de Binance{" "}
+                  <span className="text-red-500">*</span>
                 </label>
                 {pairForBinanceConfig && (
                   <TradeMethodSelector
                     selectedMethods={binanceConfig.banks_to_track}
-                    onChange={(methods) => setBinanceConfig({ ...binanceConfig, banks_to_track: methods })}
-                    fiatCurrency={pairForBinanceConfig.from_currency.currency_type === 'FIAT' 
-                      ? pairForBinanceConfig.from_currency.symbol 
-                      : pairForBinanceConfig.to_currency.symbol}
+                    onChange={(methods) =>
+                      setBinanceConfig({
+                        ...binanceConfig,
+                        banks_to_track: methods,
+                      })
+                    }
+                    fiatCurrency={
+                      pairForBinanceConfig.from_currency.currency_type ===
+                      "FIAT"
+                        ? pairForBinanceConfig.from_currency.symbol
+                        : pairForBinanceConfig.to_currency.symbol
+                    }
                     className="w-full"
                   />
                 )}
@@ -1507,18 +1199,24 @@ export default function CurrencyPairsAdminPage() {
                   type="number"
                   min="0.01"
                   step="0.01"
-                  value={binanceConfig.amount_to_track || ''}
-                  onChange={(e) => setBinanceConfig({
-                    ...binanceConfig,
-                    amount_to_track: e.target.value ? parseFloat(e.target.value) : null
-                  })}
+                  value={binanceConfig.amount_to_track || ""}
+                  onChange={(e) =>
+                    setBinanceConfig({
+                      ...binanceConfig,
+                      amount_to_track: e.target.value
+                        ? parseFloat(e.target.value)
+                        : null,
+                    })
+                  }
                   className="w-full border border-gray-300 rounded-md px-3 py-2"
                   placeholder="100.00"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Monto en {pairForBinanceConfig.from_currency.currency_type === 'CRYPTO' ? 
-                    pairForBinanceConfig.from_currency.symbol : 
-                    pairForBinanceConfig.to_currency.symbol} para buscar órdenes
+                  Monto en{" "}
+                  {pairForBinanceConfig.from_currency.currency_type === "CRYPTO"
+                    ? pairForBinanceConfig.from_currency.symbol
+                    : pairForBinanceConfig.to_currency.symbol}{" "}
+                  para buscar órdenes
                 </p>
               </div>
 
@@ -1554,9 +1252,7 @@ export default function CurrencyPairsAdminPage() {
         <RateHistoryModal
           isOpen={showHistoryModal}
           onClose={handleCloseHistoryModal}
-          fromCurrency={selectedPairForHistory.from_currency.symbol}
-          toCurrency={selectedPairForHistory.to_currency.symbol}
-          pairDisplayName={selectedPairForHistory.display_name}
+          selectedPair={selectedPairForHistory}
         />
       )}
 

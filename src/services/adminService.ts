@@ -1,6 +1,6 @@
-import { 
-  CurrencyData, 
-  CreateCurrencyData, 
+import {
+  CurrencyData,
+  CreateCurrencyData,
   CurrencyAdminResponse,
   CurrencyPairData,
   CreateCurrencyPairData,
@@ -11,11 +11,11 @@ import {
   BinanceTradeMethod,
   BinanceTradeMethodsResponse,
   BinanceFilterConditionsResponse,
-  ManualRateData,
   BasePairData,
   DerivedPairData
 } from '@/types/admin';
 import { ApiResponse } from '@/types/auth';
+import { ExchangeRateResponse } from '@/types/currency';
 import { httpClient } from '@/utils/httpInterceptor';
 
 export class AdminService {
@@ -43,8 +43,8 @@ export class AdminService {
     };
   }
 
-  async updateCurrency(id: number, currencyData: Partial<CreateCurrencyData>): Promise<ApiResponse<CurrencyData>> {
-    const result = await httpClient.put<CurrencyData>(`/currencies/${id}`, currencyData);
+  async updateCurrency(uuid: string, currencyData: Partial<CreateCurrencyData>): Promise<ApiResponse<CurrencyData>> {
+    const result = await httpClient.put<CurrencyData>(`/currencies/${uuid}`, currencyData);
     return {
       success: result.success,
       data: result.data,
@@ -52,16 +52,16 @@ export class AdminService {
     };
   }
 
-  async deleteCurrency(id: number): Promise<ApiResponse<void>> {
-    const result = await httpClient.delete(`/currencies/${id}`);
+  async deleteCurrency(uuid: string): Promise<ApiResponse<void>> {
+    const result = await httpClient.delete(`/currencies/${uuid}`);
     return {
       success: result.success,
       error: result.error
     };
   }
 
-  async toggleCurrencyStatus(id: number): Promise<ApiResponse<CurrencyData>> {
-    const result = await httpClient.patch<CurrencyData>(`/currencies/${id}/toggle-status`);
+  async toggleCurrencyStatus(uuid: string): Promise<ApiResponse<CurrencyData>> {
+    const result = await httpClient.patch<CurrencyData>(`/currencies/${uuid}/toggle-status`);
     return {
       success: result.success,
       data: result.data,
@@ -95,8 +95,8 @@ export class AdminService {
     };
   }
 
-  async updateCurrencyPair(id: number, pairData: UpdateCurrencyPairData): Promise<ApiResponse<CurrencyPairData>> {
-    const result = await httpClient.put<CurrencyPairData>(`/currency-pairs/${id}`, pairData);
+  async updateCurrencyPair(uuid: string, pairData: UpdateCurrencyPairData): Promise<ApiResponse<CurrencyPairData>> {
+    const result = await httpClient.put<CurrencyPairData>(`/currency-pairs/${uuid}`, pairData);
     return {
       success: result.success,
       data: result.data,
@@ -104,8 +104,8 @@ export class AdminService {
     };
   }
 
-  async updateCurrencyPairStatus(id: number, statusData: CurrencyPairStatusData): Promise<ApiResponse<CurrencyPairData>> {
-    const result = await httpClient.patch<CurrencyPairData>(`/currency-pairs/${id}/status`, statusData);
+  async updateCurrencyPairStatus(uuid: string, statusData: CurrencyPairStatusData): Promise<ApiResponse<CurrencyPairData>> {
+    const result = await httpClient.patch<CurrencyPairData>(`/currency-pairs/${uuid}/status`, statusData);
     return {
       success: result.success,
       data: result.data,
@@ -122,8 +122,8 @@ export class AdminService {
     };
   }
 
-  async deleteCurrencyPair(id: number): Promise<ApiResponse<void>> {
-    const result = await httpClient.delete(`/currency-pairs/${id}`);
+  async deleteCurrencyPair(uuid: string): Promise<ApiResponse<void>> {
+    const result = await httpClient.delete(`/currency-pairs/${uuid}`);
     return {
       success: result.success,
       error: result.error
@@ -195,8 +195,11 @@ export class AdminService {
   }
 
   // Manual Rate Management Methods
-  async setManualRate(fromCurrency: string, toCurrency: string, manualRate: number): Promise<ApiResponse<ManualRateData>> {
-    const result = await httpClient.post<ManualRateData>(`/rates/manual/${fromCurrency}/${toCurrency}`, { manual_rate: manualRate });
+  async setManualRate(currencyPairUuid: string, manualRate: number): Promise<ApiResponse<ExchangeRateResponse>> {
+    const result = await httpClient.post<ExchangeRateResponse>('/rates/manual', {
+      currency_pair_uuid: currencyPairUuid,
+      manual_rate: manualRate
+    });
     return {
       success: result.success,
       data: result.data,
@@ -204,8 +207,8 @@ export class AdminService {
     };
   }
 
-  async removeManualRate(fromCurrency: string, toCurrency: string): Promise<ApiResponse<ManualRateData>> {
-    const result = await httpClient.delete<ManualRateData>(`/rates/manual/${fromCurrency}/${toCurrency}`);
+  async disableManualRate(currencyPairUuid: string): Promise<ApiResponse<ExchangeRateResponse>> {
+    const result = await httpClient.put<ExchangeRateResponse>(`/rates/manual/${currencyPairUuid}/disable`);
     return {
       success: result.success,
       data: result.data,
@@ -213,3 +216,5 @@ export class AdminService {
     };
   }
 }
+
+export const adminService = new AdminService();

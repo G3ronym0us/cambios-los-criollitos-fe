@@ -14,8 +14,7 @@ export class RatesService {
   }
 
   async getLatestRatesByCurrencies(
-    fromCurrency: string, 
-    toCurrency: string, 
+    currencyPairUuid: string, 
     limit: number = 10
   ): Promise<ApiResponse<ExchangeRateResponse[]>> {
     try {
@@ -24,7 +23,7 @@ export class RatesService {
       });
 
       const response = await fetch(
-        `${this.baseUrl}/rates/latest/${fromCurrency.toUpperCase()}/${toCurrency.toUpperCase()}?${params}`, 
+        `${this.baseUrl}/rates/latest/${currencyPairUuid}?${params}`, 
         {
           method: 'GET',
           headers: this.getAuthHeaders(),
@@ -51,7 +50,7 @@ export class RatesService {
   }
 
   async getLatestRatesByPairSymbol(
-    pairSymbol: string, 
+    pairSymbol: string,
     limit: number = 10
   ): Promise<ApiResponse<ExchangeRateResponse[]>> {
     try {
@@ -60,7 +59,7 @@ export class RatesService {
       });
 
       const response = await fetch(
-        `${this.baseUrl}/rates/pair/${pairSymbol.toUpperCase()}/latest?${params}`, 
+        `${this.baseUrl}/rates/pair/${pairSymbol.toUpperCase()}/latest?${params}`,
         {
           method: 'GET',
           headers: this.getAuthHeaders(),
@@ -79,6 +78,42 @@ export class RatesService {
       };
     } catch (error) {
       console.error('Error fetching latest rates by pair symbol:', error);
+      return {
+        success: false,
+        error: 'Error de conexión al servidor'
+      };
+    }
+  }
+
+  async getLatestRatesByPairUuid(
+    pairUuid: string,
+    limit: number = 10
+  ): Promise<ApiResponse<ExchangeRateResponse[]>> {
+    try {
+      const params = new URLSearchParams({
+        limit: limit.toString()
+      });
+
+      const response = await fetch(
+        `${this.baseUrl}/rates/pair-uuid/${pairUuid}/latest?${params}`,
+        {
+          method: 'GET',
+          headers: this.getAuthHeaders(),
+        }
+      );
+
+      if (response.ok) {
+        const data: ExchangeRateResponse[] = await response.json();
+        return { success: true, data };
+      }
+
+      const errorData = await response.json();
+      return {
+        success: false,
+        error: errorData.detail || 'Error al obtener las tasas por UUID del par'
+      };
+    } catch (error) {
+      console.error('Error fetching latest rates by pair UUID:', error);
       return {
         success: false,
         error: 'Error de conexión al servidor'

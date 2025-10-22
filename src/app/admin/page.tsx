@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { Coins, Users, Settings, BarChart3, ArrowLeftRight } from 'lucide-react';
+import { Coins, Users, Settings, BarChart3, ArrowLeftRight, DollarSign, TrendingUp, FileText } from 'lucide-react';
 
 export default function AdminDashboard() {
   const adminFeatures = [
@@ -20,12 +20,32 @@ export default function AdminDashboard() {
       color: 'bg-indigo-500',
     },
     {
+      title: 'Transacciones',
+      description: 'Registrar y gestionar transacciones con distribución de ganancias',
+      icon: DollarSign,
+      href: '/admin/transactions',
+      color: 'bg-emerald-500',
+    },
+    {
+      title: 'Mis Ganancias',
+      description: 'Ver reporte de tus ganancias por transacciones',
+      icon: TrendingUp,
+      href: '/admin/reports/my-profits',
+      color: 'bg-green-500',
+    },
+    {
+      title: 'Resumen General',
+      description: 'Estadísticas completas del sistema (Moderadores)',
+      icon: FileText,
+      href: '/admin/reports/summary',
+      color: 'bg-teal-500',
+    },
+    {
       title: 'Gestión de Usuarios',
-      description: 'Administrar usuarios y permisos',
+      description: 'Administrar usuarios, permisos y configuración de comisiones',
       icon: Users,
       href: '/admin/users',
-      color: 'bg-green-500',
-      disabled: true,
+      color: 'bg-purple-500',
     },
     {
       title: 'Configuración',
