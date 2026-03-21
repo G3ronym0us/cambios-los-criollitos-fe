@@ -20,7 +20,8 @@ const EditUser: React.FC<EditUserProps> = ({ user, onSave, onCancel }) => {
       is_active: user.is_active,
       phone_number: user.phone_number || "",
       bio: user.bio || "",
-      preferred_settlement_currency: user.preferred_settlement_currency || ""
+      preferred_settlement_currency: user.preferred_settlement_currency || "",
+      is_fund_manager: user.is_fund_manager ?? false
     }
   });
 
@@ -35,6 +36,9 @@ const EditUser: React.FC<EditUserProps> = ({ user, onSave, onCancel }) => {
     if (data.bio && data.bio !== user.bio) cleanData.bio = data.bio;
     if (data.preferred_settlement_currency !== undefined && data.preferred_settlement_currency !== (user.preferred_settlement_currency || "")) {
       cleanData.preferred_settlement_currency = data.preferred_settlement_currency || null;
+    }
+    if (data.is_fund_manager !== undefined && data.is_fund_manager !== (user.is_fund_manager ?? false)) {
+      cleanData.is_fund_manager = data.is_fund_manager;
     }
 
     onSave(user.uuid, cleanData);
@@ -145,6 +149,18 @@ const EditUser: React.FC<EditUserProps> = ({ user, onSave, onCancel }) => {
         />
         <label htmlFor="is_active" className="text-sm font-medium text-gray-700">
           Usuario Activo
+        </label>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          id="is_fund_manager"
+          className="rounded border-gray-300"
+          {...register("is_fund_manager")}
+        />
+        <label htmlFor="is_fund_manager" className="text-sm font-medium text-gray-700">
+          Gestor de Fondos
         </label>
       </div>
 

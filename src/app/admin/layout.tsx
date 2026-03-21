@@ -12,6 +12,7 @@ import {
   TrendingUp,
   FileText,
   UserCheck,
+  Wallet,
   Menu,
   X,
   LogOut,
@@ -50,6 +51,7 @@ export default function AdminLayout({
     { name: 'Mis Ganancias', href: '/admin/reports/my-profits', icon: TrendingUp },
     { name: 'Resumen General', href: '/admin/reports/summary', icon: FileText },
     { name: 'Usuarios', href: '/admin/users', icon: UserCheck },
+    { name: 'Fondos', href: '/admin/funds', icon: Wallet },
   ];
 
   const handleLogout = () => {

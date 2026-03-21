@@ -11,6 +11,7 @@ export interface UserData {
   is_verified: boolean;
   can_receive_commission: boolean;
   preferred_settlement_currency?: string | null;
+  is_fund_manager?: boolean;
   phone_number?: string;
   bio?: string;
   avatar_url?: string;
@@ -66,6 +67,7 @@ export interface UserUpdate {
   phone_number?: string;
   bio?: string;
   preferred_settlement_currency?: string | null;
+  is_fund_manager?: boolean;
 }
 
 export type UserRole = 'user' | 'moderator' | 'root';
