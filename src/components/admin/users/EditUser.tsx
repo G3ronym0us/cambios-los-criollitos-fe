@@ -19,7 +19,8 @@ const EditUser: React.FC<EditUserProps> = ({ user, onSave, onCancel }) => {
       role: user.role || "",
       is_active: user.is_active,
       phone_number: user.phone_number || "",
-      bio: user.bio || ""
+      bio: user.bio || "",
+      preferred_settlement_currency: user.preferred_settlement_currency || ""
     }
   });
 
@@ -32,6 +33,9 @@ const EditUser: React.FC<EditUserProps> = ({ user, onSave, onCancel }) => {
     if (data.is_active !== user.is_active) cleanData.is_active = data.is_active;
     if (data.phone_number && data.phone_number !== user.phone_number) cleanData.phone_number = data.phone_number;
     if (data.bio && data.bio !== user.bio) cleanData.bio = data.bio;
+    if (data.preferred_settlement_currency !== undefined && data.preferred_settlement_currency !== (user.preferred_settlement_currency || "")) {
+      cleanData.preferred_settlement_currency = data.preferred_settlement_currency || null;
+    }
 
     onSave(user.uuid, cleanData);
   };
@@ -111,6 +115,24 @@ const EditUser: React.FC<EditUserProps> = ({ user, onSave, onCancel }) => {
           <option value="user">Usuario</option>
           <option value="moderator">Moderador</option>
           <option value="root">Administrador</option>
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <label htmlFor="preferred_settlement_currency" className="text-sm font-medium text-gray-700">
+          Moneda de Liquidación Preferida
+        </label>
+        <select
+          id="preferred_settlement_currency"
+          className="border border-gray-300 rounded-md p-2"
+          {...register("preferred_settlement_currency")}
+        >
+          <option value="">Sin preferencia</option>
+          <option value="USD">USD</option>
+          <option value="USDT">USDT</option>
+          <option value="COP">COP</option>
+          <option value="VES">VES</option>
+          <option value="BRL">BRL</option>
         </select>
       </div>
 

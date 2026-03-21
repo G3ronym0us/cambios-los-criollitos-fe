@@ -13,6 +13,9 @@ export interface ProfitSplitData {
   user_uuid: string;
   profit_percentage: number;
   profit_amount: number;
+  profit_amount_usdt?: number | null;
+  settlement_currency?: string | null;
+  settlement_amount?: number | null;
   created_at: string;
   user?: {
     uuid: string;
@@ -37,6 +40,7 @@ export interface TransactionData {
   to_amount: number;
   exchange_rate: number;
   profit_amount: number;
+  profit_amount_usdt?: number | null;
   total_profit_percentage: number;
   description?: string;
   transaction_type?: string;
@@ -58,6 +62,7 @@ export interface CreateTransactionData {
   from_amount: number;
   to_amount: number;
   exchange_rate: number;
+  usdt_rate?: number;
   total_profit_percentage?: number;
   description?: string;
   profit_splits?: ProfitSplitCreate[];
@@ -68,6 +73,8 @@ export interface UpdateTransactionData {
   currency_pair_uuid?: string;
   description?: string;
   status?: TransactionStatus;
+  to_amount?: number;
+  usdt_rate?: number;
   total_profit_percentage?: number;
   profit_splits?: ProfitSplitCreate[];
 }

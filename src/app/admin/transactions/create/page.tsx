@@ -32,6 +32,7 @@ export default function CreateTransactionPage() {
   const [loadingPairs, setLoadingPairs] = useState(true);
   const [selectedPair, setSelectedPair] = useState<CurrencyPairData | null>(null);
   const [currentRate, setCurrentRate] = useState<{ rate: number; inverse_percentage: boolean } | null>(null);
+  const [usdtRate, setUsdtRate] = useState<number | null>(null);
   const [allRates, setAllRates] = useState<RateData[]>([]);
   const [loadingRates, setLoadingRates] = useState(true);
 
@@ -137,6 +138,23 @@ export default function CreateTransactionPage() {
     }
   }, [formData.currency_pair_uuid, selectedPair, useConfigMode]);
 
+  // Find USDT rate for a given currency symbol from loaded rates
+  const findUsdtRate = (fromCurrencySymbol: string, rates: RateData[]): number | null => {
+    // Direct: from_currency → USDT
+    const direct = rates.find(
+      r => r.from_currency === fromCurrencySymbol && r.to_currency === 'USDT'
+    );
+    if (direct) return direct.rate;
+
+    // Inverse: USDT → from_currency (invert the rate)
+    const inverse = rates.find(
+      r => r.from_currency === 'USDT' && r.to_currency === fromCurrencySymbol
+    );
+    if (inverse && inverse.rate > 0) return 1 / inverse.rate;
+
+    return null;
+  };
+
   // Handle currency pair selection
   const handlePairChange = (pairUuid: string) => {
     const pair = currencyPairs.find(p => (p.uuid || `pair-${p.uuid}`) === pairUuid);
@@ -149,6 +167,9 @@ export default function CreateTransactionPage() {
         rate => rate.from_currency === pair.from_currency.symbol &&
                 rate.to_currency === pair.to_currency.symbol
       );
+
+      // Find USDT rate for the from_currency
+      setUsdtRate(findUsdtRate(pair.from_currency.symbol, allRates));
 
       if (foundRate) {
         setCurrentRate({
@@ -180,6 +201,7 @@ export default function CreateTransactionPage() {
       }
     } else {
       setCurrentRate(null);
+      setUsdtRate(null);
       setFormData(prev => ({
         ...prev,
         currency_pair_uuid: pairUuid,
@@ -290,6 +312,7 @@ export default function CreateTransactionPage() {
         from_amount: formData.from_amount,
         to_amount: formData.to_amount,
         exchange_rate: formData.exchange_rate,
+        ...(usdtRate !== null && { usdt_rate: usdtRate }),
         description: formData.description,
         commission_config_uuid: selectedConfig
       };
@@ -311,6 +334,7 @@ export default function CreateTransactionPage() {
         from_amount: formData.from_amount,
         to_amount: formData.to_amount,
         exchange_rate: formData.exchange_rate,
+        ...(usdtRate !== null && { usdt_rate: usdtRate }),
         total_profit_percentage: formData.total_profit_percentage,
         description: formData.description,
         profit_splits: formData.profit_splits

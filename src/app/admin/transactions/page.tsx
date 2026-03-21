@@ -258,6 +258,9 @@ export default function TransactionsPage() {
                         <TrendingUp size={14} />
                         Ganancia: {formatCurrency(transaction.profit_amount)} {transaction.to_currency}
                         ({transaction.total_profit_percentage}%)
+                        {transaction.profit_amount_usdt != null && (
+                          <span className="text-gray-500 font-normal ml-1">≈ {formatCurrency(transaction.profit_amount_usdt)} USDT</span>
+                        )}
                       </p>
                       {transaction.description && (
                         <p className="text-gray-500 italic">{transaction.description}</p>
@@ -276,6 +279,12 @@ export default function TransactionsPage() {
                           {transaction.profit_splits.map((split) => (
                             <span key={split.uuid} className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded">
                               {split.user?.username || `Usuario ${split.user_uuid}`}: {formatCurrency(split.profit_amount)} ({split.profit_percentage}%)
+                              {split.settlement_amount != null && split.settlement_currency && (
+                                <> · {formatCurrency(split.settlement_amount)} {split.settlement_currency}</>
+                              )}
+                              {split.profit_amount_usdt != null && split.settlement_amount == null && (
+                                <> · {formatCurrency(split.profit_amount_usdt)} USDT</>
+                              )}
                             </span>
                           ))}
                         </div>

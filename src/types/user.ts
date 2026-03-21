@@ -10,6 +10,7 @@ export interface UserData {
   is_active: boolean;
   is_verified: boolean;
   can_receive_commission: boolean;
+  preferred_settlement_currency?: string | null;
   phone_number?: string;
   bio?: string;
   avatar_url?: string;
@@ -64,6 +65,7 @@ export interface UserUpdate {
   role?: string;
   phone_number?: string;
   bio?: string;
+  preferred_settlement_currency?: string | null;
 }
 
 export type UserRole = 'user' | 'moderator' | 'root';
