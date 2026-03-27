@@ -16,7 +16,7 @@ const EditUser: React.FC<EditUserProps> = ({ user, onSave, onCancel }) => {
     defaultValues: {
       full_name: user.full_name || "",
       email: user.email || "",
-      role: user.role || "",
+      role: (user.role || "").toLowerCase(),
       is_active: user.is_active,
       phone_number: user.phone_number || "",
       bio: user.bio || "",
@@ -30,7 +30,7 @@ const EditUser: React.FC<EditUserProps> = ({ user, onSave, onCancel }) => {
     const cleanData: UserUpdate = {};
     if (data.full_name && data.full_name !== user.full_name) cleanData.full_name = data.full_name;
     if (data.email && data.email !== user.email) cleanData.email = data.email;
-    if (data.role && data.role !== user.role) cleanData.role = data.role;
+    if (data.role && data.role.toLowerCase() !== (user.role || '').toLowerCase()) cleanData.role = data.role;
     if (data.is_active !== user.is_active) cleanData.is_active = data.is_active;
     if (data.phone_number && data.phone_number !== user.phone_number) cleanData.phone_number = data.phone_number;
     if (data.bio && data.bio !== user.bio) cleanData.bio = data.bio;

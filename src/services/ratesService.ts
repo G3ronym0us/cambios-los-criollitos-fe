@@ -121,6 +121,28 @@ export class RatesService {
     }
   }
 
+  async getHistoricalRate(
+    pairUuid: string,
+    at: string
+  ): Promise<ApiResponse<ExchangeRateResponse>> {
+    try {
+      const params = new URLSearchParams({ at });
+      const response = await fetch(
+        `${this.baseUrl}/rates/historical/${pairUuid}?${params}`,
+        { method: 'GET', headers: this.getAuthHeaders() }
+      );
+      if (response.ok) {
+        const data: ExchangeRateResponse = await response.json();
+        return { success: true, data };
+      }
+      const errorData = await response.json();
+      return { success: false, error: errorData.detail || 'Sin tasa para esta fecha/hora' };
+    } catch (error) {
+      console.error('Error fetching historical rate:', error);
+      return { success: false, error: 'Error de conexión al servidor' };
+    }
+  }
+
   createPairSymbol(fromCurrency: string, toCurrency: string): string {
     return `${fromCurrency.toUpperCase()}-${toCurrency.toUpperCase()}`;
   }

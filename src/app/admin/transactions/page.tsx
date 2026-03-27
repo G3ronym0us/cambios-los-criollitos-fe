@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { transactionService } from '@/services/transactionService';
+import { adminService } from '@/services/adminService';
 import { TransactionData, TransactionStatus, TransactionFilters } from '@/types/transaction';
+import { CurrencyPairData } from '@/types/admin';
 import { Plus, Filter, Edit, Trash2, Eye, DollarSign, TrendingUp, CheckCircle, Clock, XCircle, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
@@ -12,6 +14,7 @@ export default function TransactionsPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
+  const [currencyPairs, setCurrencyPairs] = useState<CurrencyPairData[]>([]);
 
   const [filters, setFilters] = useState<TransactionFilters>({
     page: 1,
@@ -32,6 +35,14 @@ export default function TransactionsPage() {
   useEffect(() => {
     loadTransactions();
   }, [loadTransactions]);
+
+  useEffect(() => {
+    adminService.getCurrencyPairs(0, 200).then((result) => {
+      if (result.success && result.data) {
+        setCurrencyPairs(result.data.pairs);
+      }
+    });
+  }, []);
 
   const handleDelete = async (uuid: string) => {
     if (!confirm('¿Estás seguro de que quieres eliminar esta transacción?')) return;
@@ -85,6 +96,7 @@ export default function TransactionsPage() {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
+      timeZone: 'UTC',
       hour: '2-digit',
       minute: '2-digit'
     });
@@ -153,25 +165,17 @@ export default function TransactionsPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Moneda Origen</label>
-              <input
-                type="text"
-                placeholder="Ej: Zelle, USDT"
-                value={filters.from_currency || ''}
-                onChange={(e) => setFilters({ ...filters, from_currency: e.target.value || undefined })}
+              <label className="block text-sm font-medium text-gray-700 mb-1">Par de Monedas</label>
+              <select
+                value={filters.currency_pair_uuid || ''}
+                onChange={(e) => setFilters({ ...filters, currency_pair_uuid: e.target.value || undefined })}
                 className="w-full border border-gray-300 rounded-md px-3 py-2"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Moneda Destino</label>
-              <input
-                type="text"
-                placeholder="Ej: VES, COP"
-                value={filters.to_currency || ''}
-                onChange={(e) => setFilters({ ...filters, to_currency: e.target.value || undefined })}
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
-              />
+              >
+                <option value="">Todos los pares</option>
+                {currencyPairs.map((pair) => (
+                  <option key={pair.uuid} value={pair.uuid}>{pair.pair_symbol}</option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -219,7 +223,7 @@ export default function TransactionsPage() {
       )}
 
       {/* Transactions List */}
-      <div className="space-y-4">
+      <div>
         {transactions.length === 0 ? (
           <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
             <DollarSign className="mx-auto text-gray-400 mb-4" size={48} />
@@ -234,92 +238,91 @@ export default function TransactionsPage() {
             </Link>
           </div>
         ) : (
-          transactions.map((transaction) => (
-            <div key={transaction.uuid} className="bg-white rounded-lg border border-gray-200 hover:shadow-md transition-shadow">
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {transaction.from_currency} → {transaction.to_currency}
-                      </h3>
-                      {getStatusBadge(transaction.status)}
-                    </div>
-
-                    <div className="text-sm text-gray-600 space-y-1">
-                      <p>
-                        <span className="font-medium">Monto:</span> {formatCurrency(transaction.from_amount)} {transaction.from_currency}
-                        → {formatCurrency(transaction.to_amount)} {transaction.to_currency}
-                      </p>
-                      <p>
-                        <span className="font-medium">Tasa:</span> {formatCurrency(transaction.exchange_rate)}
-                      </p>
-                      <p className="flex items-center gap-1 text-green-600 font-medium">
-                        <TrendingUp size={14} />
-                        Ganancia: {formatCurrency(transaction.profit_amount)} {transaction.to_currency}
-                        ({transaction.total_profit_percentage}%)
-                        {transaction.profit_amount_usdt != null && (
-                          <span className="text-gray-500 font-normal ml-1">≈ {formatCurrency(transaction.profit_amount_usdt)} USDT</span>
-                        )}
-                      </p>
-                      {transaction.description && (
-                        <p className="text-gray-500 italic">{transaction.description}</p>
-                      )}
-                      <p className="text-xs text-gray-400">
-                        Creado el {formatDate(transaction.created_at)}
-                        {transaction.creator && ` por ${transaction.creator.username}`}
-                      </p>
-                    </div>
-
-                    {/* Profit Splits */}
-                    {transaction.profit_splits && transaction.profit_splits.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-gray-100">
-                        <p className="text-xs font-medium text-gray-700 mb-2">Distribución de Ganancias:</p>
-                        <div className="flex flex-wrap gap-2">
-                          {transaction.profit_splits.map((split) => (
-                            <span key={split.uuid} className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded">
-                              {split.user?.username || `Usuario ${split.user_uuid}`}: {formatCurrency(split.profit_amount)} ({split.profit_percentage}%)
-                              {split.settlement_amount != null && split.settlement_currency && (
-                                <> · {formatCurrency(split.settlement_amount)} {split.settlement_currency}</>
-                              )}
-                              {split.profit_amount_usdt != null && split.settlement_amount == null && (
-                                <> · {formatCurrency(split.profit_amount_usdt)} USDT</>
-                              )}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-2 ml-4">
-                    <Link
-                      href={`/admin/transactions/${transaction.uuid}`}
-                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                      title="Ver detalles"
-                    >
-                      <Eye size={18} />
-                    </Link>
-                    <Link
-                      href={`/admin/transactions/${transaction.uuid}/edit`}
-                      className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg"
-                      title="Editar"
-                    >
-                      <Edit size={18} />
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(transaction.uuid)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                      title="Eliminar"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                </div>
-              </div>
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            {/* Desktop header */}
+            <div className="hidden md:grid md:grid-cols-[1fr_1.5fr_1.5fr_1fr_auto_auto] gap-4 px-4 py-2 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase tracking-wide">
+              <span>Fecha</span>
+              <span>Par / Descripción</span>
+              <span>Monto</span>
+              <span>Ganancia</span>
+              <span>Estado</span>
+              <span></span>
             </div>
-          ))
+
+            <div className="divide-y divide-gray-100">
+              {transactions.map((transaction) => (
+                <div key={transaction.uuid} className="hover:bg-gray-50 transition-colors">
+
+                  {/* Desktop row */}
+                  <div className="hidden md:grid md:grid-cols-[1fr_1.5fr_1.5fr_1fr_auto_auto] gap-4 items-center px-4 py-3 text-sm">
+                    <span className="text-gray-400 text-xs">{formatDate(transaction.created_at)}</span>
+
+                    <div>
+                      <span className="font-medium text-gray-900">{transaction.from_currency} → {transaction.to_currency}</span>
+                      {transaction.description && (
+                        <p className="text-xs text-gray-400 truncate">{transaction.description}</p>
+                      )}
+                    </div>
+
+                    <div className="text-gray-700">
+                      <span>{formatCurrency(transaction.from_amount)} {transaction.from_currency}</span>
+                      {transaction.to_amount != null && (
+                        <span className="text-gray-400"> → {formatCurrency(transaction.to_amount)} {transaction.to_currency}</span>
+                      )}
+                      {transaction.exchange_rate != null && (
+                        <p className="text-xs text-gray-400">Tasa: {formatCurrency(transaction.exchange_rate)}</p>
+                      )}
+                    </div>
+
+                    <div className="text-green-600 font-medium">
+                      <div className="flex items-center gap-1">
+                        <TrendingUp size={12} />
+                        {formatCurrency(transaction.profit_amount)} ({transaction.total_profit_percentage}%)
+                      </div>
+                      {transaction.profit_amount_usdt != null && (
+                        <p className="text-xs text-gray-400 font-normal">≈ {formatCurrency(transaction.profit_amount_usdt)} USDT</p>
+                      )}
+                    </div>
+
+                    {getStatusBadge(transaction.status)}
+
+                    <div className="flex items-center gap-1">
+                      <Link href={`/admin/transactions/${transaction.uuid}`} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded" title="Ver detalles"><Eye size={15} /></Link>
+                      <Link href={`/admin/transactions/${transaction.uuid}/edit`} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded" title="Editar"><Edit size={15} /></Link>
+                      <button onClick={() => handleDelete(transaction.uuid)} className="p-1.5 text-red-500 hover:bg-red-100 rounded" title="Eliminar"><Trash2 size={15} /></button>
+                    </div>
+                  </div>
+
+                  {/* Mobile card */}
+                  <div className="md:hidden px-4 py-3 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-900 text-sm">{transaction.from_currency} → {transaction.to_currency}</span>
+                        {getStatusBadge(transaction.status)}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Link href={`/admin/transactions/${transaction.uuid}`} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded"><Eye size={15} /></Link>
+                        <Link href={`/admin/transactions/${transaction.uuid}/edit`} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded"><Edit size={15} /></Link>
+                        <button onClick={() => handleDelete(transaction.uuid)} className="p-1.5 text-red-500 hover:bg-red-100 rounded"><Trash2 size={15} /></button>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-gray-600">
+                      <span>{formatCurrency(transaction.from_amount)} {transaction.from_currency}{transaction.to_amount != null && ` → ${formatCurrency(transaction.to_amount)} ${transaction.to_currency}`}</span>
+                      <span className="flex items-center gap-0.5 text-green-600 font-medium">
+                        <TrendingUp size={12} />
+                        {formatCurrency(transaction.profit_amount)} ({transaction.total_profit_percentage}%)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-400">
+                      <span>{formatDate(transaction.created_at)}</span>
+                      {transaction.description && <span className="italic truncate">{transaction.description}</span>}
+                    </div>
+                  </div>
+
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 

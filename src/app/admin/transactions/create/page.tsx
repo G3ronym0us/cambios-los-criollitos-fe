@@ -5,14 +5,19 @@ import { useRouter } from 'next/navigation';
 import { transactionService } from '@/services/transactionService';
 import { userService } from '@/services/userService';
 import { commissionConfigService } from '@/services/commissionConfigService';
+import { fundService } from '@/services/fundService';
 import { adminService } from '@/services/adminService';
+import { ratesService } from '@/services/ratesService';
+import { useAuth } from '@/contexts/AuthContext';
 import { CreateTransactionData, ProfitSplitCreate, TransactionData } from '@/types/transaction';
 import { CommissionUserResponse } from '@/types/user';
 import { CommissionConfiguration } from '@/types/commissionConfig';
 import { CurrencyPairData } from '@/types/admin';
-import { ArrowLeft, Plus, Trash2, Calculator, Users, Settings } from 'lucide-react';
+import { FundGroup } from '@/types/fund';
+import { ArrowLeft, Plus, Trash2, Calculator, Users, Settings, CalendarDays } from 'lucide-react';
 import Link from 'next/link';
 import SimilarTransactionModal from '@/components/admin/SimilarTransactionModal';
+import { Role } from '@/utils/enums';
 
 // Interface for rates from /api/rates endpoint
 interface RateData {
@@ -22,8 +27,18 @@ interface RateData {
   inverse_percentage: boolean;
 }
 
+const TODAY = new Date().toISOString().slice(0, 10);
+const getLocalNow = () => {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 export default function CreateTransactionPage() {
   const router = useRouter();
+  const { user } = useAuth();
+  const isPrivileged = user?.role === Role.MODERATOR || user?.role === Role.ROOT;
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [commissionUsers, setCommissionUsers] = useState<CommissionUserResponse[]>([]);
@@ -31,16 +46,25 @@ export default function CreateTransactionPage() {
   const [currencyPairs, setCurrencyPairs] = useState<CurrencyPairData[]>([]);
   const [loadingPairs, setLoadingPairs] = useState(true);
   const [selectedPair, setSelectedPair] = useState<CurrencyPairData | null>(null);
+  const [selectedFromCurrency, setSelectedFromCurrency] = useState('');
   const [currentRate, setCurrentRate] = useState<{ rate: number; inverse_percentage: boolean } | null>(null);
   const [usdtRate, setUsdtRate] = useState<number | null>(null);
   const [allRates, setAllRates] = useState<RateData[]>([]);
   const [loadingRates, setLoadingRates] = useState(true);
+  const [selectedDate, setSelectedDate] = useState(getLocalNow());
+  const [loadingHistoricalRate, setLoadingHistoricalRate] = useState(false);
+  const [rateDate, setRateDate] = useState<string | null>(null);
 
   // Commission configuration mode
   const [useConfigMode, setUseConfigMode] = useState<boolean>(true);
   const [availableConfigs, setAvailableConfigs] = useState<CommissionConfiguration[]>([]);
   const [selectedConfig, setSelectedConfig] = useState<string | null>(null);
   const [loadingConfigs, setLoadingConfigs] = useState(false);
+
+  // Fund group state
+  const [fundGroups, setFundGroups] = useState<FundGroup[]>([]);
+  const [fundGroupOverride, setFundGroupOverride] = useState<string | null>(null);
+  const [skipFund, setSkipFund] = useState<boolean>(false);
 
   const [formData, setFormData] = useState({
     currency_pair_uuid: '',
@@ -112,6 +136,15 @@ export default function CreateTransactionPage() {
     loadCommissionUsers();
   }, []);
 
+  // Load fund groups on mount
+  useEffect(() => {
+    fundService.getGroups().then(result => {
+      if (result.success && result.data) {
+        setFundGroups(result.data.filter(g => g.is_active));
+      }
+    });
+  }, []);
+
   // Load commission configurations when pair changes
   useEffect(() => {
     const loadConfigurations = async () => {
@@ -155,61 +188,78 @@ export default function CreateTransactionPage() {
     return null;
   };
 
-  // Handle currency pair selection
-  const handlePairChange = (pairUuid: string) => {
-    const pair = currencyPairs.find(p => (p.uuid || `pair-${p.uuid}`) === pairUuid);
-    setSelectedPair(pair || null);
-    setSelectedConfig(null); // Reset config selection
-
-    if (pair) {
-      // Find the rate for this pair from the loaded rates using from_currency and to_currency
-      const foundRate = allRates.find(
-        rate => rate.from_currency === pair.from_currency.symbol &&
-                rate.to_currency === pair.to_currency.symbol
-      );
-
-      // Find USDT rate for the from_currency
-      setUsdtRate(findUsdtRate(pair.from_currency.symbol, allRates));
-
-      if (foundRate) {
-        setCurrentRate({
-          rate: foundRate.rate,
-          inverse_percentage: foundRate.inverse_percentage
-        });
-
-        // Update form with the rate and calculate to_amount if from_amount exists
-        setFormData(prev => {
-          const newFormData = {
-            ...prev,
-            currency_pair_uuid: pairUuid,
-            exchange_rate: foundRate.rate,
-            to_amount: prev.from_amount > 0
-              ? calculateToAmountWithRate(prev.from_amount, foundRate.rate, foundRate.inverse_percentage)
-              : 0
-          };
-          return newFormData;
-        });
-      } else {
-        // No rate found for this pair
-        setCurrentRate(null);
-        setFormData(prev => ({
-          ...prev,
-          currency_pair_uuid: pairUuid,
-          exchange_rate: 0,
-          to_amount: 0
-        }));
-      }
-    } else {
-      setCurrentRate(null);
-      setUsdtRate(null);
+  // Apply a found rate to form state
+  const applyRate = (pairUuid: string, foundRate: { rate: number; inverse_percentage: boolean } | null, datestamp: string | null) => {
+    setRateDate(datestamp);
+    if (foundRate) {
+      setCurrentRate({ rate: foundRate.rate, inverse_percentage: foundRate.inverse_percentage });
       setFormData(prev => ({
         ...prev,
         currency_pair_uuid: pairUuid,
-        exchange_rate: 0,
-        to_amount: 0
+        exchange_rate: foundRate.rate,
+        to_amount: prev.from_amount > 0
+          ? calculateToAmountWithRate(prev.from_amount, foundRate.rate, foundRate.inverse_percentage)
+          : 0
       }));
+    } else {
+      setCurrentRate(null);
+      setFormData(prev => ({ ...prev, currency_pair_uuid: pairUuid, exchange_rate: 0, to_amount: 0 }));
     }
   };
+
+  // Returns true if the selected datetime is within 15 minutes of now (use live rates)
+  const isCurrentTime = (dateStr: string) =>
+    Math.abs(new Date(dateStr).getTime() - Date.now()) < 15 * 60 * 1000;
+
+  // Load rate for a pair on a given datetime (current = use allRates, historical = fetch)
+  const loadRateForPairAndDate = async (pair: CurrencyPairData, date: string) => {
+    if (isCurrentTime(date)) {
+      const found = allRates.find(
+        r => r.from_currency === pair.from_currency.symbol && r.to_currency === pair.to_currency.symbol
+      );
+      applyRate(pair.uuid, found ? { rate: found.rate, inverse_percentage: found.inverse_percentage } : null, null);
+      setUsdtRate(findUsdtRate(pair.from_currency.symbol, allRates));
+    } else {
+      setLoadingHistoricalRate(true);
+      const isoAt = new Date(date).toISOString();
+      const result = await ratesService.getHistoricalRate(pair.uuid, isoAt);
+      setLoadingHistoricalRate(false);
+      if (result.success && result.data) {
+        const r = result.data;
+        applyRate(pair.uuid, { rate: r.rate, inverse_percentage: r.inverse_percentage }, r.created_at);
+        setUsdtRate(null);
+      } else {
+        applyRate(pair.uuid, null, null);
+      }
+    }
+  };
+
+  // Handle currency pair selection
+  const handlePairChange = (pairUuid: string) => {
+    const pair = currencyPairs.find(p => p.uuid === pairUuid);
+    setSelectedPair(pair || null);
+    setSelectedConfig(null);
+    setFundGroupOverride(null);
+    setSkipFund(false);
+
+    if (!pair) {
+      setCurrentRate(null);
+      setUsdtRate(null);
+      setRateDate(null);
+      setFormData(prev => ({ ...prev, currency_pair_uuid: '', exchange_rate: 0, to_amount: 0 }));
+      return;
+    }
+
+    loadRateForPairAndDate(pair, selectedDate);
+  };
+
+  // Reload rate when date changes (if pair already selected)
+  useEffect(() => {
+    if (selectedPair) {
+      loadRateForPairAndDate(selectedPair, selectedDate);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate]);
 
   // Calculate to_amount based on from_amount, exchange_rate and inverse_percentage
   const calculateToAmountWithRate = (fromAmount: number, rate: number, inversePercentage: boolean) => {
@@ -314,7 +364,9 @@ export default function CreateTransactionPage() {
         exchange_rate: formData.exchange_rate,
         ...(usdtRate !== null && { usdt_rate: usdtRate }),
         description: formData.description,
-        commission_config_uuid: selectedConfig
+        commission_config_uuid: selectedConfig,
+        ...(skipFund && { skip_fund: true }),
+        ...(fundGroupOverride && { fund_group_uuid: fundGroupOverride }),
       };
     } else {
       // Manual splits
@@ -337,7 +389,8 @@ export default function CreateTransactionPage() {
         ...(usdtRate !== null && { usdt_rate: usdtRate }),
         total_profit_percentage: formData.total_profit_percentage,
         description: formData.description,
-        profit_splits: formData.profit_splits
+        profit_splits: formData.profit_splits,
+        ...(fundGroupOverride && { fund_group_uuid: fundGroupOverride }),
       };
     }
 
@@ -392,6 +445,14 @@ export default function CreateTransactionPage() {
     setLoading(false);
   };
 
+  const uniqueFromCurrencies = Array.from(
+    new Set(currencyPairs.map(p => p.from_currency.symbol))
+  ).sort();
+
+  const filteredToPairs = selectedFromCurrency
+    ? currencyPairs.filter(p => p.from_currency.symbol === selectedFromCurrency)
+    : [];
+
   return (
     <div className="p-6 max-w-4xl mx-auto">
       {/* Header */}
@@ -414,37 +475,105 @@ export default function CreateTransactionPage() {
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Detalles de la Transacción</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Currency Pair Selector */}
+            {/* Date/time of transaction */}
             <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                <CalendarDays size={14} className="text-gray-400" />
+                Fecha y hora de la transacción
+              </label>
+              {isPrivileged ? (
+                <input
+                  type="datetime-local"
+                  value={selectedDate}
+                  max={getLocalNow()}
+                  onChange={(e) => setSelectedDate(e.target.value || getLocalNow())}
+                  className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+                />
+              ) : (
+                <span className="text-sm text-gray-700">
+                  {new Date(selectedDate).toLocaleString('es-ES', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </div>
+
+            {/* Step 1: From currency */}
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Par de Monedas <span className="text-red-500">*</span>
+                Moneda de Origen <span className="text-red-500">*</span>
               </label>
               {loadingPairs ? (
                 <div className="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-50 text-gray-500 text-sm">
-                  Cargando pares de monedas...
+                  Cargando...
                 </div>
               ) : (
                 <select
-                  value={formData.currency_pair_uuid}
-                  onChange={(e) => handlePairChange(e.target.value)}
+                  value={selectedFromCurrency}
+                  onChange={(e) => {
+                    setSelectedFromCurrency(e.target.value);
+                    handlePairChange('');
+                  }}
                   className="w-full border border-gray-300 rounded-md px-3 py-2"
-                  required
                 >
-                  <option value="">Seleccionar par de monedas...</option>
-                  {currencyPairs.map((pair) => (
-                    <option key={pair.uuid || `pair-${pair.uuid}`} value={pair.uuid || `pair-${pair.uuid}`}>
-                      {pair.display_name || pair.pair_symbol} ({pair.from_currency.symbol} → {pair.to_currency.symbol})
-                    </option>
+                  <option value="">Seleccionar moneda...</option>
+                  {uniqueFromCurrencies.map(sym => (
+                    <option key={sym} value={sym}>{sym}</option>
                   ))}
                 </select>
               )}
-              {selectedPair && (
-                <p className="text-xs text-gray-500 mt-1">
-                  {selectedPair.from_currency.symbol} → {selectedPair.to_currency.symbol}
-                  {selectedPair.description && ` - ${selectedPair.description}`}
-                </p>
-              )}
             </div>
+
+            {/* Step 2: To currency (filtered by from) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Moneda de Destino <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={formData.currency_pair_uuid}
+                onChange={(e) => handlePairChange(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 disabled:bg-gray-50 disabled:text-gray-400"
+                disabled={!selectedFromCurrency || loadingPairs}
+                required
+              >
+                <option value="">Seleccionar destino...</option>
+                {filteredToPairs.map(pair => (
+                  <option key={pair.uuid} value={pair.uuid}>
+                    {pair.to_currency.symbol}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Selected pair info */}
+            {selectedPair && (
+              <div className="md:col-span-2 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                  <span className="font-semibold text-gray-800">{selectedPair.pair_symbol}</span>
+                  {selectedPair.display_name && (
+                    <span className="text-gray-500">{selectedPair.display_name}</span>
+                  )}
+                  {selectedPair.description && (
+                    <span className="text-gray-400 italic">{selectedPair.description}</span>
+                  )}
+                  {currentRate && !loadingHistoricalRate && (
+                    <span className="ml-auto text-blue-700 font-medium">
+                      Tasa: {currentRate.rate.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+                      {rateDate && (
+                        <span className="text-xs text-gray-400 ml-1">
+                          ({new Date(rateDate).toLocaleString('es-ES', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })})
+                        </span>
+                      )}
+                      {!rateDate && <span className="text-xs text-gray-400 ml-1">(actual)</span>}
+                    </span>
+                  )}
+                  {loadingHistoricalRate && (
+                    <span className="ml-auto text-xs text-gray-500">Buscando tasa...</span>
+                  )}
+                  {!currentRate && !loadingHistoricalRate && (
+                    <span className="ml-auto text-xs text-amber-600">Sin tasa para esta fecha/hora</span>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -464,7 +593,7 @@ export default function CreateTransactionPage() {
                 }}
                 className="w-full border border-gray-300 rounded-md px-3 py-2"
                 required
-                disabled={!selectedPair || loadingRates}
+                disabled={!selectedPair || loadingRates || loadingHistoricalRate}
               />
               {selectedPair && (
                 <p className="text-xs text-gray-500 mt-1">{selectedPair.from_currency.symbol}</p>
@@ -493,15 +622,10 @@ export default function CreateTransactionPage() {
                 }}
                 className="w-full border border-gray-300 rounded-md px-3 py-2"
                 required
-                disabled={!selectedPair || loadingRates}
+                disabled={!selectedPair || loadingRates || loadingHistoricalRate}
               />
-              {loadingRates && (
-                <p className="text-xs text-blue-600 mt-1">Cargando tasas...</p>
-              )}
-              {currentRate && !loadingRates && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Tasa actual del mercado: {currentRate.rate.toFixed(4)}
-                </p>
+              {(loadingRates || loadingHistoricalRate) && (
+                <p className="text-xs text-blue-600 mt-1">Cargando tasa...</p>
               )}
             </div>
 
@@ -647,7 +771,7 @@ export default function CreateTransactionPage() {
                     {availableConfigs.map((config) => (
                       <div
                         key={config.uuid}
-                        onClick={() => setSelectedConfig(config.uuid)}
+                        onClick={() => { setSelectedConfig(config.uuid); setFundGroupOverride(null); setSkipFund(false); }}
                         className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
                           selectedConfig === config.uuid
                             ? 'border-blue-500 bg-blue-50'
@@ -661,9 +785,16 @@ export default function CreateTransactionPage() {
                               <p className="text-sm text-gray-600 mt-1">{config.description}</p>
                             )}
                           </div>
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            {config.total_percentage}%
-                          </span>
+                          <div className="flex items-center gap-2">
+                            {config.fund_group_name && (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                Fondo: {config.fund_group_name}
+                              </span>
+                            )}
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              {config.total_percentage}%
+                            </span>
+                          </div>
                         </div>
                         <div className="mt-3 space-y-1">
                           {config.splits.map((split, idx) => (
@@ -678,6 +809,47 @@ export default function CreateTransactionPage() {
                       </div>
                     ))}
                   </div>
+
+                  {/* Fund controls for config mode */}
+                  {selectedConfig && (() => {
+                    const cfg = availableConfigs.find(c => c.uuid === selectedConfig);
+                    return cfg ? (
+                      <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg space-y-3">
+                        <p className="text-sm font-medium text-gray-700">Opciones de Fondo</p>
+                        {cfg.fund_group_name && !fundGroupOverride && (
+                          <p className="text-sm text-gray-600">
+                            Fondo automático: <span className="font-semibold text-purple-700">{cfg.fund_group_name}</span>
+                          </p>
+                        )}
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={skipFund}
+                            onChange={(e) => { setSkipFund(e.target.checked); if (e.target.checked) setFundGroupOverride(null); }}
+                            className="rounded"
+                          />
+                          <span className="text-sm text-gray-700">No registrar en fondo (skip_fund)</span>
+                        </label>
+                        {!skipFund && (
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Usar otro fondo (override, opcional)
+                            </label>
+                            <select
+                              value={fundGroupOverride || ''}
+                              onChange={(e) => setFundGroupOverride(e.target.value || null)}
+                              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                            >
+                              <option value="">{cfg.fund_group_name ? `Usar fondo de la config (${cfg.fund_group_name})` : 'Sin fondo'}</option>
+                              {fundGroups.map(g => (
+                                <option key={g.uuid} value={g.uuid}>{g.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    ) : null;
+                  })()}
                 </div>
               )}
             </div>
@@ -805,6 +977,25 @@ export default function CreateTransactionPage() {
               <p className="text-sm text-amber-600 mt-2">
                 ⚠️ Falta asignar {((formData.total_profit_percentage || 0) - getTotalSplitPercentage()).toFixed(2)}%
               </p>
+            )}
+
+            {/* Fund group for manual mode */}
+            {fundGroups.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Grupo de Fondos (Opcional)
+                </label>
+                <select
+                  value={fundGroupOverride || ''}
+                  onChange={(e) => setFundGroupOverride(e.target.value || null)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                >
+                  <option value="">Sin grupo de fondos</option>
+                  {fundGroups.map(g => (
+                    <option key={g.uuid} value={g.uuid}>{g.name}</option>
+                  ))}
+                </select>
+              </div>
             )}
           </div>
         )}

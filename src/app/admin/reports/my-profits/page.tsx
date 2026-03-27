@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { transactionService } from '@/services/transactionService';
 import { UserProfitReport } from '@/types/transaction';
 import { TrendingUp, DollarSign, FileText, Calendar } from 'lucide-react';
 
 export default function MyProfitsPage() {
   const [report, setReport] = useState<UserProfitReport | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
@@ -24,11 +24,14 @@ export default function MyProfitsPage() {
     setLoading(false);
   }, [startDate, endDate]);
 
+  useEffect(() => { loadReport(); }, [loadReport]);
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('es-ES', {
       year: 'numeric',
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
+      timeZone: 'UTC'
     });
   };
 

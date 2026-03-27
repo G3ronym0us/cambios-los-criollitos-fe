@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { transactionService } from "@/services/transactionService";
 import { ProfitSummary } from "@/types/transaction";
 import { TrendingUp, Users, DollarSign, Repeat } from "lucide-react";
@@ -224,21 +225,24 @@ export default function SummaryReportPage() {
                         return (
                           <tr key={user.user_uuid} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center">
+                              <Link
+                                href={`/admin/reports/users?user_uuid=${user.user_uuid}`}
+                                className="flex items-center group"
+                              >
                                 <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
                                   <span className="text-blue-600 font-semibold">
                                     {user.username.charAt(0).toUpperCase()}
                                   </span>
                                 </div>
                                 <div className="ml-3">
-                                  <p className="font-medium text-gray-900">
+                                  <p className="font-medium text-gray-900 group-hover:text-blue-600">
                                     {user.username}
                                   </p>
                                   <p className="text-xs text-gray-500">
-                                    {user.user_uuid.substring(0, 8)}
+                                    Ver reporte →
                                   </p>
                                 </div>
-                              </div>
+                              </Link>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                               {user.transaction_count}

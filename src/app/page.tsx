@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import CurrencyCalculator from '../components/CurrencyCalculator';
 import { Rate, IconProps } from '@/types/currency';
+import { Role } from '@/utils/enums';
 
 // Iconos SVG
 const RefreshIcon = ({ className, spinning = false }: IconProps) => (
@@ -113,7 +114,7 @@ const ExchangeRatesDashboard = () => {
                 </span>
               </button>
 
-              {user && (user.role === 'root' || user.role === 'moderator') && (
+              {user && (user.role === Role.ROOT || user.role === Role.MODERATOR) && (
                 <Link
                   href="/admin"
                   className="flex items-center gap-2 p-2 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl bg-purple-50 text-purple-600 hover:bg-purple-100 transition-all hover:shadow-md"
@@ -131,7 +132,7 @@ const ExchangeRatesDashboard = () => {
       {/* Contenido principal - Solo calculadora */}
       <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
         <div className="max-w-4xl mx-auto">
-          <CurrencyCalculator rates={rates} />
+          <CurrencyCalculator rates={rates} user={user} onRateUpdated={fetchRates} />
         </div>
       </div>
     </div>

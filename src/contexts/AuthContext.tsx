@@ -124,11 +124,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, [router]);
 
-  // Configurar el handler de 401 en el interceptor HTTP
-  useEffect(() => {
-    httpClient.setUnauthorizedHandler(forceLogout);
-  }, [forceLogout]);
-
   const refreshToken = async (): Promise<boolean> => {
     try {
       const refreshTokenValue = Cookies.get('refresh_token');
@@ -136,14 +131,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       const result = await authService.refreshToken(refreshTokenValue);
       if (result.success && result.data) {
-        Cookies.set('access_token', result.data.access_token, { 
+        Cookies.set('access_token', result.data.access_token, {
           expires: 7,
           secure: process.env.NODE_ENV === 'production',
           sameSite: 'strict'
         });
         return true;
       }
-      
+
       // Refresh token inválido, hacer logout
       logout();
       return false;
@@ -153,6 +148,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return false;
     }
   };
+
+  // Configurar los handlers de 401 y refresh en el interceptor HTTP
+  useEffect(() => {
+    httpClient.setUnauthorizedHandler(forceLogout);
+    httpClient.setRefreshTokenHandler(refreshToken);
+  }, [forceLogout, refreshToken]);
 
   const value: AuthContextType = {
     user,

@@ -1,11 +1,12 @@
 // User Types
+import { Role } from '@/utils/enums';
 
 export interface UserData {
   uuid: string;
   username: string;
   email: string;
   full_name?: string;
-  role: string;
+  role: Role;
   role_display?: string;
   is_active: boolean;
   is_verified: boolean;
@@ -70,5 +71,5 @@ export interface UserUpdate {
   is_fund_manager?: boolean;
 }
 
-export type UserRole = 'user' | 'moderator' | 'root';
+export type UserRole = Role;
 

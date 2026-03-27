@@ -5,12 +5,14 @@ import { useParams } from 'next/navigation';
 import { AdminService } from '@/services/adminService';
 import { commissionConfigService } from '@/services/commissionConfigService';
 import { userService } from '@/services/userService';
+import { fundService } from '@/services/fundService';
 import { CurrencyPairData } from '@/types/admin';
 import {
   CommissionConfiguration,
   CommissionConfigCreate
 } from '@/types/commissionConfig';
 import { CommissionUserResponse } from '@/types/user';
+import { FundGroup } from '@/types/fund';
 import { ArrowLeft, Plus, Trash2, Users, DollarSign, Percent } from 'lucide-react';
 import Link from 'next/link';
 
@@ -23,6 +25,7 @@ export default function PairCommissionConfigsPage() {
   const [pair, setPair] = useState<CurrencyPairData | null>(null);
   const [configurations, setConfigurations] = useState<CommissionConfiguration[]>([]);
   const [commissionUsers, setCommissionUsers] = useState<CommissionUserResponse[]>([]);
+  const [fundGroups, setFundGroups] = useState<FundGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
 
@@ -31,6 +34,7 @@ export default function PairCommissionConfigsPage() {
     name: '',
     description: '',
     total_percentage: 10,
+    fund_group_uuid: null,
     splits: []
   });
 
@@ -62,6 +66,12 @@ export default function PairCommissionConfigsPage() {
       const usersResult = await userService.getAvailableCommissionUsers();
       if (usersResult.success && usersResult.data) {
         setCommissionUsers(usersResult.data);
+      }
+
+      // Load fund groups
+      const groupsResult = await fundService.getGroups();
+      if (groupsResult.success && groupsResult.data) {
+        setFundGroups(groupsResult.data.filter(g => g.is_active));
       }
 
       setLoading(false);
@@ -137,6 +147,7 @@ export default function PairCommissionConfigsPage() {
         name: '',
         description: '',
         total_percentage: 10,
+        fund_group_uuid: null,
         splits: []
       });
       if (pair?.uuid) {
@@ -309,6 +320,25 @@ export default function PairCommissionConfigsPage() {
                   rows={2}
                   placeholder="Ej: División equitativa 50/50"
                 />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Grupo de Fondos (Opcional)
+                </label>
+                <select
+                  value={formData.fund_group_uuid || ''}
+                  onChange={(e) => setFormData({ ...formData, fund_group_uuid: e.target.value || null })}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2"
+                >
+                  <option value="">Sin grupo de fondos</option>
+                  {fundGroups.map((g) => (
+                    <option key={g.uuid} value={g.uuid}>{g.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Si se selecciona, las transacciones con esta config crearán automáticamente un movimiento en el fondo.
+                </p>
               </div>
             </div>
 
@@ -487,11 +517,18 @@ export default function PairCommissionConfigsPage() {
                   {config.description && (
                     <p className="text-sm text-gray-600 mb-3">{config.description}</p>
                   )}
-                  <div className="flex items-center gap-2 text-sm text-gray-700">
-                    <Percent size={16} />
-                    <span className="font-semibold">
-                      Total: {config.total_percentage}%
-                    </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 text-sm text-gray-700">
+                      <Percent size={16} />
+                      <span className="font-semibold">
+                        Total: {config.total_percentage}%
+                      </span>
+                    </div>
+                    {config.fund_group_name && (
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                        Fondo: {config.fund_group_name}
+                      </span>
+                    )}
                   </div>
                 </div>
 

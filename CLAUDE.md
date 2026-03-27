@@ -9,71 +9,72 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run start` - Start the production server
 - `npm run lint` - Run ESLint for code quality checks
 
+No test runner is configured; use `npm run lint` before committing.
+
 ## Architecture Overview
 
-This is a **Next.js 15 frontend application** for a cryptocurrency exchange rate platform that fetches P2P rates from Binance. The app is built with React 19, TypeScript, and Tailwind CSS.
+Next.js 15 (App Router) frontend for a P2P cryptocurrency exchange rate platform. Fetches rates from Binance and supports currency conversion between VES, COP, BRL, USDT, Zelle, and PayPal.
 
-### Key Components Structure
+### Authentication
 
-**Authentication System:**
-- Context-based auth with JWT tokens stored in localStorage
-- `AuthContext` provides login, register, logout, and token refresh
-- Protected routes and session persistence
-- User roles: USER, MODERATOR, ROOT
+- JWT dual-token (access + refresh) stored in **cookies** (`js-cookie`), not localStorage
+- `AuthContext` (`src/contexts/AuthContext.tsx`) provides `useAuth()` hook with `login`, `logout`, `refreshToken`, `forceLogout`
+- Middleware (`middleware.ts`) protects `/dashboard` and `/admin` routes via token presence check
+- Roles: `USER`, `MODERATOR`, `ROOT` — admin sections require MODERATOR or ROOT
 
-**Currency Exchange Features:**
-- Real-time exchange rate dashboard from Binance P2P API
-- Interactive currency calculator with live rate conversion
-- Support for: VES, COP, BRL, USDT, Zelle, PayPal
-- Automatic data refresh every 2 minutes
+### HTTP Layer
 
-**API Integration:**
-- Backend API at `process.env.NEXT_PUBLIC_API_URL`
-- Rate fetching endpoint: `/api/rates`
-- Manual scraping trigger: `/api/scrape` (POST)
-- JWT-based authentication endpoints
+All API calls go through a **singleton** `HttpInterceptor` (`src/utils/httpInterceptor.ts`):
+- Automatically attaches `Authorization: Bearer <token>` header
+- Handles 401 errors via a configurable handler (wired to `forceLogout` in `AuthContext`)
+- Has special-case logic for transaction confirmation warnings (returns `{ requiresConfirmation: true }` on specific 400 responses)
+- Methods: `get`, `post`, `put`, `patch`, `delete`
 
-### File Organization
+### Service Layer
 
-```
-src/
-├── app/                 # Next.js App Router pages
-│   ├── auth/login/     # Authentication pages
-│   ├── layout.tsx      # Root layout with AuthProvider
-│   └── page.tsx        # Main dashboard
-├── components/         # Reusable UI components
-│   ├── auth/          # Authentication-specific components
-│   └── Currency*.tsx  # Exchange rate components
-├── contexts/          # React contexts (AuthContext)
-├── services/          # API service layers (authService)
-├── types/            # TypeScript type definitions
-└── utils/            # Utility functions and enums
-```
+`src/services/` contains one file per domain:
+- `authService.ts` — login, register, refresh, getCurrentUser
+- `ratesService.ts` — fetch rates by pair UUID or symbol, format utilities
+- `adminService.ts` — currency and currency pair CRUD, Binance trade methods
+- `userService.ts` — commission user management
+- `transactionService.ts` — create/read/update transactions, profit reports
+- `commissionConfigService.ts` — commission split configuration
+- `bcvService.ts` — BCV rate data
 
-### State Management
+### Currency Calculator Flow
 
-- **Authentication:** React Context (`AuthContext`) with localStorage persistence
-- **Exchange Rates:** Component-level state with automatic refresh intervals
-- **Form Management:** Local state with validation utilities
+`CurrencyCalculator` fetches available pairs from the backend, lets the user pick a pair via `CurrencySelector`, then computes conversion using the rate from the pair. When `inverse_percentage` is set on a rate, the calculation is inverted. BCV rates are integrated for VES conversions.
 
-### Key Technical Details
+### Admin Section
 
-- Uses **Turbopack** for fast development builds
-- **App Router** architecture (Next.js 15)
-- **Client-side rendering** for dynamic exchange rate updates
-- **Responsive design** with Tailwind CSS
-- **Custom SVG icons** for UI elements (RefreshIcon, TrendingUp/Down, etc.)
+`/admin` layout (`src/app/admin/layout.tsx`) enforces role check (ROOT/MODERATOR). Sub-routes:
+- `/admin/currencies` — manage currency definitions
+- `/admin/currency-pairs` — manage pairs with `PairType` (BASE, DERIVED, CROSS)
+- `/admin/transactions` — create transactions with profit splits, filter by status/currency/date
+- `/admin/users` — toggle commission eligibility per user
+- `/admin/reports` — per-user profit reports and system-wide summary
+
+### Type Definitions
+
+All domain types live in `src/types/`:
+- `currency.ts` — `Currency` enum, `Rate`, `CurrencyPairData`, `ExchangeRateResponse`
+- `admin.ts` — `PairType` enum (BASE/DERIVED/CROSS), `CurrencyType` enum (CRYPTO/FIAT)
+- `transaction.ts` — `TransactionStatus` enum, `TransactionData`, `ProfitSplitData`
+- `auth.d.ts` — `User`, `AuthContextType`, `AuthResponse`
+
+### Utilities
+
+- `src/utils/currencyConfig.ts` — display metadata per currency (name, symbol, Tailwind color); helpers `getCurrencyName()`, `getCurrencySymbol()`, `getCurrencyColor()`
+- `src/utils/enums.ts` — `Role`, `MessageType`, `InputType` enums
+- `src/utils/validation.ts` — email regex, password rules (8+ chars, upper, lower, number)
+- `src/utils/functions.ts` — `formatNumber()`, `getRoleOptions()`
 
 ### Environment Variables
 
-Required environment variables:
-- `NEXT_PUBLIC_API_URL` - Backend API base URL
+- `NEXT_PUBLIC_API_URL` — Backend API base URL (default: `http://localhost:8000`)
 
-### Testing & Quality
+### Other Notes
 
-Run linting before commits:
-```bash
-npm run lint
-```
-
-The application includes ESLint configuration with Next.js rules for code quality.
+- Path alias `@/*` maps to `./src/*`
+- `next.config.ts` allows images from `bin.bnbstatic.com` (Binance assets)
+- Tailwind CSS v4 is used with PostCSS

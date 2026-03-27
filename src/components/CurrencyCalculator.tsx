@@ -2,12 +2,17 @@ import React, { useState, useEffect, useCallback } from "react";
 import CurrencySelector from "./CurrencySelector";
 import CurrencyInputFields from "./CurrencyInputFields";
 import BCVService from "../services/bcvService";
+import { adminService } from "../services/adminService";
+import { Role } from "../utils/enums";
 
 interface Rate {
   from_currency: string;
   to_currency: string;
   rate: number;
+  base_rate?: number | null;
+  percentage?: number | null;
   inverse_percentage: boolean;
+  currency_pair_uuid?: string;
 }
 
 interface CurrencyConfig {
@@ -20,6 +25,8 @@ interface CurrencyConfig {
 
 interface CurrencyCalculatorProps {
   rates: Rate[];
+  user?: { role: string } | null;
+  onRateUpdated?: () => void;
 }
 
 interface CalculatorState {
@@ -36,7 +43,7 @@ interface BCVRate {
   lastUpdated: string;
 }
 
-const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates }) => {
+const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, onRateUpdated }) => {
   const [calculator, setCalculator] = useState<CalculatorState>({
     amount: 1,
     fromCurrency: "ZELLE",
@@ -47,7 +54,17 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates }) => {
   });
 
   const [bcvRate, setBcvRate] = useState<BCVRate | null>(null);
+  const [sliderValue, setSliderValue] = useState<number>(0);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string>('');
   const bcvService = BCVService.getInstance();
+
+  const isPrivileged = user?.role === Role.MODERATOR || user?.role === Role.ROOT;
+
+  const calcPreviewRate = (baseRate: number, pct: number, isInverse: boolean) => {
+    const factor = 1 - pct / 100;
+    return isInverse ? baseRate / factor : baseRate * factor;
+  };
 
   // Función para redondear valores calculados a 2 decimales
   const roundToDecimals = (value: number, decimals: number = 2): number => {
@@ -155,6 +172,9 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates }) => {
       return;
     }
 
+    // Sync slider to the new pair's percentage
+    setSliderValue(directRate.percentage ?? 0);
+
     // Calcular el monto faltante según la entrada
     let finalFromAmount: number;
     let finalToAmount: number;
@@ -228,6 +248,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates }) => {
         result: result,
         rate: directRate.rate,
       }));
+      setSliderValue(directRate.percentage ?? 0);
     }
   }, [rates]);
 
@@ -252,6 +273,27 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates }) => {
   };
 
   const availableCurrencies = getAvailableCurrencies();
+
+  const currentRate = rates.find(
+    (r) => r.from_currency === calculator.fromCurrency && r.to_currency === calculator.toCurrency
+  );
+
+  const handleSavePercentage = async () => {
+    if (!currentRate?.currency_pair_uuid) return;
+    setSaving(true);
+    setSaveError('');
+    const result = await adminService.updatePairPercentage(
+      currentRate.currency_pair_uuid,
+      sliderValue,
+      currentRate.inverse_percentage
+    );
+    setSaving(false);
+    if (result.success) {
+      onRateUpdated?.();
+    } else {
+      setSaveError(result.error || 'Error al guardar');
+    }
+  };
 
   const handleFromAmountChange = (amount: string) => {
     calculateConversion(
@@ -377,6 +419,38 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates }) => {
           bcvAmount={calculator.bcvAmount}
           onBCVAmountChange={handleBCVAmountChange}
         />
+
+        {/* Ajuste de porcentaje — solo MODERATOR/ROOT con par que tenga base_rate */}
+        {isPrivileged && currentRate?.base_rate != null && (
+          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+            <div className="flex justify-between text-sm text-gray-600">
+              <span>Tasa base (Binance): <strong>{currentRate.base_rate.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}</strong></span>
+              <span>Porcentaje: <strong>{sliderValue.toFixed(1)}%</strong></span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={20}
+              step={0.1}
+              value={sliderValue}
+              onChange={(e) => setSliderValue(parseFloat(e.target.value))}
+              className="w-full accent-blue-600"
+            />
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-blue-800 font-medium">
+                Preview: {calcPreviewRate(currentRate.base_rate, sliderValue, currentRate.inverse_percentage).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 6 })} {calculator.toCurrency}
+              </span>
+              <button
+                onClick={handleSavePercentage}
+                disabled={saving}
+                className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {saving ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+            {saveError && <p className="text-xs text-red-600">{saveError}</p>}
+          </div>
+        )}
 
         {/* Mensaje si no hay conversión disponible */}
         {calculator.amount &&

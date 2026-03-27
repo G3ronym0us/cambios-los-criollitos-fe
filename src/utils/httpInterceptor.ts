@@ -11,6 +11,7 @@ export class HttpInterceptor {
   private static instance: HttpInterceptor;
   private baseUrl: string;
   private onUnauthorized?: () => void;
+  private onRefreshToken?: () => Promise<boolean>;
 
   constructor() {
     this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -28,6 +29,10 @@ export class HttpInterceptor {
 
   setUnauthorizedHandler(handler: () => void): void {
     this.onUnauthorized = handler;
+  }
+
+  setRefreshTokenHandler(handler: () => Promise<boolean>): void {
+    this.onRefreshToken = handler;
   }
 
   private getAuthHeaders() {
@@ -54,18 +59,38 @@ export class HttpInterceptor {
     }
   }
 
-  private async handleResponse<T>(response: Response): Promise<HttpResponse<T>> {
+  private async request<T>(method: string, endpoint: string, body?: unknown): Promise<HttpResponse<T>> {
+    const makeRequest = () => fetch(`${this.baseUrl}${endpoint}`, {
+      method,
+      headers: this.getAuthHeaders(),
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+
     try {
-      // Manejar error 401 (No autorizado)
+      let response = await makeRequest();
+
       if (response.status === 401) {
-        this.handleUnauthorized();
-        return {
-          success: false,
-          error: 'Sesión expirada. Redirigiendo al login...',
-          redirectToLogin: true
-        };
+        if (this.onRefreshToken) {
+          const refreshed = await this.onRefreshToken();
+          if (refreshed) {
+            response = await makeRequest();
+          }
+        }
+        if (response.status === 401) {
+          this.handleUnauthorized();
+          return { success: false, error: 'Sesión expirada. Redirigiendo al login...', redirectToLogin: true };
+        }
       }
 
+      return this.handleResponse<T>(response);
+    } catch (error) {
+      console.error(`[HttpInterceptor] Network error in ${method} request:`, error);
+      return { success: false, error: 'Error de conexión al servidor' };
+    }
+  }
+
+  private async handleResponse<T>(response: Response): Promise<HttpResponse<T>> {
+    try {
       // Manejar otros errores HTTP
       if (!response.ok) {
         let errorMessage = 'Error del servidor';
@@ -108,115 +133,23 @@ export class HttpInterceptor {
   }
 
   async get<T>(endpoint: string): Promise<HttpResponse<T>> {
-    try {
-      const url = `${this.baseUrl}${endpoint}`;
-      console.log('[HttpInterceptor] GET request:', url);
-      console.log('[HttpInterceptor] Base URL:', this.baseUrl);
-      console.log('[HttpInterceptor] Headers:', this.getAuthHeaders());
-
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: this.getAuthHeaders(),
-      });
-
-      console.log('[HttpInterceptor] Response status:', response.status);
-      const result = await this.handleResponse<T>(response);
-      console.log('[HttpInterceptor] Final result:', result);
-
-      return result;
-    } catch (error) {
-      console.error('[HttpInterceptor] Network error in GET request:', error);
-      return {
-        success: false,
-        error: 'Error de conexión al servidor'
-      };
-    }
+    return this.request<T>('GET', endpoint);
   }
 
   async post<T>(endpoint: string, data?: unknown): Promise<HttpResponse<T>> {
-    try {
-      const options: RequestInit = {
-        method: 'POST',
-        headers: this.getAuthHeaders(),
-      };
-      
-      if (data) {
-        options.body = JSON.stringify(data);
-      }
-      
-      const response = await fetch(`${this.baseUrl}${endpoint}`, options);
-
-      return this.handleResponse<T>(response);
-    } catch (error) {
-      console.error('Network error in POST request:', error);
-      return {
-        success: false,
-        error: 'Error de conexión al servidor'
-      };
-    }
+    return this.request<T>('POST', endpoint, data);
   }
 
   async put<T>(endpoint: string, data?: unknown): Promise<HttpResponse<T>> {
-    try {
-      const options: RequestInit = {
-        method: 'PUT',
-        headers: this.getAuthHeaders(),
-      };
-      
-      if (data) {
-        options.body = JSON.stringify(data);
-      }
-      
-      const response = await fetch(`${this.baseUrl}${endpoint}`, options);
-
-      return this.handleResponse<T>(response);
-    } catch (error) {
-      console.error('Network error in PUT request:', error);
-      return {
-        success: false,
-        error: 'Error de conexión al servidor'
-      };
-    }
+    return this.request<T>('PUT', endpoint, data);
   }
 
   async patch<T>(endpoint: string, data?: unknown): Promise<HttpResponse<T>> {
-    try {
-      const options: RequestInit = {
-        method: 'PATCH',
-        headers: this.getAuthHeaders(),
-      };
-      
-      if (data) {
-        options.body = JSON.stringify(data);
-      }
-      
-      const response = await fetch(`${this.baseUrl}${endpoint}`, options);
-
-      return this.handleResponse<T>(response);
-    } catch (error) {
-      console.error('Network error in PATCH request:', error);
-      return {
-        success: false,
-        error: 'Error de conexión al servidor'
-      };
-    }
+    return this.request<T>('PATCH', endpoint, data);
   }
 
   async delete<T>(endpoint: string): Promise<HttpResponse<T>> {
-    try {
-      const response = await fetch(`${this.baseUrl}${endpoint}`, {
-        method: 'DELETE',
-        headers: this.getAuthHeaders(),
-      });
-
-      return this.handleResponse<T>(response);
-    } catch (error) {
-      console.error('Network error in DELETE request:', error);
-      return {
-        success: false,
-        error: 'Error de conexión al servidor'
-      };
-    }
+    return this.request<T>('DELETE', endpoint);
   }
 }
 

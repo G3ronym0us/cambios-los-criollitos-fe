@@ -12,12 +12,14 @@ import {
   TrendingUp,
   FileText,
   UserCheck,
+  Users,
   Wallet,
   Menu,
   X,
   LogOut,
   Home
 } from 'lucide-react';
+import { Role } from '@/utils/enums';
 
 export default function AdminLayout({
   children,
@@ -36,7 +38,7 @@ export default function AdminLayout({
         return;
       }
 
-      if (user.role.toUpperCase() !== 'ROOT' && user.role.toUpperCase() !== 'MODERATOR') {
+      if (user.role !== Role.ROOT && user.role !== Role.MODERATOR) {
         router.push('/');
         return;
       }
@@ -50,6 +52,7 @@ export default function AdminLayout({
     { name: 'Transacciones', href: '/admin/transactions', icon: DollarSign },
     { name: 'Mis Ganancias', href: '/admin/reports/my-profits', icon: TrendingUp },
     { name: 'Resumen General', href: '/admin/reports/summary', icon: FileText },
+    { name: 'Reporte por Usuario', href: '/admin/reports/users', icon: Users },
     { name: 'Usuarios', href: '/admin/users', icon: UserCheck },
     { name: 'Fondos', href: '/admin/funds', icon: Wallet },
   ];
@@ -67,7 +70,7 @@ export default function AdminLayout({
     );
   }
 
-  if (!user || (user.role.toUpperCase() !== 'ROOT' && user.role.toUpperCase() !== 'MODERATOR')) {
+  if (!user || (user.role !== Role.ROOT && user.role !== Role.MODERATOR)) {
     return null;
   }
 

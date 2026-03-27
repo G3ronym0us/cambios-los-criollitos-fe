@@ -18,6 +18,8 @@ export interface CommissionConfiguration {
   is_active: boolean;
   created_by_user_uuid?: string;
   splits: CommissionConfigSplit[];
+  fund_group_uuid?: string | null;
+  fund_group_name?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -27,6 +29,7 @@ export interface CommissionConfigCreate {
   name: string;
   description?: string;
   total_percentage: number;
+  fund_group_uuid?: string | null;
   splits: {
     user_uuid: string;
     percentage: number;
@@ -38,6 +41,7 @@ export interface CommissionConfigUpdate {
   description?: string;
   total_percentage?: number;
   is_active?: boolean;
+  fund_group_uuid?: string | null;
   splits?: {
     user_uuid: string;
     percentage: number;

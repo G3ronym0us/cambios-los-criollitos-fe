@@ -29,11 +29,10 @@ export class TransactionService {
     const params = new URLSearchParams();
 
     if (filters.status_filter) params.append('status_filter', filters.status_filter);
-    if (filters.from_currency) params.append('from_currency', filters.from_currency);
-    if (filters.to_currency) params.append('to_currency', filters.to_currency);
+    if (filters.currency_pair_uuid) params.append('currency_pair_uuid', filters.currency_pair_uuid);
     if (filters.user_uuid) params.append('user_uuid', filters.user_uuid);
-    if (filters.start_date) params.append('start_date', filters.start_date);
-    if (filters.end_date) params.append('end_date', filters.end_date);
+    if (filters.start_date) params.append('start_date', `${filters.start_date}T00:00:00`);
+    if (filters.end_date) params.append('end_date', `${filters.end_date}T23:59:59`);
     if (filters.page) params.append('page', filters.page.toString());
     if (filters.per_page) params.append('per_page', filters.per_page.toString());
 
@@ -81,16 +80,17 @@ export class TransactionService {
   async getUserProfitReport(
     userUuid: string,
     startDate?: string,
-    endDate?: string
+    endDate?: string,
+    page: number = 1,
+    perPage: number = 50
   ): Promise<ApiResponse<UserProfitReport>> {
     const params = new URLSearchParams();
-    if (startDate) params.append('start_date', startDate);
-    if (endDate) params.append('end_date', endDate);
+    if (startDate) params.append('start_date', `${startDate}T00:00:00`);
+    if (endDate) params.append('end_date', `${endDate}T23:59:59`);
+    params.append('page', page.toString());
+    params.append('per_page', perPage.toString());
 
-    const queryString = params.toString();
-    const endpoint = queryString
-      ? `/transactions/reports/user/${userUuid}?${queryString}`
-      : `/transactions/reports/user/${userUuid}`;
+    const endpoint = `/transactions/reports/user/${userUuid}?${params.toString()}`;
 
     const result = await httpClient.get<UserProfitReport>(endpoint);
     return {
@@ -121,8 +121,8 @@ export class TransactionService {
   // Get My Profits
   async getMyProfits(startDate?: string, endDate?: string): Promise<ApiResponse<UserProfitReport>> {
     const params = new URLSearchParams();
-    if (startDate) params.append('start_date', startDate);
-    if (endDate) params.append('end_date', endDate);
+    if (startDate) params.append('start_date', `${startDate}T00:00:00`);
+    if (endDate) params.append('end_date', `${endDate}T23:59:59`);
 
     const queryString = params.toString();
     const endpoint = queryString

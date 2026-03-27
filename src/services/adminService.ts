@@ -215,6 +215,18 @@ export class AdminService {
       error: result.error
     };
   }
+
+  async updatePairPercentage(
+    pairUuid: string,
+    derived_percentage: number,
+    use_inverse_percentage: boolean
+  ): Promise<ApiResponse<CurrencyPairData>> {
+    const result = await httpClient.patch<CurrencyPairData>(
+      `/currency-pairs/${pairUuid}/percentage`,
+      { derived_percentage, use_inverse_percentage }
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
 }
 
 export const adminService = new AdminService();

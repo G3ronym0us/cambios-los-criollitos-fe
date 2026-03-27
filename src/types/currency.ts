@@ -15,12 +15,14 @@ export interface Rate {
   from_currency: Currency;
   to_currency: Currency;
   rate: number;
+  base_rate?: number | null;
+  percentage?: number | null;
   type: string;
   inverse_percentage: boolean;
   is_manual?: boolean;
   manual_rate?: number | null;
   automatic_rate?: number | null;
-  currency_pair_uuid: string;  
+  currency_pair_uuid: string;
   pair_symbol?: string;
   pair_type: PairType;
 }
@@ -59,6 +61,7 @@ export interface ExchangeRateResponse {
   from_currency: string;
   to_currency: string;
   rate: number;
+  base_rate?: number | null;
   source: string;
   is_active: boolean;
   percentage: number | null;

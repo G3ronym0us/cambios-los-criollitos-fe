@@ -1,7 +1,7 @@
 import {
   FundGroup,
   FundGroupMember,
-  FundMovement,
+  FundMovementsResponse,
   GroupBalance,
   UserPosition,
   FundMovementFilters,
@@ -43,18 +43,20 @@ export class FundService {
   async getGroupMovements(
     groupUuid: string,
     filters: FundMovementFilters = {}
-  ): Promise<ApiResponse<FundMovement[]>> {
+  ): Promise<ApiResponse<FundMovementsResponse>> {
     const params = new URLSearchParams();
     if (filters.movement_type) params.append('movement_type', filters.movement_type);
     if (filters.date_from) params.append('date_from', filters.date_from);
     if (filters.date_to) params.append('date_to', filters.date_to);
+    if (filters.page) params.append('page', filters.page.toString());
+    if (filters.per_page) params.append('per_page', filters.per_page.toString());
 
     const queryString = params.toString();
     const endpoint = queryString
       ? `/funds/groups/${groupUuid}/movements?${queryString}`
       : `/funds/groups/${groupUuid}/movements`;
 
-    const result = await httpClient.get<FundMovement[]>(endpoint);
+    const result = await httpClient.get<FundMovementsResponse>(endpoint);
     return { success: result.success, data: result.data, error: result.error };
   }
 

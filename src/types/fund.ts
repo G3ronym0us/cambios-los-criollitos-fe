@@ -1,8 +1,8 @@
 export enum MovementType {
-  DEPOSIT = 'deposit',
-  EXCHANGE = 'exchange',
-  PERSONAL = 'personal',
-  ADJUSTMENT = 'adjustment',
+  DEPOSIT = 'DEPOSIT',
+  EXCHANGE = 'EXCHANGE',
+  PERSONAL = 'PERSONAL',
+  ADJUSTMENT = 'ADJUSTMENT',
 }
 
 export interface FundGroup {
@@ -82,10 +82,21 @@ export interface FundMovementFilters {
   movement_type?: MovementType;
   date_from?: string;
   date_to?: string;
+  page?: number;
+  per_page?: number;
+}
+
+export interface FundMovementsResponse {
+  movements: FundMovement[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
 }
 
 export interface CreateFundGroup {
   name: string;
+  currency: string;
   description?: string;
 }
 

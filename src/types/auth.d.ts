@@ -1,11 +1,12 @@
 import { LucideIcon } from 'lucide-react';
+import { Role } from '@/utils/enums';
 
 export interface User {
   uuid: string;
   username: string;
   email: string;
   full_name?: string;
-  role: 'user' | 'moderator' | 'root';
+  role: Role;
   role_display?: string;
   is_active: boolean;
   is_verified: boolean;

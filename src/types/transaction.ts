@@ -67,6 +67,8 @@ export interface CreateTransactionData {
   description?: string;
   profit_splits?: ProfitSplitCreate[];
   commission_config_uuid?: string;
+  fund_group_uuid?: string | null;
+  skip_fund?: boolean;
 }
 
 export interface UpdateTransactionData {
@@ -86,8 +88,11 @@ export interface UserProfitReport {
   email: string;
   total_profit: number;
   transaction_count: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
   transactions: Array<{
-    transaction_uuid: string;
+    uuid: string;
     from_currency: string;
     to_currency: string;
     profit_amount: number;
@@ -136,8 +141,7 @@ export interface TransactionsResponse {
 // Filter Types
 export interface TransactionFilters {
   status_filter?: TransactionStatus;
-  from_currency?: string;
-  to_currency?: string;
+  currency_pair_uuid?: string;
   user_uuid?: string;
   start_date?: string;
   end_date?: string;

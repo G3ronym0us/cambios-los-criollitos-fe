@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { fundService } from '@/services/fundService';
 import { userService } from '@/services/userService';
+import { adminService } from '@/services/adminService';
+import { CurrencyData } from '@/types/admin';
 import {
   FundGroup,
   FundMovement,
@@ -16,6 +18,7 @@ import {
 import { CommissionUserResponse } from '@/types/user';
 import { Wallet, Plus, Trash2, Filter, Users, TrendingUp, DollarSign } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { Role } from '@/utils/enums';
 
 const MOVEMENT_LABELS: Record<MovementType, string> = {
   [MovementType.DEPOSIT]: 'Depósito',
@@ -33,19 +36,23 @@ const MOVEMENT_COLORS: Record<MovementType, string> = {
 
 export default function FundsPage() {
   const { user } = useAuth();
-  const isModeratorOrAbove =
-    user?.role?.toUpperCase() === 'MODERATOR' || user?.role?.toUpperCase() === 'ROOT';
-  const isRoot = user?.role?.toUpperCase() === 'ROOT';
+  const isModeratorOrAbove = user?.role === Role.MODERATOR || user?.role === Role.ROOT;
+  const isRoot = user?.role === Role.ROOT;
 
   const [groups, setGroups] = useState<FundGroup[]>([]);
   const [selectedGroupUuid, setSelectedGroupUuid] = useState<string>('');
   const [groupBalance, setGroupBalance] = useState<GroupBalance | null>(null);
   const [movements, setMovements] = useState<FundMovement[]>([]);
   const [availableUsers, setAvailableUsers] = useState<CommissionUserResponse[]>([]);
+  const [availableCurrencies, setAvailableCurrencies] = useState<CurrencyData[]>([]);
 
   const [loadingGroups, setLoadingGroups] = useState(true);
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [loadingMovements, setLoadingMovements] = useState(false);
+
+  const [movementsPage, setMovementsPage] = useState(1);
+  const [movementsTotal, setMovementsTotal] = useState(0);
+  const MOVEMENTS_PER_PAGE = 50;
 
   const [movementFilters, setMovementFilters] = useState<FundMovementFilters>({});
 
@@ -55,7 +62,7 @@ export default function FundsPage() {
   const [showRegisterMovement, setShowRegisterMovement] = useState(false);
 
   // Form states
-  const [createGroupForm, setCreateGroupForm] = useState<CreateFundGroup>({ name: '', description: '' });
+  const [createGroupForm, setCreateGroupForm] = useState<CreateFundGroup>({ name: '', currency: '', description: '' });
   const [addMemberForm, setAddMemberForm] = useState<AddFundMember>({ user_uuid: '', is_fund_manager: false });
   const [movementForm, setMovementForm] = useState<Omit<CreateFundMovement, 'group_uuid'>>({
     user_uuid: '',
@@ -92,8 +99,16 @@ export default function FundsPage() {
       }
     };
 
+    const loadCurrencies = async () => {
+      const result = await adminService.getCurrencies(1, 100);
+      if (result.success && result.data) {
+        setAvailableCurrencies(result.data.currencies);
+      }
+    };
+
     loadGroups();
     loadUsers();
+    loadCurrencies();
   }, []);
 
   // Load balance and movements when selected group changes
@@ -105,7 +120,11 @@ export default function FundsPage() {
 
     const [balanceResult, movementsResult] = await Promise.all([
       fundService.getGroupBalance(selectedGroupUuid),
-      fundService.getGroupMovements(selectedGroupUuid, movementFilters),
+      fundService.getGroupMovements(selectedGroupUuid, {
+        ...movementFilters,
+        page: movementsPage,
+        per_page: MOVEMENTS_PER_PAGE,
+      }),
     ]);
 
     if (balanceResult.success && balanceResult.data) {
@@ -114,9 +133,14 @@ export default function FundsPage() {
     setLoadingBalance(false);
 
     if (movementsResult.success && movementsResult.data) {
-      setMovements(movementsResult.data);
+      setMovements(movementsResult.data.movements);
+      setMovementsTotal(movementsResult.data.total);
     }
     setLoadingMovements(false);
+  }, [selectedGroupUuid, movementFilters, movementsPage]);
+
+  useEffect(() => {
+    setMovementsPage(1);
   }, [selectedGroupUuid, movementFilters]);
 
   useEffect(() => {
@@ -133,6 +157,7 @@ export default function FundsPage() {
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
+      timeZone: 'UTC',
     });
 
   const getUserDisplayName = (uuid: string) => {
@@ -147,13 +172,17 @@ export default function FundsPage() {
       setFormError('El nombre es obligatorio');
       return;
     }
+    if (!createGroupForm.currency) {
+      setFormError('La moneda es obligatoria');
+      return;
+    }
     setFormLoading(true);
     const result = await fundService.createGroup(createGroupForm);
     if (result.success && result.data) {
       setGroups(prev => [...prev, result.data!]);
       setSelectedGroupUuid(result.data.uuid);
       setShowCreateGroup(false);
-      setCreateGroupForm({ name: '', description: '' });
+      setCreateGroupForm({ name: '', currency: '', description: '' });
     } else {
       setFormError(result.error || 'Error al crear grupo');
     }
@@ -515,6 +544,29 @@ export default function FundsPage() {
                   </table>
                 </div>
               )}
+
+              {/* Movements Pagination */}
+              {movementsTotal > MOVEMENTS_PER_PAGE && (
+                <div className="flex justify-center items-center gap-2 px-6 py-4 border-t border-gray-200">
+                  <button
+                    onClick={() => setMovementsPage(p => Math.max(1, p - 1))}
+                    disabled={movementsPage === 1}
+                    className="px-3 py-1.5 border border-gray-300 rounded-md text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Anterior
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    Página {movementsPage} de {Math.ceil(movementsTotal / MOVEMENTS_PER_PAGE)}
+                  </span>
+                  <button
+                    onClick={() => setMovementsPage(p => p + 1)}
+                    disabled={movementsPage >= Math.ceil(movementsTotal / MOVEMENTS_PER_PAGE)}
+                    className="px-3 py-1.5 border border-gray-300 rounded-md text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </>
@@ -538,6 +590,19 @@ export default function FundsPage() {
                   className="w-full border border-gray-300 rounded-md px-3 py-2"
                   placeholder="Ej: Zelle/Paypal"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Moneda *</label>
+                <select
+                  value={createGroupForm.currency}
+                  onChange={(e) => setCreateGroupForm(prev => ({ ...prev, currency: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2"
+                >
+                  <option value="">Seleccionar moneda...</option>
+                  {availableCurrencies.map(c => (
+                    <option key={c.uuid} value={c.symbol}>{c.symbol} — {c.name}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
