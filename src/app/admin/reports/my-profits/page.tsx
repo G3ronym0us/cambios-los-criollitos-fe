@@ -150,9 +150,9 @@ export default function MyProfitsPage() {
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {report.transactions.map((transaction) => (
-                      <tr key={transaction.transaction_uuid} className="hover:bg-gray-50">
+                      <tr key={transaction.uuid} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          #{transaction.transaction_uuid.substring(0, 8)}
+                          #{transaction.uuid.substring(0, 8)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                           {transaction.from_currency} → {transaction.to_currency}

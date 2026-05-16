@@ -110,11 +110,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const logout = (): void => {
+  const logout = useCallback((): void => {
     Cookies.remove('access_token');
     Cookies.remove('refresh_token');
     setUser(null);
-  };
+  }, []);
 
   const forceLogout = useCallback((): void => {
     logout();
@@ -122,9 +122,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (typeof window !== 'undefined' && !window.location.pathname.includes('/auth/login')) {
       router.push('/auth/login');
     }
-  }, [router]);
+  }, [router, logout]);
 
-  const refreshToken = async (): Promise<boolean> => {
+  const refreshToken = useCallback(async (): Promise<boolean> => {
     try {
       const refreshTokenValue = Cookies.get('refresh_token');
       if (!refreshTokenValue) return false;
@@ -139,7 +139,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return true;
       }
 
-      // Refresh token inválido, hacer logout
       logout();
       return false;
     } catch (error) {
@@ -147,7 +146,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       logout();
       return false;
     }
-  };
+  }, [logout]);
 
   // Configurar los handlers de 401 y refresh en el interceptor HTTP
   useEffect(() => {
