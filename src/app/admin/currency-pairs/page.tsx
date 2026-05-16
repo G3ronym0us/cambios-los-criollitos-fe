@@ -48,6 +48,7 @@ export default function CurrencyPairsAdminPage() {
   const [filters, setFilters] = useState({
     activeOnly: false,
     monitoredOnly: false,
+    currency: '',
   });
   const [showBinanceModal, setShowBinanceModal] = useState(false);
   const [binanceConfig, setBinanceConfig] = useState({
@@ -71,13 +72,14 @@ export default function CurrencyPairsAdminPage() {
       0,
       100,
       filters.activeOnly,
-      filters.monitoredOnly
+      filters.monitoredOnly,
+      filters.currency || undefined
     );
     if (result.success && result.data) {
       setPairs(result.data.pairs);
     }
     setLoading(false);
-  }, [filters.activeOnly, filters.monitoredOnly]);
+  }, [filters.activeOnly, filters.monitoredOnly, filters.currency]);
 
   useEffect(() => {
     Promise.all([
@@ -86,7 +88,7 @@ export default function CurrencyPairsAdminPage() {
       loadBasePairs(),
       loadStats(),
     ]);
-  }, [filters.activeOnly, filters.monitoredOnly, loadCurrencyPairs]);
+  }, [filters.activeOnly, filters.monitoredOnly, filters.currency, loadCurrencyPairs]);
 
   const loadCurrencies = async () => {
     const result = await adminService.getCurrencies();
@@ -584,7 +586,7 @@ export default function CurrencyPairsAdminPage() {
         )}
 
         {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4 flex-wrap">
           <label className="flex items-center text-sm">
             <input
               type="checkbox"
@@ -607,6 +609,16 @@ export default function CurrencyPairsAdminPage() {
             />
             Solo monitoreados
           </label>
+          <select
+            value={filters.currency}
+            onChange={(e) => setFilters({ ...filters, currency: e.target.value })}
+            className="text-sm border border-gray-300 rounded-md px-2 py-1"
+          >
+            <option value="">Todas las monedas</option>
+            {Array.from(new Set(currencies.map(c => c.symbol))).sort().map(sym => (
+              <option key={sym} value={sym}>{sym}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -617,27 +629,27 @@ export default function CurrencyPairsAdminPage() {
             <div className="px-6 py-12 text-center">
               <div className="flex flex-col items-center">
                 <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                  {filters.activeOnly || filters.monitoredOnly ? (
+                  {filters.activeOnly || filters.monitoredOnly || !!filters.currency ? (
                     <Eye className="text-gray-400" size={32} />
                   ) : (
                     <ArrowLeftRight className="text-gray-400" size={32} />
                   )}
                 </div>
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  {filters.activeOnly || filters.monitoredOnly
+                  {filters.activeOnly || filters.monitoredOnly || !!filters.currency
                     ? "No se encontraron pares con estos filtros"
                     : "No hay pares de monedas"}
                 </h3>
                 <p className="text-gray-500 mb-4">
-                  {filters.activeOnly || filters.monitoredOnly
+                  {filters.activeOnly || filters.monitoredOnly || !!filters.currency
                     ? "Prueba ajustando los filtros o crea un nuevo par de monedas."
                     : "Comienza creando tu primer par de monedas para gestionar las tasas de cambio."}
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3">
-                  {(filters.activeOnly || filters.monitoredOnly) && (
+                  {(filters.activeOnly || filters.monitoredOnly || !!filters.currency) && (
                     <button
                       onClick={() =>
-                        setFilters({ activeOnly: false, monitoredOnly: false })
+                        setFilters({ activeOnly: false, monitoredOnly: false, currency: '' })
                       }
                       className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 flex items-center justify-center sm:justify-start gap-2"
                     >
@@ -650,7 +662,7 @@ export default function CurrencyPairsAdminPage() {
                     className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center sm:justify-start gap-2"
                   >
                     <Plus size={16} />
-                    {filters.activeOnly || filters.monitoredOnly
+                    {filters.activeOnly || filters.monitoredOnly || !!filters.currency
                       ? "Crear nuevo par"
                       : "Crear primer par"}
                   </button>
@@ -688,6 +700,11 @@ export default function CurrencyPairsAdminPage() {
                           {getPairTypeLabel(pair.pair_type).icon}{" "}
                           {getPairTypeLabel(pair.pair_type).label}
                         </span>
+                        {pair.usdt_reference_side && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                            USDT ✓
+                          </span>
+                        )}
                       </div>
                       <div className="text-sm text-gray-600 mb-2">
                         <span className="font-medium">

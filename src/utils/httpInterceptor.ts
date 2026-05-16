@@ -117,7 +117,10 @@ export class HttpInterceptor {
         };
       }
 
-      // Respuesta exitosa
+      // Respuesta exitosa — 204 No Content no tiene body
+      if (response.status === 204) {
+        return { success: true };
+      }
       const data = await response.json();
       return {
         success: true,

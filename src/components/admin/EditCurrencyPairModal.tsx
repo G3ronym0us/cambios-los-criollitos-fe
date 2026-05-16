@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { Edit } from 'lucide-react';
 import {
@@ -33,14 +33,21 @@ export default function EditCurrencyPairModal({
   validateBinanceForm,
   getFiatCurrencyFromPair,
 }: EditCurrencyPairModalProps) {
-  const { control, handleSubmit, watch, reset, formState: { errors, isSubmitting } } = useForm<UpdateCurrencyPairData>();
+  const { control, handleSubmit, watch, reset, setValue, formState: { errors, isSubmitting } } = useForm<UpdateCurrencyPairData>();
 
   const watchPairType = watch('pair_type');
   const watchBasePairId = watch('base_pair_uuid');
+  const watchUsdtReferenceSide = watch('usdt_reference_side');
+  const watchUsdtPairUuid = watch('usdt_pair_uuid');
+
+  // Local state to toggle between manual rate and dynamic pair methods
+  const [usdtMethod, setUsdtMethod] = useState<'manual' | 'dynamic'>('manual');
 
   useEffect(() => {
     if (editingPair && isOpen) {
       const normalizedPairType = (editingPair.pair_type as string).toUpperCase() as PairType;
+      const hasDynamicPair = !!editingPair.usdt_pair_uuid;
+      setUsdtMethod(hasDynamicPair ? 'dynamic' : 'manual');
       reset({
         base_pair_uuid: editingPair.base_pair_uuid,
         derived_percentage: editingPair.derived_percentage,
@@ -52,6 +59,10 @@ export default function EditCurrencyPairModal({
         banks_to_track: editingPair.banks_to_track || [],
         amount_to_track: editingPair.amount_to_track,
         pair_type: normalizedPairType,
+        usdt_reference_side: editingPair.usdt_reference_side ?? null,
+        usdt_manual_rate: editingPair.usdt_manual_rate ?? null,
+        usdt_pair_uuid: editingPair.usdt_pair_uuid ?? null,
+        usdt_pair_inverse: editingPair.usdt_pair_inverse ?? false,
       });
       setError('');
     }
@@ -253,6 +264,123 @@ export default function EditCurrencyPairModal({
               />
               {errors.description && (
                 <p className="text-red-500 text-xs mt-1">{errors.description.message}</p>
+              )}
+            </div>
+
+            {/* USDT Configuration */}
+            <div className="border border-gray-200 rounded-lg p-4">
+              <p className="text-sm font-medium text-gray-700 mb-3">Configuración USDT</p>
+
+              <div className="mb-3">
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Lado de referencia
+                </label>
+                <Controller
+                  name="usdt_reference_side"
+                  control={control}
+                  render={({ field }) => (
+                    <select
+                      value={field.value ?? ''}
+                      onChange={(e) => field.onChange(e.target.value || null)}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                    >
+                      <option value="">Sin configurar</option>
+                      <option value="FROM">FROM — monto origen</option>
+                      <option value="TO">TO — monto destino</option>
+                    </select>
+                  )}
+                />
+              </div>
+
+              {watchUsdtReferenceSide && (
+                <>
+                  <div className="flex gap-3 mb-3">
+                    <label className="flex items-center gap-1 text-sm cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={usdtMethod === 'manual'}
+                        onChange={() => { setUsdtMethod('manual'); setValue('usdt_pair_uuid', null); }}
+                      />
+                      Tasa fija
+                    </label>
+                    <label className="flex items-center gap-1 text-sm cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={usdtMethod === 'dynamic'}
+                        onChange={() => { setUsdtMethod('dynamic'); setValue('usdt_manual_rate', null); }}
+                      />
+                      Par dinámico
+                    </label>
+                  </div>
+
+                  {usdtMethod === 'manual' && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Tasa USDT fija
+                      </label>
+                      <Controller
+                        name="usdt_manual_rate"
+                        control={control}
+                        render={({ field }) => (
+                          <input
+                            type="number"
+                            step="0.000001"
+                            min="0"
+                            value={field.value ?? ''}
+                            onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : null)}
+                            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                            placeholder="Ej: 1.0 para Zelle (1:1 con USDT)"
+                          />
+                        )}
+                      />
+                    </div>
+                  )}
+
+                  {usdtMethod === 'dynamic' && (
+                    <>
+                      <div className="mb-2">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                          Par de referencia
+                        </label>
+                        <Controller
+                          name="usdt_pair_uuid"
+                          control={control}
+                          render={({ field }) => (
+                            <select
+                              value={field.value ?? ''}
+                              onChange={(e) => field.onChange(e.target.value || null)}
+                              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                            >
+                              <option value="">Seleccionar par...</option>
+                              {basePairs.map((p) => (
+                                <option key={p.uuid} value={p.uuid}>{p.pair_symbol}</option>
+                              ))}
+                            </select>
+                          )}
+                        />
+                        {watchUsdtPairUuid && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            Tasa del par seleccionado {watchUsdtPairUuid}
+                          </p>
+                        )}
+                      </div>
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <Controller
+                          name="usdt_pair_inverse"
+                          control={control}
+                          render={({ field }) => (
+                            <input
+                              type="checkbox"
+                              checked={field.value ?? false}
+                              onChange={field.onChange}
+                            />
+                          )}
+                        />
+                        Usar tasa inversa (1/rate)
+                      </label>
+                    </>
+                  )}
+                </>
               )}
             </div>
 

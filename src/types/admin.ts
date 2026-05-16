@@ -57,6 +57,11 @@ export interface CurrencyPairData {
   banks_to_track: string[] | null;
   amount_to_track: number | null;
   pair_type: PairType;
+  usdt_reference_side?: 'FROM' | 'TO' | null;
+  usdt_manual_rate?: number | null;
+  usdt_pair_uuid?: string | null;
+  usdt_pair_symbol?: string | null;
+  usdt_pair_inverse?: boolean;
   created_at: string;
   updated_at?: string;
 }
@@ -74,6 +79,10 @@ export interface CreateCurrencyPairData {
   banks_to_track?: string[] | null;
   amount_to_track?: number | null;
   pair_type?: PairType;
+  usdt_reference_side?: 'FROM' | 'TO' | null;
+  usdt_manual_rate?: number | null;
+  usdt_pair_uuid?: string | null;
+  usdt_pair_inverse?: boolean;
 }
 
 export interface UpdateCurrencyPairData {
@@ -87,6 +96,10 @@ export interface UpdateCurrencyPairData {
   banks_to_track?: string[] | null;
   amount_to_track?: number | null;
   pair_type?: PairType;
+  usdt_reference_side?: 'FROM' | 'TO' | null;
+  usdt_manual_rate?: number | null;
+  usdt_pair_uuid?: string | null;
+  usdt_pair_inverse?: boolean;
 }
 
 export interface CurrencyPairStatusData {

@@ -70,12 +70,13 @@ export class AdminService {
   }
 
   // Currency Pairs Methods
-  async getCurrencyPairs(skip: number = 0, limit: number = 100, activeOnly: boolean = false, monitoredOnly: boolean = false): Promise<ApiResponse<CurrencyPairsResponse>> {
+  async getCurrencyPairs(skip: number = 0, limit: number = 100, activeOnly: boolean = false, monitoredOnly: boolean = false, currency?: string): Promise<ApiResponse<CurrencyPairsResponse>> {
     const params = new URLSearchParams({
       skip: skip.toString(),
       limit: limit.toString(),
       ...(activeOnly && { active_only: 'true' }),
-      ...(monitoredOnly && { monitored_only: 'true' })
+      ...(monitoredOnly && { monitored_only: 'true' }),
+      ...(currency && { currency })
     });
 
     const result = await httpClient.get<CurrencyPairsResponse>(`/currency-pairs/?${params}`);
