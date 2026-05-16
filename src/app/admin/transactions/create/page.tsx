@@ -27,7 +27,6 @@ interface RateData {
   inverse_percentage: boolean;
 }
 
-const TODAY = new Date().toISOString().slice(0, 10);
 const getLocalNow = () => {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
