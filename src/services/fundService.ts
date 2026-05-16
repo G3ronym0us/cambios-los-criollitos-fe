@@ -1,6 +1,7 @@
 import {
   FundGroup,
   FundGroupMember,
+  FundMovement,
   FundMovementsResponse,
   GroupBalance,
   UserPosition,
