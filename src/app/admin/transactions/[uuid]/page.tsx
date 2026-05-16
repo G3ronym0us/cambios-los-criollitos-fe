@@ -203,7 +203,7 @@ export default function TransactionDetailPage() {
               {transaction.profit_splits.map((split) => (
                 <tr key={split.uuid} className="hover:bg-gray-50">
                   <td className="px-6 py-4 font-medium text-gray-900">
-                    {split.user?.full_name || split.user?.username || userMap[split.user_uuid] || split.user_uuid}
+                    {split.user?.username || userMap[split.user_uuid] || split.user_uuid}
                   </td>
                   <td className="px-6 py-4 text-right text-gray-700">{split.profit_percentage}%</td>
                   <td className="px-6 py-4 text-right text-gray-900">
