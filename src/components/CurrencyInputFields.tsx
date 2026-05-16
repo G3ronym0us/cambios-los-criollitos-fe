@@ -16,6 +16,9 @@ interface CurrencyInputFieldsProps {
   onFromAmountChange: (value: string) => void;
   onToAmountChange: (value: string) => void;
   bcvRate?: number;
+  euroRate?: number;
+  bcvMode?: 'usd' | 'eur';
+  onBCVModeToggle?: () => void;
   bcvAmount?: string;
   onBCVAmountChange?: (value: string) => void;
 }
@@ -28,6 +31,9 @@ const CurrencyInputFields: React.FC<CurrencyInputFieldsProps> = ({
   onFromAmountChange,
   onToAmountChange,
   bcvRate,
+  euroRate,
+  bcvMode = 'usd',
+  onBCVModeToggle,
   bcvAmount,
   onBCVAmountChange
 }) => {
@@ -57,8 +63,15 @@ const CurrencyInputFields: React.FC<CurrencyInputFieldsProps> = ({
     return currencyConfig[code]?.bgColor || 'bg-gray-100 border-gray-300';
   };
 
-  // Determinar si mostrar campo BCV
-  const shouldShowBCVField = bcvRate && (fromCurrency === 'VES' || toCurrency === 'VES');
+  const activeRate = bcvMode === 'usd' ? bcvRate : euroRate;
+  const shouldShowBCVField = activeRate && (fromCurrency === 'VES' || toCurrency === 'VES');
+  const isEurMode = bcvMode === 'eur';
+  const canToggleToEur = !!euroRate;
+  const bcvLabel = isEurMode ? 'Equivalente en €BCV' : 'Equivalente en $BCV';
+  const bcvSymbol = isEurMode ? '€BCV' : '$BCV';
+  const bcvRateLabel = isEurMode
+    ? `1 €BCV = ${euroRate?.toFixed(2)} VES`
+    : `1 $BCV = ${bcvRate?.toFixed(2)} VES`;
 
   if (!fromCurrency || !toCurrency) {
     return (
@@ -120,14 +133,27 @@ const CurrencyInputFields: React.FC<CurrencyInputFieldsProps> = ({
         <div className="p-4 rounded-lg border-2 bg-blue-100 border-blue-300 transition-all hover:shadow-md">
           <div className="flex items-center justify-between mb-2">
             <label className="text-sm font-medium text-blue-700">
-              Equivalente en $BCV
+              {bcvLabel}
             </label>
             <div className="flex items-center gap-2">
               <span className="text-xs text-blue-600">
-                1 BCV = {bcvRate?.toFixed(2)} VES
+                {bcvRateLabel}
               </span>
+              {canToggleToEur && onBCVModeToggle && (
+                <button
+                  type="button"
+                  onClick={onBCVModeToggle}
+                  title={isEurMode ? 'Cambiar a USD BCV' : 'Cambiar a EUR BCV'}
+                  className="flex items-center gap-1 text-xs font-medium text-blue-700 px-2 py-1 rounded-full bg-white bg-opacity-70 hover:bg-opacity-100 border border-blue-300 transition-all"
+                >
+                  <span>{isEurMode ? '$' : '€'}</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                </button>
+              )}
               <span className="text-xs font-medium text-blue-700 px-2 py-1 rounded-full bg-white bg-opacity-50">
-                $BCV
+                {bcvSymbol}
               </span>
             </div>
           </div>

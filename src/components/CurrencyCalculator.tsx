@@ -54,6 +54,8 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
   });
 
   const [bcvRate, setBcvRate] = useState<BCVRate | null>(null);
+  const [euroRate, setEuroRate] = useState<BCVRate | null>(null);
+  const [bcvMode, setBcvMode] = useState<'usd' | 'eur'>('usd');
   const [sliderValue, setSliderValue] = useState<number>(0);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>('');
@@ -87,31 +89,28 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
     }
   };
 
-  // Helper: Calcular monto BCV equivalente
+  // Helper: Calcular monto BCV equivalente usando la tasa activa (USD o EUR)
   const getBCVAmount = (
     fromAmount: number,
     toAmount: number,
     fromCurrency: string,
     toCurrency: string,
+    activeRate: number | undefined,
     bcvValue?: number
   ): number | undefined => {
-    // Si bcvValue ya fue proporcionado, usarlo
     if (bcvValue) return bcvValue;
+    if (!activeRate) return undefined;
 
-    // Si no hay tasa BCV disponible, retornar undefined
-    if (!bcvRate?.rate) return undefined;
-
-    // Determinar qué monto usar para el cálculo BCV
     let vesAmount: number;
     if (fromCurrency === "VES") {
       vesAmount = fromAmount;
     } else if (toCurrency === "VES") {
       vesAmount = toAmount;
     } else {
-      return undefined; // No hay VES involucrado
+      return undefined;
     }
 
-    return roundToDecimals(vesAmount / bcvRate.rate, 2);
+    return roundToDecimals(vesAmount / activeRate, 2);
   };
 
   // Configuración de monedas
@@ -201,12 +200,14 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
       finalToAmount = roundToDecimals(calculated, 2);
     }
 
-    // Calcular equivalente BCV
+    // Calcular equivalente BCV usando la tasa activa (USD o EUR según bcvMode)
+    const activeRate = bcvMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
     const amountBCV = getBCVAmount(
       finalFromAmount,
       finalToAmount,
       fromCurrency,
       toCurrency,
+      activeRate,
       bcvValue
     );
 
@@ -222,13 +223,17 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
     }));
   };
 
-  // Efecto para cargar tasa BCV
+  // Efecto para cargar tasas BCV (USD y EUR)
   useEffect(() => {
-    const loadBCVRate = async () => {
-      const rate = await bcvService.getBCVRate();
-      setBcvRate(rate);
+    const loadRates = async () => {
+      const [usdRate, eurRate] = await Promise.all([
+        bcvService.getBCVRate(),
+        bcvService.getEuroRate(),
+      ]);
+      setBcvRate(usdRate);
+      setEuroRate(eurRate);
     };
-    loadBCVRate();
+    loadRates();
   }, [bcvService]);
 
   const firstCalculation = useCallback(() => {
@@ -323,12 +328,13 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
   const handleBCVAmountChange = (bcvAmount: string) => {
     setCalculator((prev) => ({ ...prev, bcvAmount }));
 
-    if (!bcvRate || !bcvAmount) return;
+    const activeRate = bcvMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
+    if (!activeRate || !bcvAmount) return;
 
     const bcvValue = parseFloat(bcvAmount);
     if (isNaN(bcvValue)) return;
 
-    const vesValue = bcvValue * bcvRate.rate;
+    const vesValue = bcvValue * activeRate;
 
     calculateConversion(
       calculator.fromCurrency,
@@ -337,6 +343,24 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
       calculator.toCurrency === "VES" ? vesValue : undefined,
       bcvValue
     );
+  };
+
+  const handleBCVModeToggle = () => {
+    const nextMode = bcvMode === 'usd' ? 'eur' : 'usd';
+    setBcvMode(nextMode);
+    // Recalcular el campo BCV con la nueva tasa
+    const activeRate = nextMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
+    if (!activeRate || !calculator.amount) return;
+    const { fromCurrency, toCurrency, amount, result } = calculator;
+    let vesAmount: number | undefined;
+    if (fromCurrency === 'VES') vesAmount = amount;
+    else if (toCurrency === 'VES') vesAmount = result ?? undefined;
+    if (vesAmount !== undefined) {
+      setCalculator((prev) => ({
+        ...prev,
+        bcvAmount: (vesAmount! / activeRate).toFixed(2),
+      }));
+    }
   };
 
   return (
@@ -416,6 +440,9 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
           onFromAmountChange={handleFromAmountChange}
           onToAmountChange={handleToAmountChange}
           bcvRate={bcvRate?.rate}
+          euroRate={euroRate?.rate}
+          bcvMode={bcvMode}
+          onBCVModeToggle={handleBCVModeToggle}
           bcvAmount={calculator.bcvAmount}
           onBCVAmountChange={handleBCVAmountChange}
         />
