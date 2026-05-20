@@ -460,7 +460,40 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
               max={20}
               step={0.1}
               value={sliderValue}
-              onChange={(e) => setSliderValue(parseFloat(e.target.value))}
+              onChange={(e) => {
+                const newPct = parseFloat(e.target.value);
+                setSliderValue(newPct);
+
+                if (currentRate?.base_rate == null || calculator.amount === undefined) return;
+
+                const previewRate = calcPreviewRate(
+                  currentRate.base_rate,
+                  newPct,
+                  currentRate.inverse_percentage
+                );
+                const newResult = applyRateConversion(
+                  calculator.amount,
+                  previewRate,
+                  currentRate.inverse_percentage,
+                  false
+                );
+
+                const activeRate = bcvMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
+                const newBcv = getBCVAmount(
+                  calculator.amount,
+                  roundToDecimals(newResult, 2),
+                  calculator.fromCurrency,
+                  calculator.toCurrency,
+                  activeRate
+                );
+
+                setCalculator((prev) => ({
+                  ...prev,
+                  result: roundToDecimals(newResult, 2),
+                  rate: previewRate,
+                  bcvAmount: newBcv !== undefined ? newBcv.toString() : prev.bcvAmount,
+                }));
+              }}
               className="w-full accent-blue-600"
             />
             <div className="flex items-center justify-between">
