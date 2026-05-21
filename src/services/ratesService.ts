@@ -1,146 +1,43 @@
-import Cookies from 'js-cookie';
 import { ApiResponse } from '@/types/auth';
 import { ExchangeRateResponse } from '@/types/currency';
+import { httpClient } from '@/utils/httpInterceptor';
 
 export class RatesService {
-  private baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
-  private getAuthHeaders() {
-    const token = Cookies.get('access_token');
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    };
+  async getAllActiveRates(): Promise<ApiResponse<ExchangeRateResponse[]>> {
+    const result = await httpClient.get<ExchangeRateResponse[]>('/rates');
+    return { success: result.success, data: result.data, error: result.error };
   }
 
-  async getLatestRatesByCurrencies(
-    currencyPairUuid: string, 
-    limit: number = 10
-  ): Promise<ApiResponse<ExchangeRateResponse[]>> {
-    try {
-      const params = new URLSearchParams({
-        limit: limit.toString()
-      });
-
-      const response = await fetch(
-        `${this.baseUrl}/rates/latest/${currencyPairUuid}?${params}`, 
-        {
-          method: 'GET',
-          headers: this.getAuthHeaders(),
-        }
-      );
-
-      if (response.ok) {
-        const data: ExchangeRateResponse[] = await response.json();
-        return { success: true, data };
-      }
-
-      const errorData = await response.json();
-      return {
-        success: false,
-        error: errorData.detail || 'Error al obtener las tasas históricas'
-      };
-    } catch (error) {
-      console.error('Error fetching latest rates:', error);
-      return {
-        success: false,
-        error: 'Error de conexión al servidor'
-      };
-    }
+  async getRateByUuid(rateUuid: string): Promise<ApiResponse<ExchangeRateResponse>> {
+    const result = await httpClient.get<ExchangeRateResponse>(`/rates/${rateUuid}`);
+    return { success: result.success, data: result.data, error: result.error };
   }
 
-  async getLatestRatesByPairSymbol(
-    pairSymbol: string,
-    limit: number = 10
-  ): Promise<ApiResponse<ExchangeRateResponse[]>> {
-    try {
-      const params = new URLSearchParams({
-        limit: limit.toString()
-      });
-
-      const response = await fetch(
-        `${this.baseUrl}/rates/pair/${pairSymbol.toUpperCase()}/latest?${params}`,
-        {
-          method: 'GET',
-          headers: this.getAuthHeaders(),
-        }
-      );
-
-      if (response.ok) {
-        const data: ExchangeRateResponse[] = await response.json();
-        return { success: true, data };
-      }
-
-      const errorData = await response.json();
-      return {
-        success: false,
-        error: errorData.detail || 'Error al obtener las tasas históricas'
-      };
-    } catch (error) {
-      console.error('Error fetching latest rates by pair symbol:', error);
-      return {
-        success: false,
-        error: 'Error de conexión al servidor'
-      };
-    }
+  async getRateByPair(currencyPairUuid: string): Promise<ApiResponse<ExchangeRateResponse>> {
+    const result = await httpClient.get<ExchangeRateResponse>(`/rates/by-pair/${currencyPairUuid}`);
+    return { success: result.success, data: result.data, error: result.error };
   }
 
-  async getLatestRatesByPairUuid(
-    pairUuid: string,
+  async getLatestRatesByPair(
+    currencyPairUuid: string,
     limit: number = 10
   ): Promise<ApiResponse<ExchangeRateResponse[]>> {
-    try {
-      const params = new URLSearchParams({
-        limit: limit.toString()
-      });
-
-      const response = await fetch(
-        `${this.baseUrl}/rates/pair-uuid/${pairUuid}/latest?${params}`,
-        {
-          method: 'GET',
-          headers: this.getAuthHeaders(),
-        }
-      );
-
-      if (response.ok) {
-        const data: ExchangeRateResponse[] = await response.json();
-        return { success: true, data };
-      }
-
-      const errorData = await response.json();
-      return {
-        success: false,
-        error: errorData.detail || 'Error al obtener las tasas por UUID del par'
-      };
-    } catch (error) {
-      console.error('Error fetching latest rates by pair UUID:', error);
-      return {
-        success: false,
-        error: 'Error de conexión al servidor'
-      };
-    }
+    const params = new URLSearchParams({ limit: limit.toString() });
+    const result = await httpClient.get<ExchangeRateResponse[]>(
+      `/rates/latest/${currencyPairUuid}?${params}`
+    );
+    return { success: result.success, data: result.data, error: result.error };
   }
 
   async getHistoricalRate(
     pairUuid: string,
     at: string
   ): Promise<ApiResponse<ExchangeRateResponse>> {
-    try {
-      const params = new URLSearchParams({ at });
-      const response = await fetch(
-        `${this.baseUrl}/rates/historical/${pairUuid}?${params}`,
-        { method: 'GET', headers: this.getAuthHeaders() }
-      );
-      if (response.ok) {
-        const data: ExchangeRateResponse = await response.json();
-        return { success: true, data };
-      }
-      const errorData = await response.json();
-      return { success: false, error: errorData.detail || 'Sin tasa para esta fecha/hora' };
-    } catch (error) {
-      console.error('Error fetching historical rate:', error);
-      return { success: false, error: 'Error de conexión al servidor' };
-    }
+    const params = new URLSearchParams({ at });
+    const result = await httpClient.get<ExchangeRateResponse>(
+      `/rates/historical/${pairUuid}?${params}`
+    );
+    return { success: result.success, data: result.data, error: result.error };
   }
 
   createPairSymbol(fromCurrency: string, toCurrency: string): string {

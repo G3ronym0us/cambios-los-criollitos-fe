@@ -70,7 +70,7 @@ const RateHistoryModal: React.FC<RateHistoryModalProps> = ({
     setError(null);
 
     try {
-      const response = await ratesService.getLatestRatesByCurrencies(
+      const response = await ratesService.getLatestRatesByPair(
         selectedPair.uuid,
         limit
       );

@@ -17,9 +17,11 @@ import {
   Menu,
   X,
   LogOut,
-  Home
+  Home,
+  Bell
 } from 'lucide-react';
 import { Role } from '@/utils/enums';
+import NotificationBell from '@/components/admin/NotificationBell';
 
 export default function AdminLayout({
   children,
@@ -55,6 +57,7 @@ export default function AdminLayout({
     { name: 'Reporte por Usuario', href: '/admin/reports/users', icon: Users },
     { name: 'Usuarios', href: '/admin/users', icon: UserCheck },
     { name: 'Fondos', href: '/admin/funds', icon: Wallet },
+    { name: 'Alertas', href: '/admin/alerts', icon: Bell },
   ];
 
   const handleLogout = () => {
@@ -176,8 +179,11 @@ export default function AdminLayout({
 
               <div className="flex-1 lg:hidden"></div>
 
-              <div className="text-sm text-gray-600 hidden lg:block">
-                Panel de Administración
+              <div className="flex items-center gap-4 ml-auto">
+                <div className="text-sm text-gray-600 hidden lg:block">
+                  Panel de Administración
+                </div>
+                <NotificationBell />
               </div>
             </div>
           </div>
