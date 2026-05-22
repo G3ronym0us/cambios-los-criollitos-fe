@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { AdminService } from "@/services/adminService";
+import { ratesService } from "@/services/ratesService";
 import {
   CurrencyPairData,
   CreateCurrencyPairData,
@@ -65,6 +66,11 @@ export default function CurrencyPairsAdminPage() {
   const [selectedPairForManualRate, setSelectedPairForManualRate] =
     useState<CurrencyPairData | null>(null);
   const [manualRateLoading, setManualRateLoading] = useState(false);
+  const [selectedPairRateInfo, setSelectedPairRateInfo] = useState<{
+    isManual: boolean;
+    currentRate?: number;
+    automaticRate?: number;
+  }>({ isManual: false });
 
   const loadCurrencyPairs = useCallback(async () => {
     setLoading(true);
@@ -454,13 +460,25 @@ export default function CurrencyPairsAdminPage() {
     setSelectedPairForHistory(null);
   };
 
-  const handleOpenManualRateDialog = (pair: CurrencyPairData) => {
+  const handleOpenManualRateDialog = async (pair: CurrencyPairData) => {
     setSelectedPairForManualRate(pair);
+    setSelectedPairRateInfo({ isManual: false });
     setShowManualRateDialog(true);
+
+    const result = await ratesService.getRateByPair(pair.uuid);
+    if (result.success && result.data) {
+      setSelectedPairRateInfo({
+        isManual: result.data.is_manual,
+        currentRate: result.data.manual_rate ?? result.data.rate,
+        automaticRate: result.data.automatic_rate ?? undefined,
+      });
+    }
   };
 
   const handleCloseManualRateDialog = () => {
     setShowManualRateDialog(false);
+    setSelectedPairForManualRate(null);
+    setSelectedPairRateInfo({ isManual: false });
   };
 
   const handleSetManualRate = async (rate: number): Promise<boolean> => {
@@ -474,8 +492,6 @@ export default function CurrencyPairsAdminPage() {
       );
 
       if (result.success) {
-        setSelectedPairForManualRate(null);
-        // Could refresh data here if needed
         return true;
       } else {
         alert(result.error || "Error al establecer precio manual");
@@ -490,14 +506,22 @@ export default function CurrencyPairsAdminPage() {
   };
 
   const handleRemoveManualRate = async () => {
-    if (!selectedPairForManualRate) return false;
+    if (!selectedPairForManualRate) return;
 
     setManualRateLoading(true);
     try {
-      // TODO
+      const result = await adminService.disableManualRate(
+        selectedPairForManualRate.uuid
+      );
+
+      if (result.success) {
+        setSelectedPairRateInfo({ isManual: false });
+        handleCloseManualRateDialog();
+      } else {
+        alert(result.error || "Error al remover precio manual");
+      }
     } catch {
       alert("Error de conexión al servidor");
-      return false;
     } finally {
       setManualRateLoading(false);
     }
@@ -1282,6 +1306,9 @@ export default function CurrencyPairsAdminPage() {
           onRemoveRate={handleRemoveManualRate}
           fromCurrency={selectedPairForManualRate.from_currency.symbol}
           toCurrency={selectedPairForManualRate.to_currency.symbol}
+          currentRate={selectedPairRateInfo.currentRate}
+          automaticRate={selectedPairRateInfo.automaticRate}
+          isManual={selectedPairRateInfo.isManual}
           isLoading={manualRateLoading}
         />
       )}
