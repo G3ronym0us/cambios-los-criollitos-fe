@@ -422,6 +422,15 @@ export function useCurrencyPairs() {
 
   const handleRemoveManualRate = useCallback(async () => {
     if (!manualRatePair) return;
+
+    const ok = await confirm({
+      title: '¿Remover precio manual?',
+      description: 'El sistema volverá a usar el precio automático para este par.',
+      confirmText: 'Remover',
+      variant: 'destructive',
+    });
+    if (!ok) return;
+
     setManualRateLoading(true);
     try {
       const result = await adminService.disableManualRate(manualRatePair.uuid);
@@ -438,7 +447,7 @@ export function useCurrencyPairs() {
     } finally {
       setManualRateLoading(false);
     }
-  }, [manualRatePair, closeManualRate, refresh]);
+  }, [manualRatePair, confirm, closeManualRate, refresh]);
 
   return {
     state: {

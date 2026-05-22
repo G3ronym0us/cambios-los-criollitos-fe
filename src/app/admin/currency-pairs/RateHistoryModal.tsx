@@ -1,80 +1,75 @@
-import React, { useState, useEffect, useCallback } from 'react';
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import {
+  Bot,
+  Clock,
+  Database,
+  Settings,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react';
 import { ExchangeRateResponse } from '@/types/currency';
 import { ratesService } from '@/services/ratesService';
-import { CurrencyPairData, PairType } from '@/types/admin';
-
-const XIcon = ({ className }: { className: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-  </svg>
-);
-
-const ClockIcon = ({ className }: { className: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
-
-const TrendingUpIcon = ({ className }: { className: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-  </svg>
-);
-
-const TrendingDownIcon = ({ className }: { className: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
-  </svg>
-);
-
-const DatabaseIcon = ({ className }: { className: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
-  </svg>
-);
-
-const SettingsIcon = ({ className }: { className: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-  </svg>
-);
-
-const RobotIcon = ({ className }: { className: string }) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-  </svg>
-);
+import { CurrencyPairData } from '@/types/admin';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { StatusBadge } from '@/components/shared/StatusBadge';
+import { getCurrencySymbol } from '@/utils/currencyConfig';
 
 interface RateHistoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  selectedPair: CurrencyPairData
+  selectedPair: CurrencyPairData;
 }
 
-const RateHistoryModal: React.FC<RateHistoryModalProps> = ({
+type Tone = 'success' | 'info' | 'primary' | 'neutral';
+
+const pairTypeTone: Record<string, Tone> = {
+  base: 'success',
+  derived: 'info',
+  cross: 'primary',
+};
+
+const LIMIT_OPTIONS = [5, 10, 20, 50, 100];
+
+export default function RateHistoryModal({
   isOpen,
   onClose,
-  selectedPair
-}) => {
+  selectedPair,
+}: RateHistoryModalProps) {
   const [rates, setRates] = useState<ExchangeRateResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [limit, setLimit] = useState(10);
 
-  const fetchRateHistory = useCallback(async () => {
-    console.log(selectedPair);
-    if (!selectedPair) return;
+  const toSymbol = getCurrencySymbol(selectedPair.to_currency.symbol) || selectedPair.to_currency.symbol;
 
+  const fetchRateHistory = useCallback(async () => {
+    if (!selectedPair) return;
     setLoading(true);
     setError(null);
-
     try {
       const response = await ratesService.getLatestRatesByPair(
         selectedPair.uuid,
         limit
       );
-
       if (response.success && response.data) {
         setRates(response.data);
       } else {
@@ -93,50 +88,13 @@ const RateHistoryModal: React.FC<RateHistoryModalProps> = ({
     }
   }, [isOpen, selectedPair, limit, fetchRateHistory]);
 
-  const formatNumber = (num: number) => {
-    return num.toLocaleString('es-ES', {
+  const formatNumber = (num: number) =>
+    num.toLocaleString('es-ES', {
       minimumFractionDigits: 2,
-      maximumFractionDigits: 6
+      maximumFractionDigits: 6,
     });
-  };
 
-  const formatDate = (dateString: string) => {
-    return ratesService.formatRateDate(dateString);
-  };
-
-  const getCurrencyName = (code: string) => {
-    return code.toUpperCase();
-  };
-
-  const getCurrencySymbol = (code: string) => {
-    return code === 'USDT' ? '$' : code === 'VES' ? 'Bs' : code === 'COP' ? 'COL$' : code === 'BRL' ? 'R$' : '$';
-  };
-
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case PairType.BASE:
-        return <DatabaseIcon className="h-4 w-4 text-green-600" />;
-      case PairType.DERIVED:
-        return <DatabaseIcon className="h-4 w-4 text-blue-600" />;
-      case PairType.CROSS:
-        return <DatabaseIcon className="h-4 w-4 text-purple-600" />;
-      default:
-        return <DatabaseIcon className="h-4 w-4 text-gray-600" />;
-    }
-  };
-
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case PairType.BASE:
-        return 'bg-green-100 text-green-800 border-green-200';
-      case PairType.DERIVED:
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-      case PairType.CROSS:
-        return 'bg-purple-100 text-purple-800 border-purple-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
+  const formatDate = (dateString: string) => ratesService.formatRateDate(dateString);
 
   const getRateTrend = (index: number): 'up' | 'down' | 'neutral' => {
     if (index === rates.length - 1) return 'neutral';
@@ -147,178 +105,169 @@ const RateHistoryModal: React.FC<RateHistoryModalProps> = ({
     return 'neutral';
   };
 
-  const calculatePercentageDifference = (manualRate: number, automaticRate: number): { percentage: number; isHigher: boolean } => {
+  const calculatePercentageDifference = (
+    manualRate: number,
+    automaticRate: number
+  ): { percentage: number; isHigher: boolean } => {
     const difference = ((manualRate - automaticRate) / automaticRate) * 100;
     return {
       percentage: Math.abs(difference),
-      isHigher: difference > 0
+      isHigher: difference > 0,
     };
   };
 
-  if (!isOpen) return null;
+  const highest = rates.length ? Math.max(...rates.map((r) => r.rate)) : 0;
+  const lowest = rates.length ? Math.min(...rates.map((r) => r.rate)) : 0;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-blue-50 to-purple-50">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-gray-900 text-lg">
-                {selectedPair.display_name}
-              </span>
-              <span className="text-gray-500 text-sm">
-                ({getCurrencyName(selectedPair.from_currency.name)} → {getCurrencyName(selectedPair.to_currency.name)})
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <select
-              value={limit}
-              onChange={(e) => setLimit(Number(e.target.value))}
-              className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value={5}>5 registros</option>
-              <option value={10}>10 registros</option>
-              <option value={20}>20 registros</option>
-              <option value={50}>50 registros</option>
-              <option value={100}>100 registros</option>
-            </select>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <XIcon className="h-6 w-6" />
-            </button>
-          </div>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+    >
+      <DialogContent className="flex max-h-[90vh] flex-col gap-4 sm:max-w-3xl">
+        <DialogHeader className="pr-8">
+          <DialogTitle>{selectedPair.display_name}</DialogTitle>
+          <DialogDescription>
+            Historial de tasas — {selectedPair.from_currency.name} → {selectedPair.to_currency.name}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <Label htmlFor="rate-history-limit" className="text-xs uppercase tracking-wide text-muted-foreground">
+            Mostrar
+          </Label>
+          <Select
+            value={String(limit)}
+            onValueChange={(value) => setLimit(Number(value))}
+          >
+            <SelectTrigger id="rate-history-limit" className="h-10 w-full sm:w-[160px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LIMIT_OPTIONS.map((opt) => (
+                <SelectItem key={opt} value={String(opt)}>
+                  {opt} registros
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
-        {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-          {loading && (
-            <div className="text-center py-8">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <p className="mt-2 text-gray-600">Cargando historial...</p>
-            </div>
-          )}
-
-          {error && (
-            <div className="text-center py-8">
-              <p className="text-red-600 mb-4">{error}</p>
-              <button
-                onClick={fetchRateHistory}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Reintentar
-              </button>
-            </div>
-          )}
-
-          {!loading && !error && rates.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              <DatabaseIcon className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-              <p>No se encontraron registros para este par de monedas</p>
-            </div>
-          )}
-
-          {!loading && !error && rates.length > 0 && (
-            <div className="space-y-3">
-              {/* Statistics */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <LoadingState label="Cargando historial..." />
+          ) : error ? (
+            <EmptyState
+              icon={Database}
+              title="No se pudo cargar el historial"
+              description={error}
+              actions={
+                <Button variant="outline" onClick={fetchRateHistory}>
+                  Reintentar
+                </Button>
+              }
+            />
+          ) : rates.length === 0 ? (
+            <EmptyState
+              icon={Database}
+              title="Sin registros"
+              description="No se encontraron tasas para este par de monedas."
+            />
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 rounded-lg border border-border bg-muted/40 p-4 sm:grid-cols-3">
                 <div className="text-center">
-                  <p className="text-sm text-gray-600">Tasa Actual</p>
-                  <p className="text-xl font-bold text-gray-900">
-                    {formatNumber(rates[0]?.rate)} {getCurrencySymbol(selectedPair.to_currency.symbol)}
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Tasa actual</p>
+                  <p className="mt-1 text-xl font-bold text-foreground">
+                    {formatNumber(rates[0]?.rate)} <span className="text-sm font-medium text-muted-foreground">{toSymbol}</span>
                   </p>
                 </div>
                 <div className="text-center">
-                  <p className="text-sm text-gray-600">Tasa Más Alta</p>
-                  <p className="text-xl font-bold text-green-600">
-                    {formatNumber(Math.max(...rates.map(r => r.rate)))} {getCurrencySymbol(selectedPair.to_currency.symbol)}
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Más alta</p>
+                  <p className="mt-1 text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                    {formatNumber(highest)} <span className="text-sm font-medium text-muted-foreground">{toSymbol}</span>
                   </p>
                 </div>
                 <div className="text-center">
-                  <p className="text-sm text-gray-600">Tasa Más Baja</p>
-                  <p className="text-xl font-bold text-red-600">
-                    {formatNumber(Math.min(...rates.map(r => r.rate)))} {getCurrencySymbol(selectedPair.to_currency.symbol)}
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Más baja</p>
+                  <p className="mt-1 text-xl font-bold text-rose-600 dark:text-rose-400">
+                    {formatNumber(lowest)} <span className="text-sm font-medium text-muted-foreground">{toSymbol}</span>
                   </p>
                 </div>
               </div>
 
-              {/* Rate History List */}
               <div className="space-y-2">
                 {rates.map((rate, index) => {
                   const trend = getRateTrend(index);
                   return (
                     <div
                       key={rate.uuid}
-                      className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                      className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4"
                     >
-                      <div className="flex flex-col gap-3">
-                        <div className="flex items-center gap-4">
-                          <div className="flex items-center gap-2">
-                            {trend === 'up' && <TrendingUpIcon className="h-4 w-4 text-green-600" />}
-                            {trend === 'down' && <TrendingDownIcon className="h-4 w-4 text-red-600" />}
-                            {trend === 'neutral' && <div className="w-4 h-4" />}
-                            <span className="text-xl font-bold text-gray-900">
-                              {formatNumber(rate.rate)}
-                            </span>
-                            <span className="text-gray-600">{getCurrencySymbol(selectedPair.to_currency.symbol)}</span>
-                          </div>
-                          
-                          <div className={`px-2 py-1 rounded-full text-xs border ${getTypeColor(rate.pair_type)}`}>
-                            <div className="flex items-center gap-1">
-                              {getTypeIcon(rate.pair_type)}
-                              {rate.pair_type.replace('_', ' ').toUpperCase()}
-                            </div>
-                          </div>
-
-                          {rate.percentage && (
-                            <div className="px-2 py-1 rounded-full text-xs bg-yellow-100 text-yellow-800 border border-yellow-200">
-                              {rate.inverse_percentage ? '-' : '+'}{rate.percentage}%
-                            </div>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {trend === 'up' ? (
+                            <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                          ) : trend === 'down' ? (
+                            <TrendingDown className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                          ) : (
+                            <span className="h-4 w-4" />
                           )}
+                          <span className="text-lg font-bold text-foreground">
+                            {formatNumber(rate.rate)}
+                          </span>
+                          <span className="text-sm text-muted-foreground">{toSymbol}</span>
+
+                          <StatusBadge tone={pairTypeTone[rate.pair_type.toLowerCase()] ?? 'neutral'} icon={Database}>
+                            {rate.pair_type.replace('_', ' ').toUpperCase()}
+                          </StatusBadge>
+
+                          {rate.percentage ? (
+                            <StatusBadge tone="warning">
+                              {rate.inverse_percentage ? '-' : '+'}
+                              {rate.percentage}%
+                            </StatusBadge>
+                          ) : null}
                         </div>
 
-                        {/* Show both manual and automatic rates when manual is active */}
-                        {rate.is_manual && rate.manual_rate && rate.automatic_rate && (() => {
-                          const { percentage, isHigher } = calculatePercentageDifference(rate.manual_rate, rate.automatic_rate);
-                          return (
-                            <div className="ml-6 flex flex-col gap-1 text-sm">
-                              <div className="flex items-center gap-2">
-                                <SettingsIcon className="h-3 w-3 text-orange-600" />
-                                <span className="text-orange-700 font-medium">Manual:</span>
-                                <span className="font-semibold text-orange-800">
-                                  {formatNumber(rate.manual_rate)} {getCurrencySymbol(selectedPair.to_currency.symbol)}
-                                </span>
-                                <span className="px-1.5 py-0.5 rounded text-xs bg-orange-100 text-orange-800 border border-orange-200 font-medium">
-                                  ACTIVO
-                                </span>
-                                <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                                  isHigher 
-                                    ? 'bg-red-100 text-red-800 border border-red-200' 
-                                    : 'bg-green-100 text-green-800 border border-green-200'
-                                }`}>
-                                  {isHigher ? '+' : '-'}{percentage.toFixed(2)}%
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <RobotIcon className="h-3 w-3 text-gray-500" />
-                                <span className="text-gray-600 font-medium">Automático:</span>
-                                <span className="text-gray-700">
-                                  {formatNumber(rate.automatic_rate)} {getCurrencySymbol(selectedPair.to_currency.symbol)}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })()}
+                        {rate.is_manual && rate.manual_rate && rate.automatic_rate
+                          ? (() => {
+                              const { percentage, isHigher } = calculatePercentageDifference(
+                                rate.manual_rate,
+                                rate.automatic_rate
+                              );
+                              return (
+                                <div className="flex flex-col gap-1.5 pl-6 text-sm">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Settings className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                                    <span className="font-medium text-amber-700 dark:text-amber-400">Manual:</span>
+                                    <span className="font-semibold text-foreground">
+                                      {formatNumber(rate.manual_rate)} {toSymbol}
+                                    </span>
+                                    <StatusBadge tone="warning">ACTIVO</StatusBadge>
+                                    <StatusBadge tone={isHigher ? 'destructive' : 'success'}>
+                                      {isHigher ? '+' : '-'}
+                                      {percentage.toFixed(2)}%
+                                    </StatusBadge>
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
+                                    <Bot className="h-3.5 w-3.5" />
+                                    <span className="font-medium">Automático:</span>
+                                    <span>
+                                      {formatNumber(rate.automatic_rate)} {toSymbol}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })()
+                          : null}
                       </div>
 
-                      <div className="flex items-center gap-3 text-sm text-gray-600">
-                        <div className="flex items-center gap-1">
-                          <ClockIcon className="h-4 w-4" />
-                          {formatDate(rate.created_at)}
-                        </div>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground sm:text-sm">
+                        <Clock className="h-4 w-4" />
+                        {formatDate(rate.created_at)}
                       </div>
                     </div>
                   );
@@ -327,9 +276,7 @@ const RateHistoryModal: React.FC<RateHistoryModalProps> = ({
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
-};
-
-export default RateHistoryModal;
+}
