@@ -1,10 +1,12 @@
-"use client";
+'use client';
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Bell, Check, AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Bell, Check, RefreshCw } from 'lucide-react';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { useNotifications } from '@/contexts/NotificationContext';
-import { RateAlert } from '@/types/notifications';
+import { cn } from '@/lib/utils';
+import type { RateAlert } from '@/types/notifications';
 
 function formatRelative(dateString: string): string {
   const date = new Date(dateString);
@@ -23,41 +25,64 @@ function formatRelative(dateString: string): string {
   });
 }
 
-function AlertRow({ alert, onAcknowledge }: { alert: RateAlert; onAcknowledge: (uuid: string) => void }) {
+function getSeverityTextClass(diffPercentage: number): string {
+  const abs = Math.abs(diffPercentage);
+  if (abs >= 3) return 'text-destructive';
+  if (abs >= 1) return 'text-amber-600 dark:text-amber-400';
+  return 'text-muted-foreground';
+}
+
+interface AlertRowProps {
+  alert: RateAlert;
+  onAcknowledge: (uuid: string) => void;
+}
+
+function AlertRow({ alert, onAcknowledge }: AlertRowProps) {
   const isAcked = !!alert.acknowledged_at;
-  const diffAbs = Math.abs(alert.diff_percentage);
-  const diffColor = diffAbs >= 3 ? 'text-red-600' : diffAbs >= 1 ? 'text-amber-600' : 'text-gray-600';
+  const severity = getSeverityTextClass(alert.diff_percentage);
+  const sign = alert.diff_percentage > 0 ? '+' : '';
 
   return (
-    <div className={`px-3 py-2 border-b border-gray-100 last:border-b-0 ${isAcked ? 'opacity-60' : ''}`}>
+    <div
+      className={cn(
+        'border-b border-border px-3 py-2 last:border-b-0',
+        isAcked && 'opacity-60'
+      )}
+    >
       <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <AlertTriangle size={14} className={diffColor} />
-            <span className="font-medium text-sm text-gray-900">
-              {alert.from_currency}/{alert.to_currency}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <AlertTriangle className={cn('h-3.5 w-3.5 shrink-0', severity)} />
+            <span className="text-sm font-medium text-foreground">
+              {alert.from_currency}
+              <ArrowRight className="mx-1 inline h-3 w-3 text-muted-foreground" />
+              {alert.to_currency}
             </span>
-            <span className={`text-sm font-semibold ${diffColor}`}>
-              {alert.diff_percentage > 0 ? '+' : ''}
+            <span className={cn('text-sm font-semibold', severity)}>
+              {sign}
               {alert.diff_percentage.toFixed(2)}%
             </span>
           </div>
-          <div className="text-xs text-gray-600 mt-1">
-            Manual: <span className="font-mono">{alert.manual_rate}</span>
-            {' · '}
-            Auto: <span className="font-mono">{alert.automatic_rate}</span>
-          </div>
-          <div className="text-[11px] text-gray-400 mt-0.5">{formatRelative(alert.created_at)}</div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Manual: <span className="font-mono text-foreground/80">{alert.manual_rate}</span>
+            <span className="mx-1">·</span>
+            Auto: <span className="font-mono text-foreground/80">{alert.automatic_rate}</span>
+          </p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            {formatRelative(alert.created_at)}
+          </p>
         </div>
-        {!isAcked && (
-          <button
+        {!isAcked ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
             onClick={() => onAcknowledge(alert.uuid)}
-            className="flex-shrink-0 p-1.5 rounded hover:bg-green-50 text-green-600"
-            title="Marcar como vista"
+            className="shrink-0 text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-400"
+            aria-label="Marcar como vista"
           >
-            <Check size={14} />
-          </button>
-        )}
+            <Check className="h-3.5 w-3.5" />
+          </Button>
+        ) : null}
       </div>
     </div>
   );
@@ -84,60 +109,76 @@ export default function NotificationBell() {
 
   return (
     <div ref={containerRef} className="relative">
-      <button
-        onClick={() => setOpen(prev => !prev)}
-        className="relative p-2 rounded-md text-gray-600 hover:bg-gray-100"
-        aria-label="Notificaciones"
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-label={
+          unreadCount > 0 ? `Notificaciones (${unreadCount} sin leer)` : 'Notificaciones'
+        }
+        className="relative min-h-11 min-w-11"
       >
-        <Bell size={20} />
-        {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full">
+        <Bell className="h-5 w-5" />
+        {unreadCount > 0 ? (
+          <span className="absolute right-1.5 top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
             {badgeText}
           </span>
-        )}
+        ) : null}
         <span
-          className={`absolute bottom-1 right-1 w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-400'}`}
+          className={cn(
+            'absolute bottom-1.5 right-1.5 h-2 w-2 rounded-full ring-2 ring-background',
+            isConnected ? 'bg-emerald-500' : 'bg-muted-foreground'
+          )}
+          aria-label={isConnected ? 'Conectado' : 'Desconectado'}
           title={isConnected ? 'Conectado' : 'Desconectado'}
         />
-      </button>
+      </Button>
 
-      {open && (
-        <div className="absolute right-0 mt-2 w-[340px] bg-white rounded-lg shadow-lg border border-gray-200 z-50">
-          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200">
-            <h3 className="font-semibold text-gray-900 text-sm">Alertas de divergencia</h3>
-            <button
+      {open ? (
+        <div
+          role="dialog"
+          aria-label="Alertas de divergencia"
+          className="absolute right-0 z-50 mt-2 w-[min(calc(100vw-2rem),22rem)] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/10"
+        >
+          <div className="flex items-center justify-between border-b border-border px-3 py-2">
+            <h3 className="text-sm font-semibold text-foreground">Alertas de divergencia</h3>
+            <Button
+              variant="ghost"
+              size="icon-sm"
               onClick={() => refresh()}
               disabled={loading}
-              className="p-1 rounded hover:bg-gray-100 text-gray-500 disabled:opacity-50"
-              title="Refrescar"
+              aria-label="Refrescar"
             >
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            </button>
+              <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
+            </Button>
           </div>
 
           <div className="max-h-[400px] overflow-y-auto">
             {visibleAlerts.length === 0 ? (
-              <div className="px-3 py-6 text-center text-sm text-gray-500">
+              <div className="px-3 py-6 text-center text-sm text-muted-foreground">
                 {loading ? 'Cargando...' : 'No hay alertas'}
               </div>
             ) : (
-              visibleAlerts.map(a => (
+              visibleAlerts.map((a) => (
                 <AlertRow key={a.uuid} alert={a} onAcknowledge={acknowledge} />
               ))
             )}
           </div>
 
-          <div className="px-3 py-2 border-t border-gray-200">
+          <div className="border-t border-border p-2">
             <Link
               href="/admin/alerts"
               onClick={() => setOpen(false)}
-              className="block text-center text-sm text-blue-600 hover:text-blue-800 font-medium"
+              className={cn(
+                buttonVariants({ variant: 'ghost', size: 'sm' }),
+                'w-full justify-center font-medium'
+              )}
             >
               Ver todas las alertas
             </Link>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
