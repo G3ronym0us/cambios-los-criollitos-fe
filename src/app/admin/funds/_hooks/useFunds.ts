@@ -1,0 +1,321 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
+import { fundService } from '@/services/fundService';
+import { userService } from '@/services/userService';
+import { adminService } from '@/services/adminService';
+import { useConfirm } from '@/hooks/useConfirm';
+import { Role } from '@/utils/enums';
+import { CurrencyData } from '@/types/admin';
+import { CommissionUserResponse } from '@/types/user';
+import {
+  AddFundMember,
+  CreateFundGroup,
+  CreateFundMovement,
+  FundGroup,
+  FundMovement,
+  FundMovementFilters,
+  GroupBalance,
+  MovementType,
+} from '@/types/fund';
+
+const MOVEMENTS_PER_PAGE = 50;
+
+const emptyMovementForm: Omit<CreateFundMovement, 'group_uuid'> = {
+  user_uuid: '',
+  movement_type: MovementType.DEPOSIT,
+  amount: 0,
+  currency: 'USD',
+  amount_usdt: 0,
+  usdt_rate: 1,
+  movement_date: new Date().toISOString().slice(0, 16),
+  notes: '',
+};
+
+const emptyGroupForm: CreateFundGroup = { name: '', currency: '', description: '' };
+const emptyMemberForm: AddFundMember = { user_uuid: '', is_fund_manager: false };
+
+export function useFunds() {
+  const { user } = useAuth();
+  const isModeratorOrAbove = user?.role === Role.MODERATOR || user?.role === Role.ROOT;
+  const isRoot = user?.role === Role.ROOT;
+  const confirm = useConfirm();
+
+  const [groups, setGroups] = useState<FundGroup[]>([]);
+  const [selectedGroupUuid, setSelectedGroupUuid] = useState<string>('');
+  const [groupBalance, setGroupBalance] = useState<GroupBalance | null>(null);
+  const [movements, setMovements] = useState<FundMovement[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<CommissionUserResponse[]>([]);
+  const [availableCurrencies, setAvailableCurrencies] = useState<CurrencyData[]>([]);
+
+  const [loadingGroups, setLoadingGroups] = useState(true);
+  const [loadingBalance, setLoadingBalance] = useState(false);
+  const [loadingMovements, setLoadingMovements] = useState(false);
+
+  const [movementsPage, setMovementsPage] = useState(1);
+  const [movementsTotal, setMovementsTotal] = useState(0);
+
+  const [movementFilters, setMovementFilters] = useState<FundMovementFilters>({});
+
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [showRegisterMovement, setShowRegisterMovement] = useState(false);
+
+  const [createGroupForm, setCreateGroupForm] = useState<CreateFundGroup>(emptyGroupForm);
+  const [addMemberForm, setAddMemberForm] = useState<AddFundMember>(emptyMemberForm);
+  const [movementForm, setMovementForm] =
+    useState<Omit<CreateFundMovement, 'group_uuid'>>(emptyMovementForm);
+
+  const [formError, setFormError] = useState('');
+  const [formLoading, setFormLoading] = useState(false);
+
+  // Initial load
+  useEffect(() => {
+    const loadGroups = async () => {
+      setLoadingGroups(true);
+      const result = await fundService.getGroups();
+      if (result.success && result.data) {
+        setGroups(result.data);
+        if (result.data.length > 0) {
+          setSelectedGroupUuid(result.data[0].uuid);
+        }
+      } else {
+        toast.error(result.error || 'Error al cargar los grupos');
+      }
+      setLoadingGroups(false);
+    };
+
+    const loadUsers = async () => {
+      const result = await userService.getAvailableCommissionUsers();
+      if (result.success && result.data) setAvailableUsers(result.data);
+    };
+
+    const loadCurrencies = async () => {
+      const result = await adminService.getCurrencies(1, 100);
+      if (result.success && result.data) setAvailableCurrencies(result.data.currencies);
+    };
+
+    loadGroups();
+    loadUsers();
+    loadCurrencies();
+  }, []);
+
+  // Load balance and movements when selected group / filters / page change
+  const loadGroupData = useCallback(async () => {
+    if (!selectedGroupUuid) return;
+
+    setLoadingBalance(true);
+    setLoadingMovements(true);
+
+    const [balanceResult, movementsResult] = await Promise.all([
+      fundService.getGroupBalance(selectedGroupUuid),
+      fundService.getGroupMovements(selectedGroupUuid, {
+        ...movementFilters,
+        page: movementsPage,
+        per_page: MOVEMENTS_PER_PAGE,
+      }),
+    ]);
+
+    if (balanceResult.success && balanceResult.data) {
+      setGroupBalance(balanceResult.data);
+    }
+    setLoadingBalance(false);
+
+    if (movementsResult.success && movementsResult.data) {
+      setMovements(movementsResult.data.movements);
+      setMovementsTotal(movementsResult.data.total);
+    } else if (!movementsResult.success) {
+      toast.error(movementsResult.error || 'Error al cargar movimientos');
+    }
+    setLoadingMovements(false);
+  }, [selectedGroupUuid, movementFilters, movementsPage]);
+
+  useEffect(() => {
+    setMovementsPage(1);
+  }, [selectedGroupUuid, movementFilters]);
+
+  useEffect(() => {
+    loadGroupData();
+  }, [loadGroupData]);
+
+  const totalMovementsPages = Math.max(1, Math.ceil(movementsTotal / MOVEMENTS_PER_PAGE));
+
+  const getUserDisplayName = useCallback(
+    (uuid: string) => {
+      const u = availableUsers.find((x) => x.uuid === uuid);
+      return u ? u.full_name || u.username : uuid;
+    },
+    [availableUsers]
+  );
+
+  // Dialog open helpers
+  const openCreateGroup = useCallback(() => {
+    setFormError('');
+    setCreateGroupForm(emptyGroupForm);
+    setShowCreateGroup(true);
+  }, []);
+  const closeCreateGroup = useCallback(() => setShowCreateGroup(false), []);
+
+  const openAddMember = useCallback(() => {
+    setFormError('');
+    setAddMemberForm(emptyMemberForm);
+    setShowAddMember(true);
+  }, []);
+  const closeAddMember = useCallback(() => setShowAddMember(false), []);
+
+  const openRegisterMovement = useCallback(() => {
+    setFormError('');
+    setMovementForm({
+      ...emptyMovementForm,
+      movement_date: new Date().toISOString().slice(0, 16),
+    });
+    setShowRegisterMovement(true);
+  }, []);
+  const closeRegisterMovement = useCallback(() => setShowRegisterMovement(false), []);
+
+  // Submit handlers
+  const handleCreateGroup = useCallback(async () => {
+    setFormError('');
+    if (!createGroupForm.name.trim()) {
+      setFormError('El nombre es obligatorio');
+      return;
+    }
+    if (!createGroupForm.currency) {
+      setFormError('La moneda es obligatoria');
+      return;
+    }
+    setFormLoading(true);
+    const result = await fundService.createGroup(createGroupForm);
+    setFormLoading(false);
+    if (result.success && result.data) {
+      setGroups((prev) => [...prev, result.data!]);
+      setSelectedGroupUuid(result.data.uuid);
+      closeCreateGroup();
+      toast.success('Grupo creado correctamente');
+    } else {
+      setFormError(result.error || 'Error al crear el grupo');
+    }
+  }, [createGroupForm, closeCreateGroup]);
+
+  const handleAddMember = useCallback(async () => {
+    setFormError('');
+    if (!addMemberForm.user_uuid) {
+      setFormError('Selecciona un usuario');
+      return;
+    }
+    setFormLoading(true);
+    const result = await fundService.addMember(selectedGroupUuid, addMemberForm);
+    setFormLoading(false);
+    if (result.success) {
+      closeAddMember();
+      toast.success('Miembro agregado correctamente');
+      loadGroupData();
+    } else {
+      setFormError(result.error || 'Error al agregar miembro');
+    }
+  }, [addMemberForm, selectedGroupUuid, closeAddMember, loadGroupData]);
+
+  const handleRegisterMovement = useCallback(async () => {
+    setFormError('');
+    if (!movementForm.user_uuid) {
+      setFormError('Selecciona un gestor');
+      return;
+    }
+    if (movementForm.amount <= 0) {
+      setFormError('El monto debe ser mayor a 0');
+      return;
+    }
+    setFormLoading(true);
+    const result = await fundService.createMovement({
+      ...movementForm,
+      group_uuid: selectedGroupUuid,
+    });
+    setFormLoading(false);
+    if (result.success) {
+      closeRegisterMovement();
+      toast.success('Movimiento registrado correctamente');
+      loadGroupData();
+    } else {
+      setFormError(result.error || 'Error al registrar movimiento');
+    }
+  }, [movementForm, selectedGroupUuid, closeRegisterMovement, loadGroupData]);
+
+  const handleDeleteMovement = useCallback(
+    async (movement: FundMovement) => {
+      const ok = await confirm({
+        title: '¿Eliminar movimiento?',
+        description: 'Esta acción no se puede deshacer.',
+        confirmText: 'Eliminar',
+        variant: 'destructive',
+      });
+      if (!ok) return;
+
+      const result = await fundService.deleteMovement(movement.uuid);
+      if (result.success) {
+        toast.success('Movimiento eliminado');
+        loadGroupData();
+      } else {
+        toast.error(result.error || 'Error al eliminar movimiento');
+      }
+    },
+    [confirm, loadGroupData]
+  );
+
+  const resetFilters = useCallback(() => setMovementFilters({}), []);
+  const hasActiveFilters =
+    !!movementFilters.movement_type ||
+    !!movementFilters.date_from ||
+    !!movementFilters.date_to;
+
+  return {
+    state: {
+      isModeratorOrAbove,
+      isRoot,
+      groups,
+      selectedGroupUuid,
+      groupBalance,
+      movements,
+      availableUsers,
+      availableCurrencies,
+      loadingGroups,
+      loadingBalance,
+      loadingMovements,
+      movementsPage,
+      movementsTotal,
+      movementsPerPage: MOVEMENTS_PER_PAGE,
+      totalMovementsPages,
+      movementFilters,
+      hasActiveFilters,
+      showCreateGroup,
+      showAddMember,
+      showRegisterMovement,
+      createGroupForm,
+      addMemberForm,
+      movementForm,
+      formError,
+      formLoading,
+    },
+    actions: {
+      setSelectedGroupUuid,
+      setMovementFilters,
+      resetFilters,
+      setMovementsPage,
+      openCreateGroup,
+      closeCreateGroup,
+      openAddMember,
+      closeAddMember,
+      openRegisterMovement,
+      closeRegisterMovement,
+      setCreateGroupForm,
+      setAddMemberForm,
+      setMovementForm,
+      handleCreateGroup,
+      handleAddMember,
+      handleRegisterMovement,
+      handleDeleteMovement,
+      getUserDisplayName,
+    },
+  };
+}
