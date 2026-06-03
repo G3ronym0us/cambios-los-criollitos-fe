@@ -1,14 +1,17 @@
 'use client';
 
+import { useState } from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PaymentTable } from '@/types/payment';
+import { PaymentData, PaymentTable } from '@/types/payment';
 import { PaymentsFilters } from './_components/PaymentsFilters';
 import { PaymentsList } from './_components/PaymentsList';
+import { LinkOperationDialog } from './_components/LinkOperationDialog';
 import { usePayments } from './_hooks/usePayments';
 
 export default function PaymentsAdminPage() {
   const { state, actions } = usePayments();
+  const [linking, setLinking] = useState<PaymentData | null>(null);
 
   return (
     <div className="space-y-6">
@@ -39,6 +42,7 @@ export default function PaymentsAdminPage() {
             loading={state.loading}
             hasActiveFilters={state.hasActiveFilters}
             onResetFilters={actions.resetFilters}
+            onLink={setLinking}
           />
         </TabsContent>
 
@@ -58,9 +62,17 @@ export default function PaymentsAdminPage() {
             loading={state.loading}
             hasActiveFilters={state.hasActiveFilters}
             onResetFilters={actions.resetFilters}
+            onLink={setLinking}
           />
         </TabsContent>
       </Tabs>
+
+      <LinkOperationDialog
+        payment={linking}
+        table={state.tab}
+        onClose={() => setLinking(null)}
+        onLinked={actions.reload}
+      />
     </div>
   );
 }

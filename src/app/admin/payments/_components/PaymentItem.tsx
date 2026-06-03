@@ -1,6 +1,7 @@
 'use client';
 
 import { Banknote, Forward, Link2, Link2Off, Tag, Wallet } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { formatNumber } from '@/utils/functions';
@@ -9,6 +10,7 @@ import type { PaymentData } from '@/types/payment';
 interface PaymentItemProps {
   payment: PaymentData;
   outgoing: boolean;
+  onLink?: (payment: PaymentData) => void;
 }
 
 function formatDate(value: string | null) {
@@ -21,7 +23,7 @@ function formatDate(value: string | null) {
   });
 }
 
-export function PaymentItem({ payment: p, outgoing }: PaymentItemProps) {
+export function PaymentItem({ payment: p, outgoing, onLink }: PaymentItemProps) {
   const client = p.client_name || p.client_phone?.replace(/@(c|g)\.us$/, '') || 'Sin identificar';
   const created = formatDate(p.created_at);
   const bank = p.bank_to || p.bank_from || p.provider;
@@ -76,7 +78,15 @@ export function PaymentItem({ payment: p, outgoing }: PaymentItemProps) {
               <StatusBadge tone="info" icon={Forward}>Reenvío</StatusBadge>
             ) : null}
           </div>
-          {created ? <span className="text-xs text-muted-foreground">{created}</span> : null}
+          <div className="flex items-center gap-2">
+            {onLink ? (
+              <Button variant="outline" size="sm" className="h-8" onClick={() => onLink(p)}>
+                <Link2 className="h-3.5 w-3.5" />
+                {p.operation_uuid ? 'Cambiar' : 'Vincular'}
+              </Button>
+            ) : null}
+            {created ? <span className="text-xs text-muted-foreground">{created}</span> : null}
+          </div>
         </div>
       </CardContent>
     </Card>

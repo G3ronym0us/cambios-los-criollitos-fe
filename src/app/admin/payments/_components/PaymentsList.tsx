@@ -13,6 +13,7 @@ interface PaymentsListProps {
   loading: boolean;
   hasActiveFilters: boolean;
   onResetFilters: () => void;
+  onLink?: (payment: PaymentData) => void;
 }
 
 export function PaymentsList({
@@ -21,6 +22,7 @@ export function PaymentsList({
   loading,
   hasActiveFilters,
   onResetFilters,
+  onLink,
 }: PaymentsListProps) {
   if (loading) {
     return <LoadingState label="Cargando pagos..." />;
@@ -51,7 +53,7 @@ export function PaymentsList({
   return (
     <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
       {payments.map((p) => (
-        <PaymentItem key={p.uuid} payment={p} outgoing={outgoing} />
+        <PaymentItem key={p.uuid} payment={p} outgoing={outgoing} onLink={onLink} />
       ))}
     </div>
   );

@@ -79,6 +79,6 @@ export function usePayments() {
       outClass,
       hasActiveFilters,
     },
-    actions: { setTab, setSearch, setOutClass, resetFilters },
+    actions: { setTab, setSearch, setOutClass, resetFilters, reload: load },
   };
 }
