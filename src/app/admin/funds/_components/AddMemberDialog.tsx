@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -97,6 +98,20 @@ export function AddMemberDialog({
               onCheckedChange={(checked) => onChange({ ...value, is_fund_manager: checked })}
             />
           </label>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="member-whatsapp">Número de WhatsApp del socio</Label>
+            <Input
+              id="member-whatsapp"
+              value={value.whatsapp_phone ?? ''}
+              onChange={(e) => onChange({ ...value, whatsapp_phone: e.target.value || null })}
+              placeholder="Ej: 584240000001"
+              className="h-10"
+            />
+            <p className="text-xs text-muted-foreground">
+              Opcional. Si se define, el bot detecta automáticamente los cambios reportados por este socio (escenario vía socio).
+            </p>
+          </div>
 
           {error ? (
             <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">

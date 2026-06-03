@@ -3,18 +3,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { operationService } from '@/services/operationService';
-import { OperationData, OperationStats, OperationStatus } from '@/types/operation';
+import { OperationData, OperationScenario, OperationStats, OperationStatus } from '@/types/operation';
 
 export type StatusFilter = 'ALL' | OperationStatus;
 export type DeliveryFilter = 'ALL' | 'PENDING' | 'RECEIVED';
+export type ScenarioFilter = 'ALL' | OperationScenario;
 
 export interface OperationsFilters {
   search: string;
   status: StatusFilter;
   delivery: DeliveryFilter;
+  scenario: ScenarioFilter;
 }
 
-const emptyFilters: OperationsFilters = { search: '', status: 'ALL', delivery: 'ALL' };
+const emptyFilters: OperationsFilters = { search: '', status: 'ALL', delivery: 'ALL', scenario: 'ALL' };
 
 const emptyStats: OperationStats = {
   pending: 0,
@@ -53,13 +55,17 @@ export function useOperations() {
 
   const resetFilters = useCallback(() => setFilters(emptyFilters), []);
   const hasActiveFilters =
-    filters.search.trim() !== '' || filters.status !== 'ALL' || filters.delivery !== 'ALL';
+    filters.search.trim() !== '' ||
+    filters.status !== 'ALL' ||
+    filters.delivery !== 'ALL' ||
+    filters.scenario !== 'ALL';
 
   const filteredOperations = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
     return operations.filter((op) => {
       if (filters.status !== 'ALL' && op.status !== filters.status) return false;
       if (filters.delivery !== 'ALL' && op.delivery_status !== filters.delivery) return false;
+      if (filters.scenario !== 'ALL' && (op.scenario ?? 'NORMAL') !== filters.scenario) return false;
       if (!q) return true;
       return (
         (op.client_display_name || '').toLowerCase().includes(q) ||
@@ -71,6 +77,6 @@ export function useOperations() {
 
   return {
     state: { operations: filteredOperations, stats, loading, filters, hasActiveFilters },
-    actions: { setFilters, resetFilters },
+    actions: { setFilters, resetFilters, reload: load },
   };
 }

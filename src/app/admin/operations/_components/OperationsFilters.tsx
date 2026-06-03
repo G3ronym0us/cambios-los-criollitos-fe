@@ -64,6 +64,26 @@ export function OperationsFilters({ filters, hasActiveFilters, onChange, onReset
         </div>
 
         <div className="flex flex-col gap-1.5 sm:min-w-[170px]">
+          <Label htmlFor="ops-scenario-filter" className="text-xs uppercase tracking-wide text-muted-foreground">
+            Escenario
+          </Label>
+          <Select
+            value={filters.scenario}
+            onValueChange={(value) => onChange({ ...filters, scenario: value as Filters['scenario'] })}
+          >
+            <SelectTrigger id="ops-scenario-filter" className="h-10 w-full sm:w-[170px]">
+              <SelectValue placeholder="Todos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Todos</SelectItem>
+              <SelectItem value="NORMAL">Normal</SelectItem>
+              <SelectItem value="ZELLE_DIRECT">Zelle directo</SelectItem>
+              <SelectItem value="VIA_PARTNER">Vía socio</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-1.5 sm:min-w-[170px]">
           <Label htmlFor="ops-delivery-filter" className="text-xs uppercase tracking-wide text-muted-foreground">
             Entrega
           </Label>

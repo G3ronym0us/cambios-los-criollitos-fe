@@ -5,6 +5,7 @@ import {
   OperationFilters,
   OperationListResponse,
   OperationStats,
+  UpdateScenarioPayload,
 } from '@/types/operation';
 
 export class OperationService {
@@ -28,6 +29,12 @@ export class OperationService {
 
   async getOperation(uuid: string): Promise<ApiResponse<OperationData>> {
     const result = await httpClient.get<OperationData>(`/operations/${uuid}`);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  // Edición manual del escenario/grupo/receptor del entrante de una operación.
+  async updateScenario(uuid: string, payload: UpdateScenarioPayload): Promise<ApiResponse<OperationData>> {
+    const result = await httpClient.patch<OperationData>(`/operations/${uuid}/scenario`, payload);
     return { success: result.success, data: result.data, error: result.error };
   }
 }

@@ -3,6 +3,7 @@
 
 export type OperationStatus = 'QUOTED' | 'PENDING' | 'COMPLETED' | 'CANCELLED';
 export type DeliveryStatus = 'PENDING' | 'RECEIVED';
+export type OperationScenario = 'NORMAL' | 'ZELLE_DIRECT' | 'VIA_PARTNER';
 
 export interface OperationData {
   uuid: string;
@@ -22,6 +23,11 @@ export interface OperationData {
   amount_side: 'SEND' | 'RECEIVE';
   bcv_usd: number | null;
   status: OperationStatus;
+  scenario: OperationScenario;
+  fund_group_uuid: string | null;
+  fund_group_name: string | null;
+  received_by_user_uuid: string | null;
+  received_by_username: string | null;
   delivery_status: DeliveryStatus | null;
   delivered_at: string | null;
   notes: string | null;
@@ -54,4 +60,12 @@ export interface OperationFilters {
   delivery_status?: string;
   phone?: string;
   limit?: number;
+}
+
+export interface UpdateScenarioPayload {
+  scenario?: OperationScenario;
+  fund_group_uuid?: string | null;
+  received_by_user_uuid?: string | null;
+  clear_fund_group?: boolean;
+  clear_received_by?: boolean;
 }

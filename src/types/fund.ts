@@ -5,12 +5,24 @@ export enum MovementType {
   ADJUSTMENT = 'ADJUSTMENT',
 }
 
+/** Miembro tal como lo devuelve el backend dentro de FundGroupResponse.members (forma plana). */
+export interface FundGroupMemberFlat {
+  uuid: string;
+  user_uuid: string;
+  username: string | null;
+  is_fund_manager: boolean;
+  whatsapp_phone?: string | null;
+}
+
 export interface FundGroup {
   uuid: string;
   name: string;
   description?: string;
   is_active: boolean;
   created_at: string;
+  currency?: string;
+  whatsapp_group_jid?: string | null;
+  members?: FundGroupMemberFlat[];
 }
 
 export interface FundGroupMember {
@@ -98,11 +110,24 @@ export interface CreateFundGroup {
   name: string;
   currency: string;
   description?: string;
+  whatsapp_group_jid?: string | null;
+}
+
+export interface UpdateFundGroup {
+  whatsapp_group_jid?: string | null;
+  clear_whatsapp_group_jid?: boolean;
 }
 
 export interface AddFundMember {
   user_uuid: string;
   is_fund_manager?: boolean;
+  whatsapp_phone?: string | null;
+}
+
+export interface UpdateFundMember {
+  is_fund_manager?: boolean;
+  whatsapp_phone?: string | null;
+  clear_whatsapp_phone?: boolean;
 }
 
 export interface CreateFundMovement {

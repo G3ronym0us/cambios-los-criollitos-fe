@@ -111,6 +111,21 @@ export function CreateGroupDialog({
             />
           </div>
 
+          <div className="space-y-1.5">
+            <Label htmlFor="group-jid">JID del grupo de WhatsApp</Label>
+            <Input
+              id="group-jid"
+              type="text"
+              value={value.whatsapp_group_jid ?? ''}
+              onChange={(e) => onChange({ ...value, whatsapp_group_jid: e.target.value || null })}
+              placeholder="Ej: 123456789-987654321@g.us"
+              className="h-10"
+            />
+            <p className="text-xs text-muted-foreground">
+              Opcional. Permite ligar este fondo al grupo de WhatsApp donde reenvías los comprobantes.
+            </p>
+          </div>
+
           {error ? (
             <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}

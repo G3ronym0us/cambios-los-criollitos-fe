@@ -7,7 +7,9 @@ import {
   UserPosition,
   FundMovementFilters,
   CreateFundGroup,
+  UpdateFundGroup,
   AddFundMember,
+  UpdateFundMember,
   CreateFundMovement,
 } from '@/types/fund';
 import { ApiResponse } from '@/types/auth';
@@ -24,8 +26,25 @@ export class FundService {
     return { success: result.success, data: result.data, error: result.error };
   }
 
+  async updateGroup(groupUuid: string, data: UpdateFundGroup): Promise<ApiResponse<FundGroup>> {
+    const result = await httpClient.patch<FundGroup>(`/funds/groups/${groupUuid}`, data);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
   async addMember(groupUuid: string, data: AddFundMember): Promise<ApiResponse<FundGroupMember>> {
     const result = await httpClient.post<FundGroupMember>(`/funds/groups/${groupUuid}/members`, data);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  async updateMember(
+    groupUuid: string,
+    userUuid: string,
+    data: UpdateFundMember,
+  ): Promise<ApiResponse<FundGroupMember>> {
+    const result = await httpClient.patch<FundGroupMember>(
+      `/funds/groups/${groupUuid}/members/${userUuid}`,
+      data,
+    );
     return { success: result.success, data: result.data, error: result.error };
   }
 
