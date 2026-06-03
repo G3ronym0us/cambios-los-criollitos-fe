@@ -13,6 +13,7 @@ import {
   FileText,
   UserCheck,
   Users,
+  Contact,
   Wallet,
   Menu,
   X,
@@ -37,6 +38,7 @@ const navigation = [
   { name: 'Resumen General', href: '/admin/reports/summary', icon: FileText },
   { name: 'Reporte por Usuario', href: '/admin/reports/users', icon: Users },
   { name: 'Usuarios', href: '/admin/users', icon: UserCheck },
+  { name: 'Clientes', href: '/admin/clients', icon: Contact },
   { name: 'Fondos', href: '/admin/funds', icon: Wallet },
   { name: 'Alertas', href: '/admin/alerts', icon: Bell },
 ];
