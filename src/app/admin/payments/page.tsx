@@ -7,11 +7,13 @@ import { PaymentData, PaymentTable } from '@/types/payment';
 import { PaymentsFilters } from './_components/PaymentsFilters';
 import { PaymentsList } from './_components/PaymentsList';
 import { LinkOperationDialog } from './_components/LinkOperationDialog';
+import { PaymentRawTextDialog } from './_components/PaymentRawTextDialog';
 import { usePayments } from './_hooks/usePayments';
 
 export default function PaymentsAdminPage() {
   const { state, actions } = usePayments();
   const [linking, setLinking] = useState<PaymentData | null>(null);
+  const [viewingRawText, setViewingRawText] = useState<PaymentData | null>(null);
 
   return (
     <div className="space-y-6">
@@ -43,6 +45,7 @@ export default function PaymentsAdminPage() {
             hasActiveFilters={state.hasActiveFilters}
             onResetFilters={actions.resetFilters}
             onLink={setLinking}
+            onViewRawText={setViewingRawText}
           />
         </TabsContent>
 
@@ -63,6 +66,7 @@ export default function PaymentsAdminPage() {
             hasActiveFilters={state.hasActiveFilters}
             onResetFilters={actions.resetFilters}
             onLink={setLinking}
+            onViewRawText={setViewingRawText}
           />
         </TabsContent>
       </Tabs>
@@ -72,6 +76,11 @@ export default function PaymentsAdminPage() {
         table={state.tab}
         onClose={() => setLinking(null)}
         onLinked={actions.reload}
+      />
+
+      <PaymentRawTextDialog
+        payment={viewingRawText}
+        onClose={() => setViewingRawText(null)}
       />
     </div>
   );

@@ -1,6 +1,7 @@
 'use client';
 
-import { Banknote, Forward, Link2, Link2Off, Tag, Wallet } from 'lucide-react';
+import Link from 'next/link';
+import { Banknote, FileText, Forward, Link2, Link2Off, Tag, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -11,6 +12,7 @@ interface PaymentItemProps {
   payment: PaymentData;
   outgoing: boolean;
   onLink?: (payment: PaymentData) => void;
+  onViewRawText?: (payment: PaymentData) => void;
 }
 
 function formatDate(value: string | null) {
@@ -23,7 +25,7 @@ function formatDate(value: string | null) {
   });
 }
 
-export function PaymentItem({ payment: p, outgoing, onLink }: PaymentItemProps) {
+export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText }: PaymentItemProps) {
   const client = p.client_name || p.client_phone?.replace(/@(c|g)\.us$/, '') || 'Sin identificar';
   const created = formatDate(p.created_at);
   const bank = p.bank_to || p.bank_from || p.provider;
@@ -42,7 +44,16 @@ export function PaymentItem({ payment: p, outgoing, onLink }: PaymentItemProps) 
               {outgoing ? <Wallet className="h-5 w-5" /> : <Banknote className="h-5 w-5" />}
             </div>
             <div className="min-w-0">
-              <h3 className="truncate text-base font-semibold text-foreground">{client}</h3>
+              {p.client_uuid ? (
+                <Link
+                  href={`/admin/clients/${p.client_uuid}`}
+                  className="truncate text-base font-semibold text-foreground hover:underline"
+                >
+                  {client}
+                </Link>
+              ) : (
+                <h3 className="truncate text-base font-semibold text-foreground">{client}</h3>
+              )}
               {bank ? <p className="mt-0.5 truncate text-xs text-muted-foreground">{bank}</p> : null}
             </div>
           </div>
@@ -79,6 +90,17 @@ export function PaymentItem({ payment: p, outgoing, onLink }: PaymentItemProps) 
             ) : null}
           </div>
           <div className="flex items-center gap-2">
+            {onViewRawText && p.raw_text ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={() => onViewRawText(p)}
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Ver texto
+              </Button>
+            ) : null}
             {onLink ? (
               <Button variant="outline" size="sm" className="h-8" onClick={() => onLink(p)}>
                 <Link2 className="h-3.5 w-3.5" />

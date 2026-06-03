@@ -8,6 +8,7 @@ export interface PaymentData {
   uuid: string;
   client_phone: string;
   client_name: string | null;
+  client_uuid: string | null;
   provider: string | null;
   amount: number | null;
   currency: string | null;
