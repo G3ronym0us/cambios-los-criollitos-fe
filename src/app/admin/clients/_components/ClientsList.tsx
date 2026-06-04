@@ -12,8 +12,6 @@ interface ClientsListProps {
   loading: boolean;
   hasActiveFilters: boolean;
   onResetFilters: () => void;
-  onEdit: (client: ClientData) => void;
-  onToggleBlocked: (client: ClientData) => void;
 }
 
 export function ClientsList({
@@ -21,8 +19,6 @@ export function ClientsList({
   loading,
   hasActiveFilters,
   onResetFilters,
-  onEdit,
-  onToggleBlocked,
 }: ClientsListProps) {
   if (loading) {
     return <LoadingState label="Cargando clientes..." />;
@@ -53,12 +49,7 @@ export function ClientsList({
   return (
     <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
       {clients.map((client) => (
-        <ClientItem
-          key={client.uuid}
-          client={client}
-          onEdit={onEdit}
-          onToggleBlocked={onToggleBlocked}
-        />
+        <ClientItem key={client.uuid} client={client} />
       ))}
     </div>
   );

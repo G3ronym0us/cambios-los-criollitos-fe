@@ -4,7 +4,6 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { ClientsStats } from './_components/ClientsStats';
 import { ClientsFilters } from './_components/ClientsFilters';
 import { ClientsList } from './_components/ClientsList';
-import { ClientEditDialog } from './_components/ClientEditDialog';
 import { useClients } from './_hooks/useClients';
 
 export default function ClientsAdminPage() {
@@ -31,15 +30,6 @@ export default function ClientsAdminPage() {
         loading={state.loading}
         hasActiveFilters={state.hasActiveFilters}
         onResetFilters={actions.resetFilters}
-        onEdit={actions.openEdit}
-        onToggleBlocked={actions.handleToggleBlocked}
-      />
-
-      <ClientEditDialog
-        client={state.editing}
-        submitting={state.submitting}
-        onSubmit={actions.handleUpdate}
-        onCancel={actions.closeEdit}
       />
     </div>
   );

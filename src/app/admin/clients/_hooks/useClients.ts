@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { clientService } from '@/services/clientService';
-import { ClientData, ClientUpdate } from '@/types/client';
+import { ClientData } from '@/types/client';
 
 export type BoolFilter = 'ALL' | 'YES' | 'NO';
 
@@ -19,8 +19,6 @@ export function useClients() {
   const [clients, setClients] = useState<ClientData[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<ClientsFilters>(emptyFilters);
-  const [editing, setEditing] = useState<ClientData | null>(null);
-  const [submitting, setSubmitting] = useState(false);
 
   const loadClients = useCallback(async () => {
     setLoading(true);
@@ -63,51 +61,14 @@ export function useClients() {
     [clients]
   );
 
-  const openEdit = useCallback((client: ClientData) => setEditing(client), []);
-  const closeEdit = useCallback(() => setEditing(null), []);
-
-  const handleUpdate = useCallback(
-    async (data: ClientUpdate) => {
-      if (!editing) return;
-      setSubmitting(true);
-      const result = await clientService.updateClient(editing.uuid, data);
-      setSubmitting(false);
-      if (result.success) {
-        toast.success('Cliente actualizado correctamente');
-        closeEdit();
-        loadClients();
-      } else {
-        toast.error(result.error || 'Error al actualizar el cliente');
-      }
-    },
-    [editing, closeEdit, loadClients]
-  );
-
-  const handleToggleBlocked = useCallback(
-    async (client: ClientData) => {
-      const result = await clientService.updateClient(client.uuid, {
-        is_blocked: !client.is_blocked,
-      });
-      if (result.success) {
-        toast.success(client.is_blocked ? 'Cliente desbloqueado' : 'Cliente bloqueado');
-        loadClients();
-      } else {
-        toast.error(result.error || 'Error al actualizar el cliente');
-      }
-    },
-    [loadClients]
-  );
-
   return {
     state: {
       clients: filteredClients,
       loading,
       filters,
-      editing,
-      submitting,
       stats,
       hasActiveFilters,
     },
-    actions: { setFilters, resetFilters, openEdit, closeEdit, handleUpdate, handleToggleBlocked },
+    actions: { setFilters, resetFilters },
   };
 }
