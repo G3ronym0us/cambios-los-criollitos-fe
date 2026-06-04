@@ -22,6 +22,7 @@ import {
   FundMovementFilters,
   GroupBalance,
   MovementType,
+  UpdateFundGroup,
   UpdateFundMember,
 } from '@/types/fund';
 
@@ -66,11 +67,13 @@ export function useFunds() {
   const [movementFilters, setMovementFilters] = useState<FundMovementFilters>({});
 
   const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [showEditGroup, setShowEditGroup] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
   const [showEditMember, setShowEditMember] = useState(false);
   const [showRegisterMovement, setShowRegisterMovement] = useState(false);
 
   const [createGroupForm, setCreateGroupForm] = useState<CreateFundGroup>(emptyGroupForm);
+  const [editGroupForm, setEditGroupForm] = useState<UpdateFundGroup>({});
   const [addMemberForm, setAddMemberForm] = useState<AddFundMember>(emptyMemberForm);
   const [editMemberTarget, setEditMemberTarget] = useState<FundGroupMemberFlat | null>(null);
   const [editMemberForm, setEditMemberForm] = useState<UpdateFundMember>({});
@@ -224,6 +227,40 @@ export function useFunds() {
     if (result.success && result.data) setGroups(result.data);
   }, []);
 
+  const openEditGroup = useCallback(() => {
+    const g = groups.find((x) => x.uuid === selectedGroupUuid);
+    setEditGroupForm({ whatsapp_group_jid: g?.whatsapp_group_jid ?? null });
+    setFormError('');
+    setShowEditGroup(true);
+  }, [groups, selectedGroupUuid]);
+
+  const closeEditGroup = useCallback(() => {
+    setShowEditGroup(false);
+    setFormError('');
+  }, []);
+
+  const handleUpdateGroup = useCallback(async () => {
+    setFormError('');
+    const jid = (editGroupForm.whatsapp_group_jid ?? '').trim();
+    if (jid && !jid.endsWith('@g.us')) {
+      setFormError('El JID debe terminar en @g.us');
+      return;
+    }
+    setFormLoading(true);
+    const payload: UpdateFundGroup = jid
+      ? { whatsapp_group_jid: jid }
+      : { clear_whatsapp_group_jid: true };
+    const result = await fundService.updateGroup(selectedGroupUuid, payload);
+    setFormLoading(false);
+    if (result.success) {
+      closeEditGroup();
+      toast.success('Grupo actualizado correctamente');
+      await refreshGroups();
+    } else {
+      setFormError(result.error || 'Error al actualizar el grupo');
+    }
+  }, [editGroupForm, selectedGroupUuid, closeEditGroup, refreshGroups]);
+
   const handleAddMember = useCallback(async () => {
     setFormError('');
     if (!addMemberForm.user_uuid) {
@@ -349,6 +386,7 @@ export function useFunds() {
       availableUsers,
       availableCurrencies,
       availableClients,
+      selectedGroup,
       selectedGroupMembers,
       loadingGroups,
       loadingBalance,
@@ -360,10 +398,12 @@ export function useFunds() {
       movementFilters,
       hasActiveFilters,
       showCreateGroup,
+      showEditGroup,
       showAddMember,
       showEditMember,
       showRegisterMovement,
       createGroupForm,
+      editGroupForm,
       addMemberForm,
       editMemberTarget,
       editMemberForm,
@@ -378,6 +418,8 @@ export function useFunds() {
       setMovementsPage,
       openCreateGroup,
       closeCreateGroup,
+      openEditGroup,
+      closeEditGroup,
       openAddMember,
       closeAddMember,
       openEditMember,
@@ -385,10 +427,12 @@ export function useFunds() {
       openRegisterMovement,
       closeRegisterMovement,
       setCreateGroupForm,
+      setEditGroupForm,
       setAddMemberForm,
       setEditMemberForm,
       setMovementForm,
       handleCreateGroup,
+      handleUpdateGroup,
       handleAddMember,
       handleUpdateMember,
       handleRegisterMovement,

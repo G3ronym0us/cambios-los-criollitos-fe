@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { AddMemberDialog } from './_components/AddMemberDialog';
 import { BalanceCards } from './_components/BalanceCards';
 import { CreateGroupDialog } from './_components/CreateGroupDialog';
+import { EditGroupDialog } from './_components/EditGroupDialog';
 import { EditMemberDialog } from './_components/EditMemberDialog';
 import { GroupSelector } from './_components/GroupSelector';
 import { MemberPositionsList } from './_components/MemberPositionsList';
@@ -48,6 +49,7 @@ export default function FundsAdminPage() {
             isModeratorOrAbove={state.isModeratorOrAbove}
             onSelect={actions.setSelectedGroupUuid}
             onNewGroup={actions.openCreateGroup}
+            onEditGroup={actions.openEditGroup}
             onAddMember={actions.openAddMember}
             onRegisterMovement={actions.openRegisterMovement}
           />
@@ -98,6 +100,17 @@ export default function FundsAdminPage() {
         onChange={actions.setCreateGroupForm}
         onSubmit={actions.handleCreateGroup}
         onCancel={actions.closeCreateGroup}
+      />
+
+      <EditGroupDialog
+        open={state.showEditGroup}
+        group={state.selectedGroup ?? null}
+        value={state.editGroupForm}
+        error={state.formError}
+        submitting={state.formLoading}
+        onChange={actions.setEditGroupForm}
+        onSubmit={actions.handleUpdateGroup}
+        onCancel={actions.closeEditGroup}
       />
 
       <AddMemberDialog

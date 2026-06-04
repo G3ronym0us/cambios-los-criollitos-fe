@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus, UserPlus, Wallet } from 'lucide-react';
+import { Plus, UserPlus, Wallet, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -19,6 +19,7 @@ interface GroupSelectorProps {
   isModeratorOrAbove: boolean;
   onSelect: (uuid: string) => void;
   onNewGroup: () => void;
+  onEditGroup: () => void;
   onAddMember: () => void;
   onRegisterMovement: () => void;
 }
@@ -29,6 +30,7 @@ export function GroupSelector({
   isModeratorOrAbove,
   onSelect,
   onNewGroup,
+  onEditGroup,
   onAddMember,
   onRegisterMovement,
 }: GroupSelectorProps) {
@@ -64,6 +66,10 @@ export function GroupSelector({
             </Button>
             {selectedGroupUuid ? (
               <>
+                <Button variant="outline" size="lg" onClick={onEditGroup}>
+                  <Settings2 className="h-4 w-4" />
+                  Editar grupo
+                </Button>
                 <Button variant="outline" size="lg" onClick={onAddMember}>
                   <UserPlus className="h-4 w-4" />
                   Agregar miembro
