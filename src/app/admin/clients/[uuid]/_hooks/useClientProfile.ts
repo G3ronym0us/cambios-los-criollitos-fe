@@ -13,12 +13,10 @@ export function useClientProfile(uuid: string) {
   const [client, setClient] = useState<ClientData | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [operations, setOperations] = useState<OperationData[]>([]);
   const [operationsLoading, setOperationsLoading] = useState(true);
   const [pairs, setPairs] = useState<CurrencyPairData[]>([]);
-  const [savingPair, setSavingPair] = useState(false);
 
   // Carga las operaciones (transacciones) del cliente filtrando por su teléfono.
   const loadOperations = useCallback(async (phone: string) => {
@@ -46,60 +44,33 @@ export function useClientProfile(uuid: string) {
     load();
   }, [load]);
 
-  // Pares activos para el selector inline del par preferido.
+  // Pares activos para el selector del par preferido.
   useEffect(() => {
     adminService.getCurrencyPairs(0, 200, true).then((result) => {
       if (result.success && result.data) setPairs(result.data.pairs);
     });
   }, []);
 
-  const openEdit = useCallback(() => setEditing(true), []);
-  const closeEdit = useCallback(() => setEditing(false), []);
-
-  // Guarda el par preferido directo desde la ficha (sin abrir el diálogo).
-  const updatePreferredPair = useCallback(
-    async (pairUuid: string | null) => {
-      setSavingPair(true);
-      const result = await clientService.updateClient(uuid, { preferred_pair_uuid: pairUuid });
-      setSavingPair(false);
-      if (result.success && result.data) {
-        toast.success('Par por defecto actualizado');
-        setClient(result.data);
-      } else {
-        toast.error(result.error || 'Error al actualizar el par por defecto');
-      }
-    },
-    [uuid]
-  );
-
-  const handleUpdate = useCallback(
-    async (data: ClientUpdate) => {
-      setSubmitting(true);
+  // Updater genérico de cualquier campo del cliente (nombre, par, switches).
+  // Devuelve true si guardó, para que el caller cierre su drawer de confirmación.
+  const updateFields = useCallback(
+    async (data: ClientUpdate, successMessage = 'Cliente actualizado'): Promise<boolean> => {
+      setSaving(true);
       const result = await clientService.updateClient(uuid, data);
-      setSubmitting(false);
+      setSaving(false);
       if (result.success && result.data) {
-        toast.success('Cliente actualizado correctamente');
+        toast.success(successMessage);
         setClient(result.data);
-        setEditing(false);
-      } else {
-        toast.error(result.error || 'Error al actualizar el cliente');
+        return true;
       }
+      toast.error(result.error || 'Error al actualizar el cliente');
+      return false;
     },
     [uuid]
   );
 
   return {
-    state: {
-      client,
-      loading,
-      notFound,
-      editing,
-      submitting,
-      operations,
-      operationsLoading,
-      pairs,
-      savingPair,
-    },
-    actions: { openEdit, closeEdit, handleUpdate, updatePreferredPair, reload: load },
+    state: { client, loading, notFound, saving, operations, operationsLoading, pairs },
+    actions: { updateFields, reload: load },
   };
 }
