@@ -7,8 +7,10 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { AddMemberDialog } from './_components/AddMemberDialog';
 import { BalanceCards } from './_components/BalanceCards';
 import { CreateGroupDialog } from './_components/CreateGroupDialog';
+import { EditMemberDialog } from './_components/EditMemberDialog';
 import { GroupSelector } from './_components/GroupSelector';
 import { MemberPositionsList } from './_components/MemberPositionsList';
+import { MembersList } from './_components/MembersList';
 import { MovementsFilters } from './_components/MovementsFilters';
 import { MovementsList } from './_components/MovementsList';
 import { RegisterMovementDialog } from './_components/RegisterMovementDialog';
@@ -58,6 +60,12 @@ export default function FundsAdminPage() {
 
           {state.isModeratorOrAbove ? (
             <>
+              <MembersList
+                members={state.selectedGroupMembers}
+                canEdit={state.isModeratorOrAbove}
+                onEdit={actions.openEditMember}
+              />
+
               <MovementsFilters
                 filters={state.movementFilters}
                 hasActiveFilters={state.hasActiveFilters}
@@ -102,6 +110,18 @@ export default function FundsAdminPage() {
         onChange={actions.setAddMemberForm}
         onSubmit={actions.handleAddMember}
         onCancel={actions.closeAddMember}
+      />
+
+      <EditMemberDialog
+        open={state.showEditMember}
+        member={state.editMemberTarget}
+        value={state.editMemberForm}
+        availableClients={state.availableClients}
+        error={state.formError}
+        submitting={state.formLoading}
+        onChange={actions.setEditMemberForm}
+        onSubmit={actions.handleUpdateMember}
+        onCancel={actions.closeEditMember}
       />
 
       <RegisterMovementDialog

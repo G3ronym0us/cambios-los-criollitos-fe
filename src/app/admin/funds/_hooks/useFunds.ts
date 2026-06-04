@@ -17,10 +17,12 @@ import {
   CreateFundGroup,
   CreateFundMovement,
   FundGroup,
+  FundGroupMemberFlat,
   FundMovement,
   FundMovementFilters,
   GroupBalance,
   MovementType,
+  UpdateFundMember,
 } from '@/types/fund';
 
 const MOVEMENTS_PER_PAGE = 50;
@@ -65,10 +67,13 @@ export function useFunds() {
 
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
+  const [showEditMember, setShowEditMember] = useState(false);
   const [showRegisterMovement, setShowRegisterMovement] = useState(false);
 
   const [createGroupForm, setCreateGroupForm] = useState<CreateFundGroup>(emptyGroupForm);
   const [addMemberForm, setAddMemberForm] = useState<AddFundMember>(emptyMemberForm);
+  const [editMemberTarget, setEditMemberTarget] = useState<FundGroupMemberFlat | null>(null);
+  const [editMemberForm, setEditMemberForm] = useState<UpdateFundMember>({});
   const [movementForm, setMovementForm] =
     useState<Omit<CreateFundMovement, 'group_uuid'>>(emptyMovementForm);
 
@@ -212,6 +217,13 @@ export function useFunds() {
     }
   }, [createGroupForm, closeCreateGroup]);
 
+  // Re-fetch ligero de grupos (sin toggle de loadingGroups) para refrescar la lista de
+  // miembros tras agregar/editar, conservando el grupo seleccionado.
+  const refreshGroups = useCallback(async () => {
+    const result = await fundService.getGroups();
+    if (result.success && result.data) setGroups(result.data);
+  }, []);
+
   const handleAddMember = useCallback(async () => {
     setFormError('');
     if (!addMemberForm.user_uuid) {
@@ -224,11 +236,52 @@ export function useFunds() {
     if (result.success) {
       closeAddMember();
       toast.success('Miembro agregado correctamente');
+      refreshGroups();
       loadGroupData();
     } else {
       setFormError(result.error || 'Error al agregar miembro');
     }
-  }, [addMemberForm, selectedGroupUuid, closeAddMember, loadGroupData]);
+  }, [addMemberForm, selectedGroupUuid, closeAddMember, loadGroupData, refreshGroups]);
+
+  const openEditMember = useCallback((member: FundGroupMemberFlat) => {
+    setEditMemberTarget(member);
+    setEditMemberForm({
+      is_fund_manager: member.is_fund_manager,
+      whatsapp_phone: member.whatsapp_phone ?? null,
+    });
+    setFormError('');
+    setShowEditMember(true);
+  }, []);
+
+  const closeEditMember = useCallback(() => {
+    setShowEditMember(false);
+    setEditMemberTarget(null);
+    setFormError('');
+  }, []);
+
+  const handleUpdateMember = useCallback(async () => {
+    if (!editMemberTarget) return;
+    setFormError('');
+    setFormLoading(true);
+    const phone = (editMemberForm.whatsapp_phone ?? '').trim() || null;
+    const payload: UpdateFundMember = {
+      is_fund_manager: editMemberForm.is_fund_manager,
+      ...(phone ? { whatsapp_phone: phone } : { clear_whatsapp_phone: true }),
+    };
+    const result = await fundService.updateMember(
+      selectedGroupUuid,
+      editMemberTarget.user_uuid,
+      payload,
+    );
+    setFormLoading(false);
+    if (result.success) {
+      closeEditMember();
+      toast.success('Miembro actualizado correctamente');
+      await refreshGroups();
+    } else {
+      setFormError(result.error || 'Error al actualizar miembro');
+    }
+  }, [editMemberTarget, editMemberForm, selectedGroupUuid, closeEditMember, refreshGroups]);
 
   const handleRegisterMovement = useCallback(async () => {
     setFormError('');
@@ -282,6 +335,9 @@ export function useFunds() {
     !!movementFilters.date_from ||
     !!movementFilters.date_to;
 
+  const selectedGroup = groups.find((g) => g.uuid === selectedGroupUuid);
+  const selectedGroupMembers = selectedGroup?.members ?? [];
+
   return {
     state: {
       isModeratorOrAbove,
@@ -293,6 +349,7 @@ export function useFunds() {
       availableUsers,
       availableCurrencies,
       availableClients,
+      selectedGroupMembers,
       loadingGroups,
       loadingBalance,
       loadingMovements,
@@ -304,9 +361,12 @@ export function useFunds() {
       hasActiveFilters,
       showCreateGroup,
       showAddMember,
+      showEditMember,
       showRegisterMovement,
       createGroupForm,
       addMemberForm,
+      editMemberTarget,
+      editMemberForm,
       movementForm,
       formError,
       formLoading,
@@ -320,13 +380,17 @@ export function useFunds() {
       closeCreateGroup,
       openAddMember,
       closeAddMember,
+      openEditMember,
+      closeEditMember,
       openRegisterMovement,
       closeRegisterMovement,
       setCreateGroupForm,
       setAddMemberForm,
+      setEditMemberForm,
       setMovementForm,
       handleCreateGroup,
       handleAddMember,
+      handleUpdateMember,
       handleRegisterMovement,
       handleDeleteMovement,
       getUserDisplayName,
