@@ -144,7 +144,13 @@ export function ClientEditDialog({ client, submitting, onSubmit, onCancel }: Cli
               onValueChange={(v) => setValue('preferred_pair_uuid', v ?? NO_PAIR)}
             >
               <SelectTrigger id="client-pair" className="h-11 w-full">
-                <SelectValue placeholder="Sin par preferido" />
+                <SelectValue placeholder="Sin par preferido">
+                  {(value: string | null) => {
+                    if (!value || value === NO_PAIR) return 'Sin par preferido';
+                    const match = pairs.find((p) => p.uuid === value);
+                    return match?.pair_symbol ?? client.preferred_pair_symbol ?? value;
+                  }}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={NO_PAIR}>Sin par preferido</SelectItem>
