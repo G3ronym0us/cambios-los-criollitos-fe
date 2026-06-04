@@ -54,8 +54,9 @@ export function useFunds() {
   const [movements, setMovements] = useState<FundMovement[]>([]);
   const [availableUsers, setAvailableUsers] = useState<CommissionUserResponse[]>([]);
   const [availableCurrencies, setAvailableCurrencies] = useState<CurrencyData[]>([]);
-  // Clientes del bot, para autocompletar el número de WhatsApp del socio en "Agregar miembro".
-  const [availableClients, setAvailableClients] = useState<ClientData[]>([]);
+  // Clientes del bot (todos). Se derivan dos listas: personas (para el número del socio) y
+  // grupos @g.us (para el JID del grupo).
+  const [clients, setClients] = useState<ClientData[]>([]);
 
   const [loadingGroups, setLoadingGroups] = useState(true);
   const [loadingBalance, setLoadingBalance] = useState(false);
@@ -111,10 +112,7 @@ export function useFunds() {
 
     const loadClients = async () => {
       const result = await clientService.getClients({ limit: 500 });
-      if (result.success && result.data) {
-        // Excluir grupos (@g.us): un socio es una persona, no un grupo de WhatsApp.
-        setAvailableClients((result.data.items || []).filter((c) => !c.phone.endsWith('@g.us')));
-      }
+      if (result.success && result.data) setClients(result.data.items || []);
     };
 
     loadGroups();
@@ -374,6 +372,9 @@ export function useFunds() {
 
   const selectedGroup = groups.find((g) => g.uuid === selectedGroupUuid);
   const selectedGroupMembers = selectedGroup?.members ?? [];
+  // Personas (para el número del socio) vs grupos @g.us (para el JID del grupo).
+  const availableClients = clients.filter((c) => !c.phone.endsWith('@g.us'));
+  const availableGroupClients = clients.filter((c) => c.phone.endsWith('@g.us'));
 
   return {
     state: {
@@ -386,6 +387,7 @@ export function useFunds() {
       availableUsers,
       availableCurrencies,
       availableClients,
+      availableGroupClients,
       selectedGroup,
       selectedGroupMembers,
       loadingGroups,

@@ -106,6 +106,7 @@ export default function FundsAdminPage() {
         open={state.showEditGroup}
         group={state.selectedGroup ?? null}
         value={state.editGroupForm}
+        groupClients={state.availableGroupClients}
         error={state.formError}
         submitting={state.formLoading}
         onChange={actions.setEditGroupForm}
