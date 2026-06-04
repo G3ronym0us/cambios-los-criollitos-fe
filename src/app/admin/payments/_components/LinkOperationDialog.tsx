@@ -85,9 +85,24 @@ export function LinkOperationDialog({ payment, table, onClose, onLinked }: LinkO
 
     let list: OperationData[];
     if (isGroup) {
-      list = matchedGroup
-        ? operations.filter((op) => op.fund_group_uuid === matchedGroup.uuid)
-        : [];
+      if (matchedGroup) {
+        // Ops del grupo: las etiquetadas con el fund_group, o las de sus miembros
+        // (recibidas por un miembro, o cuyo cliente es el número de un miembro/socio).
+        const memberUserUuids = new Set((matchedGroup.members ?? []).map((m) => m.user_uuid));
+        const memberPhones = new Set(
+          (matchedGroup.members ?? [])
+            .map((m) => stripPhone(m.whatsapp_phone ?? null).replace(/\D/g, ''))
+            .filter(Boolean),
+        );
+        list = operations.filter(
+          (op) =>
+            op.fund_group_uuid === matchedGroup.uuid ||
+            (op.received_by_user_uuid && memberUserUuids.has(op.received_by_user_uuid)) ||
+            (op.client_phone && memberPhones.has(stripPhone(op.client_phone).replace(/\D/g, ''))),
+        );
+      } else {
+        list = [];
+      }
     } else {
       list = operations.filter(
         (op) =>
