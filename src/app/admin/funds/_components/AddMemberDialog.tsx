@@ -22,11 +22,13 @@ import {
 import { Switch } from '@/components/ui/switch';
 import type { CommissionUserResponse } from '@/types/user';
 import type { AddFundMember } from '@/types/fund';
+import type { ClientData } from '@/types/client';
 
 interface AddMemberDialogProps {
   open: boolean;
   value: AddFundMember;
   availableUsers: CommissionUserResponse[];
+  availableClients: ClientData[];
   error: string;
   submitting: boolean;
   onChange: (value: AddFundMember) => void;
@@ -34,10 +36,13 @@ interface AddMemberDialogProps {
   onCancel: () => void;
 }
 
+const onlyDigits = (s: string) => s.replace(/\D/g, '');
+
 export function AddMemberDialog({
   open,
   value,
   availableUsers,
+  availableClients,
   error,
   submitting,
   onChange,
@@ -48,6 +53,13 @@ export function AddMemberDialog({
     e.preventDefault();
     onSubmit();
   };
+
+  // El Select de clientes refleja el cliente cuyo teléfono coincide con el número actual.
+  const phoneDigits = onlyDigits(value.whatsapp_phone ?? '');
+  const selectedClient =
+    phoneDigits !== ''
+      ? availableClients.find((c) => onlyDigits(c.phone) === phoneDigits)
+      : undefined;
 
   return (
     <Dialog
@@ -101,15 +113,39 @@ export function AddMemberDialog({
 
           <div className="space-y-1.5">
             <Label htmlFor="member-whatsapp">Número de WhatsApp del socio</Label>
+
+            {availableClients.length > 0 ? (
+              <Select
+                value={selectedClient?.uuid ?? ''}
+                onValueChange={(uuid) => {
+                  const client = availableClients.find((c) => c.uuid === uuid);
+                  if (client) onChange({ ...value, whatsapp_phone: onlyDigits(client.phone) });
+                }}
+              >
+                <SelectTrigger id="member-client" className="h-10 w-full">
+                  <SelectValue placeholder="Elegir de la lista de clientes..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableClients.map((c) => (
+                    <SelectItem key={c.uuid} value={c.uuid}>
+                      {c.display_name ? `${c.display_name} — ${c.phone}` : c.phone}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
+
             <Input
               id="member-whatsapp"
               value={value.whatsapp_phone ?? ''}
-              onChange={(e) => onChange({ ...value, whatsapp_phone: e.target.value || null })}
+              onChange={(e) =>
+                onChange({ ...value, whatsapp_phone: e.target.value ? onlyDigits(e.target.value) : null })
+              }
               placeholder="Ej: 584240000001"
               className="h-10"
             />
             <p className="text-xs text-muted-foreground">
-              Opcional. Si se define, el bot detecta automáticamente los cambios reportados por este socio (escenario vía socio).
+              Opcional. Elígelo de la lista de clientes o escríbelo. Si se define, el bot detecta automáticamente los cambios reportados por este socio (escenario vía socio).
             </p>
           </div>
 

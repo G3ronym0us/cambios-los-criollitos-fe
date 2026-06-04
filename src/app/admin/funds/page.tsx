@@ -96,6 +96,7 @@ export default function FundsAdminPage() {
         open={state.showAddMember}
         value={state.addMemberForm}
         availableUsers={state.availableUsers}
+        availableClients={state.availableClients}
         error={state.formError}
         submitting={state.formLoading}
         onChange={actions.setAddMemberForm}

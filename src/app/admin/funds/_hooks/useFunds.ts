@@ -6,10 +6,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { fundService } from '@/services/fundService';
 import { userService } from '@/services/userService';
 import { adminService } from '@/services/adminService';
+import { clientService } from '@/services/clientService';
 import { useConfirm } from '@/hooks/useConfirm';
 import { Role } from '@/utils/enums';
 import { CurrencyData } from '@/types/admin';
 import { CommissionUserResponse } from '@/types/user';
+import { ClientData } from '@/types/client';
 import {
   AddFundMember,
   CreateFundGroup,
@@ -49,6 +51,8 @@ export function useFunds() {
   const [movements, setMovements] = useState<FundMovement[]>([]);
   const [availableUsers, setAvailableUsers] = useState<CommissionUserResponse[]>([]);
   const [availableCurrencies, setAvailableCurrencies] = useState<CurrencyData[]>([]);
+  // Clientes del bot, para autocompletar el número de WhatsApp del socio en "Agregar miembro".
+  const [availableClients, setAvailableClients] = useState<ClientData[]>([]);
 
   const [loadingGroups, setLoadingGroups] = useState(true);
   const [loadingBalance, setLoadingBalance] = useState(false);
@@ -97,9 +101,18 @@ export function useFunds() {
       if (result.success && result.data) setAvailableCurrencies(result.data.currencies);
     };
 
+    const loadClients = async () => {
+      const result = await clientService.getClients({ limit: 500 });
+      if (result.success && result.data) {
+        // Excluir grupos (@g.us): un socio es una persona, no un grupo de WhatsApp.
+        setAvailableClients((result.data.items || []).filter((c) => !c.phone.endsWith('@g.us')));
+      }
+    };
+
     loadGroups();
     loadUsers();
     loadCurrencies();
+    loadClients();
   }, []);
 
   // Load balance and movements when selected group / filters / page change
@@ -279,6 +292,7 @@ export function useFunds() {
       movements,
       availableUsers,
       availableCurrencies,
+      availableClients,
       loadingGroups,
       loadingBalance,
       loadingMovements,
