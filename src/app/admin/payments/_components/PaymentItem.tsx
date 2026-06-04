@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { Banknote, FileText, Forward, Link2, Link2Off, Tag, Wallet } from 'lucide-react';
+import { Banknote, Eye, FileText, Forward, Link2, Link2Off, Tag, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { getStatusMeta } from '@/utils/operationStatus';
 import { formatNumber } from '@/utils/functions';
 import type { PaymentData } from '@/types/payment';
 
@@ -13,6 +14,7 @@ interface PaymentItemProps {
   outgoing: boolean;
   onLink?: (payment: PaymentData) => void;
   onViewRawText?: (payment: PaymentData) => void;
+  onViewOperation?: (operationUuid: string) => void;
 }
 
 function formatDate(value: string | null) {
@@ -25,12 +27,13 @@ function formatDate(value: string | null) {
   });
 }
 
-export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText }: PaymentItemProps) {
+export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText, onViewOperation }: PaymentItemProps) {
   const client = p.client_name || p.client_phone?.replace(/@(c|g)\.us$/, '') || 'Sin identificar';
   const created = formatDate(p.created_at);
   const bank = p.bank_to || p.bank_from || p.provider;
   const personal = !!p.is_personal_expense;
   const irrelevant = !!p.is_irrelevant;
+  const opMeta = getStatusMeta(p.operation_status);
 
   return (
     <Card className="overflow-hidden transition-shadow hover:shadow-md">
@@ -75,7 +78,7 @@ export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText }: Pay
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
             {p.operation_uuid ? (
-              <StatusBadge tone="info" icon={Link2}>Vinculado</StatusBadge>
+              <StatusBadge tone={opMeta.tone} icon={opMeta.icon}>{opMeta.label}</StatusBadge>
             ) : (
               <StatusBadge tone="neutral" icon={Link2Off}>Sin vincular</StatusBadge>
             )}
@@ -99,6 +102,17 @@ export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText }: Pay
               >
                 <FileText className="h-3.5 w-3.5" />
                 Ver texto
+              </Button>
+            ) : null}
+            {onViewOperation && p.operation_uuid ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={() => onViewOperation(p.operation_uuid!)}
+              >
+                <Eye className="h-3.5 w-3.5" />
+                Ver
               </Button>
             ) : null}
             {onLink ? (

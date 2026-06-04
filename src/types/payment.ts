@@ -1,6 +1,8 @@
 // Pagos del bot (whatsapp_incoming_payments / whatsapp_outgoing_payments),
 // extraídos de comprobantes por OCR. Vienen como dict del backend (list_payments).
 
+import type { OperationStatus } from '@/types/operation';
+
 export type PaymentTable = 'incoming' | 'outgoing';
 
 export interface PaymentData {
@@ -20,6 +22,8 @@ export interface PaymentData {
   reference: string | null;
   raw_text: string | null;
   operation_uuid: string | null;
+  // Estado de la operación vinculada (si la hay), inyectado por list_payments.
+  operation_status?: OperationStatus | null;
   corrected_at: string | null;
   correction_original: string | null;
   created_at: string | null;

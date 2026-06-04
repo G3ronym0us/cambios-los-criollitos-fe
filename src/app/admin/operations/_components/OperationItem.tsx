@@ -2,29 +2,24 @@
 
 import {
   ArrowRight,
-  CheckCircle2,
-  Clock,
-  FileText,
   Handshake,
   PackageCheck,
   Pencil,
   Send,
   Truck,
   Users,
-  XCircle,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/shared/StatusBadge';
-import type { OperationData, OperationScenario, OperationStatus } from '@/types/operation';
+import { getStatusMeta } from '@/utils/operationStatus';
+import type { OperationData, OperationScenario } from '@/types/operation';
 
 interface OperationItemProps {
   operation: OperationData;
   onEdit?: (operation: OperationData) => void;
 }
-
-type StatusMeta = { label: string; tone: 'info' | 'warning' | 'success' | 'destructive'; icon: LucideIcon };
 
 type ScenarioMeta = { label: string; tone: 'neutral' | 'primary' | 'info'; icon: LucideIcon };
 
@@ -37,19 +32,6 @@ function getScenarioMeta(scenario: OperationScenario): ScenarioMeta | null {
     case 'NORMAL':
     default:
       return null;
-  }
-}
-
-function getStatusMeta(status: OperationStatus): StatusMeta {
-  switch (status) {
-    case 'QUOTED':
-      return { label: 'Cotizada', tone: 'info', icon: FileText };
-    case 'PENDING':
-      return { label: 'Pendiente', tone: 'warning', icon: Clock };
-    case 'COMPLETED':
-      return { label: 'Completada', tone: 'success', icon: CheckCircle2 };
-    case 'CANCELLED':
-      return { label: 'Cancelada', tone: 'destructive', icon: XCircle };
   }
 }
 

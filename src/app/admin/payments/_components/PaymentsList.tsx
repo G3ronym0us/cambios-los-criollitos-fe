@@ -15,6 +15,7 @@ interface PaymentsListProps {
   onResetFilters: () => void;
   onLink?: (payment: PaymentData) => void;
   onViewRawText?: (payment: PaymentData) => void;
+  onViewOperation?: (operationUuid: string) => void;
 }
 
 export function PaymentsList({
@@ -25,6 +26,7 @@ export function PaymentsList({
   onResetFilters,
   onLink,
   onViewRawText,
+  onViewOperation,
 }: PaymentsListProps) {
   if (loading) {
     return <LoadingState label="Cargando pagos..." />;
@@ -61,6 +63,7 @@ export function PaymentsList({
           outgoing={outgoing}
           onLink={onLink}
           onViewRawText={onViewRawText}
+          onViewOperation={onViewOperation}
         />
       ))}
     </div>

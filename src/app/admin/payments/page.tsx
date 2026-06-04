@@ -8,12 +8,14 @@ import { PaymentsFilters } from './_components/PaymentsFilters';
 import { PaymentsList } from './_components/PaymentsList';
 import { LinkOperationDialog } from './_components/LinkOperationDialog';
 import { PaymentRawTextDialog } from './_components/PaymentRawTextDialog';
+import { OperationDetailDialog } from './_components/OperationDetailDialog';
 import { usePayments } from './_hooks/usePayments';
 
 export default function PaymentsAdminPage() {
   const { state, actions } = usePayments();
   const [linking, setLinking] = useState<PaymentData | null>(null);
   const [viewingRawText, setViewingRawText] = useState<PaymentData | null>(null);
+  const [viewingOperation, setViewingOperation] = useState<string | null>(null);
 
   return (
     <div className="space-y-6">
@@ -46,6 +48,7 @@ export default function PaymentsAdminPage() {
             onResetFilters={actions.resetFilters}
             onLink={setLinking}
             onViewRawText={setViewingRawText}
+            onViewOperation={setViewingOperation}
           />
         </TabsContent>
 
@@ -67,6 +70,7 @@ export default function PaymentsAdminPage() {
             onResetFilters={actions.resetFilters}
             onLink={setLinking}
             onViewRawText={setViewingRawText}
+            onViewOperation={setViewingOperation}
           />
         </TabsContent>
       </Tabs>
@@ -81,6 +85,11 @@ export default function PaymentsAdminPage() {
       <PaymentRawTextDialog
         payment={viewingRawText}
         onClose={() => setViewingRawText(null)}
+      />
+
+      <OperationDetailDialog
+        operationUuid={viewingOperation}
+        onClose={() => setViewingOperation(null)}
       />
     </div>
   );
