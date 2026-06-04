@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Link2Off, Search } from 'lucide-react';
+import { Link2Off, Search, Globe, Users, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -16,8 +16,10 @@ import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { operationService } from '@/services/operationService';
 import { paymentService } from '@/services/paymentService';
+import { fundService } from '@/services/fundService';
 import { formatNumber } from '@/utils/functions';
 import type { OperationData } from '@/types/operation';
+import type { FundGroup } from '@/types/fund';
 import type { PaymentData, PaymentTable } from '@/types/payment';
 
 interface LinkOperationDialogProps {
@@ -31,35 +33,81 @@ function stripPhone(phone: string | null) {
   return (phone || '').replace(/@(c|g)\.us$/, '');
 }
 
+function samePhone(a: string | null, b: string | null) {
+  const na = stripPhone(a).replace(/\D/g, '');
+  const nb = stripPhone(b).replace(/\D/g, '');
+  return na !== '' && na === nb;
+}
+
+type Scope = 'auto' | 'global';
+
 export function LinkOperationDialog({ payment, table, onClose, onLinked }: LinkOperationDialogProps) {
   const [operations, setOperations] = useState<OperationData[]>([]);
+  const [groups, setGroups] = useState<FundGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [scope, setScope] = useState<Scope>('auto');
   const [selected, setSelected] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!payment) return;
     setSelected(payment.operation_uuid);
-    setSearch(stripPhone(payment.client_phone));
+    setSearch('');
+    setScope('auto');
     let active = true;
     setLoading(true);
-    operationService.getOperations({ limit: 500 }).then((res) => {
-      if (!active) return;
-      if (res.success && res.data) setOperations(res.data.operations || []);
-      else toast.error(res.error || 'No se pudieron cargar las operaciones');
-      setLoading(false);
-    });
+    Promise.all([operationService.getOperations({ limit: 500 }), fundService.getGroups()]).then(
+      ([opsRes, groupsRes]) => {
+        if (!active) return;
+        if (opsRes.success && opsRes.data) setOperations(opsRes.data.operations || []);
+        else toast.error(opsRes.error || 'No se pudieron cargar las operaciones');
+        if (groupsRes.success && groupsRes.data) setGroups(groupsRes.data);
+        setLoading(false);
+      },
+    );
     return () => {
       active = false;
     };
   }, [payment]);
 
+  const isGroup = (payment?.client_phone || '').endsWith('@g.us');
+  const matchedGroup = useMemo(
+    () => (isGroup ? groups.find((g) => g.whatsapp_group_jid === payment?.client_phone) : undefined),
+    [isGroup, groups, payment?.client_phone],
+  );
+
+  // Operaciones según el alcance: por defecto las del cliente (o las del grupo si el pago es
+  // a un grupo); con "Ver todas" se muestran todas. La operación ya vinculada siempre se incluye.
+  const scoped = useMemo(() => {
+    if (!payment) return [];
+    if (scope === 'global') return operations;
+
+    let list: OperationData[];
+    if (isGroup) {
+      list = matchedGroup
+        ? operations.filter((op) => op.fund_group_uuid === matchedGroup.uuid)
+        : [];
+    } else {
+      list = operations.filter(
+        (op) =>
+          (payment.client_uuid && op.client_uuid === payment.client_uuid) ||
+          samePhone(op.client_phone, payment.client_phone),
+      );
+    }
+
+    if (payment.operation_uuid && !list.some((op) => op.uuid === payment.operation_uuid)) {
+      const linked = operations.find((op) => op.uuid === payment.operation_uuid);
+      if (linked) list = [linked, ...list];
+    }
+    return list;
+  }, [payment, operations, scope, isGroup, matchedGroup]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = !q
-      ? operations
-      : operations.filter((op) => {
+      ? scoped
+      : scoped.filter((op) => {
           const amounts = `${op.from_amount} ${op.to_amount}`;
           return (
             (op.client_display_name || '').toLowerCase().includes(q) ||
@@ -70,7 +118,18 @@ export function LinkOperationDialog({ payment, table, onClose, onLinked }: LinkO
           );
         });
     return list.slice(0, 60);
-  }, [operations, search]);
+  }, [scoped, search]);
+
+  const scopeLabel = (() => {
+    if (scope === 'global') return 'Todas las operaciones';
+    if (isGroup) {
+      return matchedGroup
+        ? `Cotizaciones del grupo ${matchedGroup.name}`
+        : 'Grupo no reconocido — usa "Ver todas"';
+    }
+    const who = payment?.client_name || stripPhone(payment?.client_phone ?? null) || 'cliente';
+    return `Cotizaciones de ${who}`;
+  })();
 
   const doLink = async (operationUuid: string | null) => {
     if (!payment) return;
@@ -107,11 +166,46 @@ export function LinkOperationDialog({ payment, table, onClose, onLinked }: LinkO
           />
         </div>
 
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+            {scope === 'global' ? (
+              <Globe className="h-3.5 w-3.5 shrink-0" />
+            ) : isGroup ? (
+              <Users className="h-3.5 w-3.5 shrink-0" />
+            ) : (
+              <UserRound className="h-3.5 w-3.5 shrink-0" />
+            )}
+            <span className="truncate">{scopeLabel}</span>
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="shrink-0"
+            onClick={() => setScope((s) => (s === 'global' ? 'auto' : 'global'))}
+          >
+            {scope === 'global' ? (
+              <>
+                <UserRound className="h-4 w-4" />
+                {isGroup ? 'Solo del grupo' : 'Solo del cliente'}
+              </>
+            ) : (
+              <>
+                <Globe className="h-4 w-4" />
+                Ver todas
+              </>
+            )}
+          </Button>
+        </div>
+
         <div className="-mx-1 flex-1 space-y-2 overflow-y-auto px-1 py-1">
           {loading ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Cargando operaciones…</p>
           ) : filtered.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">Sin operaciones que coincidan.</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              {scope === 'global'
+                ? 'Sin operaciones que coincidan.'
+                : 'Sin cotizaciones en este alcance. Prueba "Ver todas".'}
+            </p>
           ) : (
             filtered.map((op) => {
               const isSel = selected === op.uuid;
