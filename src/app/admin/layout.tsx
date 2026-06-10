@@ -20,18 +20,19 @@ import {
   Menu,
   X,
   LogOut,
-  Home,
   Bell,
+  Calculator,
 } from 'lucide-react';
 import { Role } from '@/utils/enums';
 import NotificationBell from '@/components/admin/NotificationBell';
 import { ConfirmProvider } from '@/hooks/useConfirm';
 import { ThemeToggle } from '@/components/shared/ThemeToggle';
 import { LoadingState } from '@/components/shared/LoadingState';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const navigation = [
+  { name: 'Calculadora', href: '/', icon: Calculator },
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { name: 'Monedas', href: '/admin/currencies', icon: Coins },
   { name: 'Pares de Monedas', href: '/admin/currency-pairs', icon: ArrowLeftRight },
@@ -153,14 +154,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   <p className="truncate text-xs text-muted-foreground">{user.role}</p>
                 </div>
               </div>
-
-              <Link
-                href="/"
-                className={cn(buttonVariants({ variant: 'ghost', size: 'lg' }), 'w-full justify-start')}
-              >
-                <Home className="h-4 w-4" />
-                Ir al Inicio
-              </Link>
 
               <Button
                 variant="destructive"
