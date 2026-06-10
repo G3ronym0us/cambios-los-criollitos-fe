@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { AlertsStats } from './_components/AlertsStats';
 import { AlertsFilters } from './_components/AlertsFilters';
 import { AlertsList } from './_components/AlertsList';
+import { PushToggle } from './_components/PushToggle';
 import { useAlerts } from './_hooks/useAlerts';
 
 export default function AlertsAdminPage() {
@@ -14,6 +15,7 @@ export default function AlertsAdminPage() {
       <PageHeader
         title="Alertas de divergencia"
         description="Divergencias detectadas entre la tasa manual y la tasa automática."
+        actions={<PushToggle />}
       />
 
       <AlertsStats stats={state.stats} />
