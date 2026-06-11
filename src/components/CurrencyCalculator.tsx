@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { TrendingUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import CurrencySelector from "./CurrencySelector";
 import CurrencyInputFields from "./CurrencyInputFields";
 import ShareableQuoteCard from "./ShareableQuoteCard";
 import BCVService from "../services/bcvService";
 import { adminService } from "../services/adminService";
+import { getCurrencyName } from "../utils/currencyConfig";
 import { Role } from "../utils/enums";
 
 interface Rate {
@@ -14,14 +17,6 @@ interface Rate {
   percentage?: number | null;
   inverse_percentage: boolean;
   currency_pair_uuid?: string;
-}
-
-interface CurrencyConfig {
-  [key: string]: {
-    name: string;
-    symbol: string;
-    color: string;
-  };
 }
 
 interface CurrencyCalculatorProps {
@@ -117,16 +112,6 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
     return roundToDecimals(vesAmount / activeRate, 2);
   };
 
-  // Configuración de monedas
-  const currencyConfig: CurrencyConfig = {
-    USDT: { name: "USDT", symbol: "$", color: "bg-green-500" },
-    VES: { name: "Bolívares", symbol: "Bs", color: "bg-yellow-500" },
-    COP: { name: "Pesos COP", symbol: "COL$", color: "bg-blue-500" },
-    BRL: { name: "Reales", symbol: "R$", color: "bg-purple-500" },
-    ZELLE: { name: "Zelle", symbol: "$", color: "bg-indigo-500" },
-    PAYPAL: { name: "PayPal", symbol: "$", color: "bg-cyan-500" },
-  };
-
   // Obtener monedas disponibles
   const getAvailableCurrencies = () => {
     const currencies = new Set<string>();
@@ -145,12 +130,12 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
     toAmount?: number,
     bcvValue?: number
   ) => {
-    console.log(fromCurrency, toCurrency, fromAmount, toAmount, bcvValue);
-
     // Limpiar estado si no hay montos proporcionados
     if (!fromAmount && !toAmount) {
       setCalculator((prev) => ({
         ...prev,
+        fromCurrency,
+        toCurrency,
         result: null,
         rate: null,
         amount: undefined,
@@ -165,10 +150,12 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
         rate.from_currency === fromCurrency && rate.to_currency === toCurrency
     );
 
-    // Si no se encuentra tasa, limpiar resultado
+    // Si no se encuentra tasa, reflejar igual el par elegido y limpiar resultado
     if (!directRate) {
       setCalculator((prev) => ({
         ...prev,
+        fromCurrency,
+        toCurrency,
         result: null,
         rate: null,
       }));
@@ -241,9 +228,11 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
   }, [bcvService]);
 
   const firstCalculation = useCallback(() => {
-    const directRate = rates.find(
-      (rate) => rate.from_currency === "ZELLE" && rate.to_currency === "VES"
-    );
+    // Par por defecto ZELLE→VES; si no existe, cae a la primera tasa disponible.
+    const directRate =
+      rates.find(
+        (rate) => rate.from_currency === "ZELLE" && rate.to_currency === "VES"
+      ) ?? rates[0];
 
     if (directRate) {
       const result = directRate.inverse_percentage
@@ -251,8 +240,8 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
         : 1 * directRate.rate;
       setCalculator((prev) => ({
         ...prev,
-        fromCurrency: "ZELLE",
-        toCurrency: "VES",
+        fromCurrency: directRate.from_currency,
+        toCurrency: directRate.to_currency,
         amount: 1,
         result: result,
         rate: directRate.rate,
@@ -267,18 +256,13 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
     }
   }, [firstCalculation, rates]);
 
-  // Función para intercambiar monedas
+  // Intercambiar monedas recalculando con la tasa del par invertido.
   const swapCurrencies = () => {
-    setCalculator((prev) => ({
-      ...prev,
-      fromCurrency: prev.toCurrency,
-      toCurrency: prev.fromCurrency,
-    }));
-  };
-
-  // Función para obtener nombre de moneda
-  const getCurrencyName = (code: string) => {
-    return currencyConfig[code]?.name || code.toUpperCase();
+    calculateConversion(
+      calculator.toCurrency,
+      calculator.fromCurrency,
+      calculator.amount
+    );
   };
 
   const availableCurrencies = getAvailableCurrencies();
@@ -473,7 +457,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
       {/* Contenido */}
       <div className="p-4 sm:p-6">
         {/* Selector de monedas */}
@@ -485,60 +469,6 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
           onToCurrencyChange={handleToCurrencyChange}
           onSwap={swapCurrencies}
         />
-
-        {/* Visualización de la tasa actual - solo cuando hay tasa y monedas seleccionadas 
-        {calculator.rate &&
-          calculator.fromCurrency &&
-          calculator.toCurrency && (
-            <div className="mb-6 p-3 sm:p-4 bg-white rounded-lg border-2 border-blue-100 shadow-sm">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <svg
-                    className="h-5 w-5 text-blue-500 flex-shrink-0"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                    />
-                  </svg>
-                  <div>
-                    <p className="text-xs text-gray-500 font-medium">
-                      Tasa de Cambio
-                    </p>
-                    <p className="text-sm sm:text-base font-bold text-gray-900">
-                      1 {calculator.fromCurrency} ={" "}
-                      {calculator.rate.toLocaleString("es-ES", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 6,
-                      })}{" "}
-                      {calculator.toCurrency}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
-                  <svg
-                    className="h-3.5 w-3.5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  <span className="font-medium">Actualizado</span>
-                </div>
-              </div>
-            </div>
-          )}*/}
 
         {/* Campos de entrada */}
         <CurrencyInputFields
@@ -558,9 +488,9 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
 
         {/* Botón compartir cotización */}
         {calculator.result != null && calculator.amount !== undefined && (
-          <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-end gap-2">
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
             {shareMessage && (
-              <p role="status" aria-live="polite" className="text-xs text-gray-600 sm:mr-auto">
+              <p role="status" aria-live="polite" className="text-xs text-muted-foreground sm:mr-auto">
                 {shareMessage}
               </p>
             )}
@@ -569,9 +499,9 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
               onClick={handleShare}
               disabled={sharing}
               aria-busy={sharing}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2 min-h-[44px] bg-green-600 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 touch-manipulation"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 touch-manipulation"
             >
-              <svg aria-hidden="true" className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <svg aria-hidden="true" className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
               </svg>
               {sharing ? 'Generando…' : 'Compartir'}
@@ -581,16 +511,14 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
 
         {/* Ajuste de porcentaje — solo MODERATOR/ROOT con par que tenga base_rate */}
         {isPrivileged && currentRate?.base_rate != null && (
-          <div className="mt-4 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl space-y-4">
+          <div className="mt-4 space-y-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
             {/* Header */}
             <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-1.5 text-gray-600">
-                <svg aria-hidden="true" className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <TrendingUp className="h-3.5 w-3.5" aria-hidden />
                 <span>Tasa base (<span translate="no">Binance</span>)</span>
               </div>
-              <span className="font-semibold text-gray-900 tabular-nums">
+              <span className="font-semibold tabular-nums text-foreground">
                 {currentRate.base_rate.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
               </span>
             </div>
@@ -598,10 +526,10 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
             {/* Percentage controls */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <label htmlFor="pct-input" className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                <label htmlFor="pct-input" className="text-xs font-semibold uppercase tracking-wide text-foreground">
                   Porcentaje de ganancia
                 </label>
-                <span className="text-xs text-gray-500">Rango: 0% – 20%</span>
+                <span className="text-xs text-muted-foreground">Rango: 0% – 20%</span>
               </div>
 
               <div className="flex items-stretch gap-2">
@@ -609,7 +537,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
                   type="button"
                   onClick={() => updatePercentage(parseFloat((sliderValue - 0.1).toFixed(1)))}
                   disabled={sliderValue <= 0}
-                  className="min-w-[44px] min-h-[44px] flex items-center justify-center bg-white border border-blue-300 rounded-lg text-blue-700 text-xl font-bold hover:bg-blue-100 active:bg-blue-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 touch-manipulation"
+                  className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border bg-card text-xl font-bold text-primary transition-colors hover:bg-accent active:bg-accent disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 touch-manipulation"
                   aria-label="Disminuir 0.1%"
                 >
                   −
@@ -626,9 +554,9 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
                     value={Number(sliderValue.toFixed(1))}
                     onChange={(e) => updatePercentage(parseFloat(e.target.value))}
                     onFocus={(e) => e.target.select()}
-                    className="w-full h-full min-h-[44px] px-3 py-2 pr-8 bg-white border border-blue-300 rounded-lg text-center text-lg font-bold text-gray-900 tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="h-full min-h-11 w-full rounded-lg border border-input bg-card px-3 py-2 pr-8 text-center text-lg font-bold tabular-nums text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   />
-                  <span aria-hidden="true" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 font-semibold pointer-events-none">
+                  <span aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 font-semibold text-muted-foreground">
                     %
                   </span>
                 </div>
@@ -636,7 +564,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
                   type="button"
                   onClick={() => updatePercentage(parseFloat((sliderValue + 0.1).toFixed(1)))}
                   disabled={sliderValue >= 20}
-                  className="min-w-[44px] min-h-[44px] flex items-center justify-center bg-white border border-blue-300 rounded-lg text-blue-700 text-xl font-bold hover:bg-blue-100 active:bg-blue-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 touch-manipulation"
+                  className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border bg-card text-xl font-bold text-primary transition-colors hover:bg-accent active:bg-accent disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 touch-manipulation"
                   aria-label="Aumentar 0.1%"
                 >
                   +
@@ -650,7 +578,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
                 step={0.1}
                 value={sliderValue}
                 onChange={(e) => updatePercentage(parseFloat(e.target.value))}
-                className="w-full accent-blue-600 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 touch-manipulation"
+                className="w-full rounded accent-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 touch-manipulation"
                 aria-label="Ajuste de porcentaje con slider"
               />
 
@@ -664,10 +592,10 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
                       type="button"
                       onClick={() => updatePercentage(preset)}
                       aria-pressed={isActive}
-                      className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors motion-reduce:transition-none tabular-nums focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 ${
+                      className={`rounded-md px-2.5 py-1 text-xs font-medium tabular-nums transition-colors motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ${
                         isActive
-                          ? 'bg-blue-600 text-white shadow-sm'
-                          : 'bg-white border border-blue-200 text-blue-700 hover:bg-blue-100'
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'border border-border bg-card text-foreground hover:bg-accent'
                       }`}
                     >
                       {preset}%
@@ -678,26 +606,26 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
             </div>
 
             {/* Preview + Save */}
-            <div className="flex items-center justify-between gap-3 pt-3 border-t border-blue-200">
+            <div className="flex items-center justify-between gap-3 border-t border-primary/20 pt-3">
               <div className="min-w-0" aria-live="polite" aria-atomic="true">
-                <p className="text-xs text-gray-500 font-medium">Nueva tasa</p>
-                <p className="text-base sm:text-lg font-bold text-blue-900 tabular-nums truncate">
+                <p className="text-xs font-medium text-muted-foreground">Nueva tasa</p>
+                <p className="truncate text-base font-bold tabular-nums text-foreground sm:text-lg">
                   {calcPreviewRate(currentRate.base_rate, sliderValue, currentRate.inverse_percentage).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}{' '}
-                  <span className="text-sm font-medium text-blue-700">{calculator.toCurrency}</span>
+                  <span className="text-sm font-medium text-primary">{calculator.toCurrency}</span>
                 </p>
               </div>
-              <button
+              <Button
                 onClick={handleSavePercentage}
                 disabled={saving || Math.abs(sliderValue - (currentRate.percentage ?? 0)) < 0.05}
                 aria-busy={saving}
-                className="shrink-0 px-4 py-2 min-h-[44px] bg-blue-600 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 touch-manipulation"
+                className="min-h-11 shrink-0 px-4"
               >
                 {saving ? 'Guardando…' : 'Guardar'}
-              </button>
+              </Button>
             </div>
 
             {saveError && (
-              <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded-md">
+              <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                 {saveError}
               </p>
             )}
@@ -709,13 +637,13 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
           calculator.fromCurrency &&
           calculator.toCurrency &&
           !calculator.result && (
-            <div className="mt-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-              <div className="text-yellow-800">
+            <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+              <div className="text-amber-800 dark:text-amber-300">
                 <strong>No se encontró tasa de conversión</strong> entre{" "}
                 {getCurrencyName(calculator.fromCurrency)} y{" "}
                 {getCurrencyName(calculator.toCurrency)}.
               </div>
-              <div className="text-yellow-600 text-sm mt-1">
+              <div className="mt-1 text-sm text-amber-700 dark:text-amber-400">
                 Intenta convertir a través de USDT o selecciona otras monedas.
               </div>
             </div>
@@ -724,9 +652,9 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
         {/* Conversiones rápidas sugeridas */}
         {availableCurrencies.length > 0 && (
           <div className="mt-6">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">
+            <p className="mb-3 text-sm font-medium text-muted-foreground">
               Conversiones rápidas:
-            </h3>
+            </p>
             <div className="flex flex-wrap gap-2">
               {[
                 { from: "USDT", to: "VES", amount: "100" },
@@ -740,9 +668,10 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
                     availableCurrencies.includes(combo.from) &&
                     availableCurrencies.includes(combo.to)
                 )
-                .map((combo, index) => (
-                  <button
-                    key={index}
+                .map((combo) => (
+                  <Button
+                    key={`${combo.from}-${combo.to}`}
+                    variant="outline"
                     onClick={() =>
                       calculateConversion(
                         combo.from,
@@ -750,10 +679,10 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
                         parseFloat(combo.amount)
                       )
                     }
-                    className="px-4 py-2 text-sm bg-gradient-to-r from-blue-50 to-blue-100 hover:from-blue-100 hover:to-blue-200 text-blue-700 font-medium rounded-lg transition-all hover:shadow-md border border-blue-200"
+                    className="min-h-11 px-4 text-sm"
                   >
                     {combo.amount} {combo.from} → {combo.to}
-                  </button>
+                  </Button>
                 ))}
             </div>
           </div>

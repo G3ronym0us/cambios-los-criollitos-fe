@@ -1,23 +1,7 @@
 import React, { useState } from "react";
+import { ArrowLeftRight } from "lucide-react";
 import CurrencyChip from "./currency/CurrencyChip";
 import CurrencyDropdown from "./currency/CurrencyDropdown";
-
-// Icono de intercambio
-const SwapIcon = ({ className }: { className: string }) => (
-  <svg
-    className={className}
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
-    />
-  </svg>
-);
 
 interface CurrencySelectorProps {
   fromCurrency: string;
@@ -41,10 +25,8 @@ const CurrencySelector: React.FC<CurrencySelectorProps> = ({
 
   return (
     <div className="mb-4">
-      {/* Contenedor principal con chips clickeables */}
-      <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-3 sm:p-4 border-2 border-blue-200">
+      <div className="rounded-xl border border-border bg-muted/40 p-3 sm:p-4">
         <div className="flex items-center justify-center gap-2">
-          {/* Chip moneda origen */}
           <CurrencyChip
             currency={fromCurrency}
             label="De"
@@ -52,17 +34,17 @@ const CurrencySelector: React.FC<CurrencySelectorProps> = ({
             isPlaceholder={!fromCurrency}
           />
 
-          {/* Botón intercambiar - ENTRE las monedas */}
           <button
+            type="button"
             onClick={onSwap}
             disabled={!fromCurrency || !toCurrency}
-            className="p-1.5 sm:p-2 bg-white hover:bg-blue-50 text-blue-600 rounded-lg transition-all shadow-sm border border-blue-200 hover:border-blue-300 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+            aria-label="Intercambiar monedas"
             title="Intercambiar monedas"
+            className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-primary shadow-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
-            <SwapIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+            <ArrowLeftRight className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden />
           </button>
 
-          {/* Chip moneda destino */}
           <CurrencyChip
             currency={toCurrency}
             label="A"
@@ -72,7 +54,6 @@ const CurrencySelector: React.FC<CurrencySelectorProps> = ({
         </div>
       </div>
 
-      {/* Dropdown para moneda origen */}
       <CurrencyDropdown
         isOpen={showFromDropdown}
         currencies={availableCurrencies}
@@ -82,7 +63,6 @@ const CurrencySelector: React.FC<CurrencySelectorProps> = ({
         title="Seleccionar moneda origen"
       />
 
-      {/* Dropdown para moneda destino */}
       <CurrencyDropdown
         isOpen={showToDropdown}
         currencies={availableCurrencies}
