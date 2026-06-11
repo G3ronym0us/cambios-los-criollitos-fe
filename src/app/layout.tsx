@@ -3,6 +3,7 @@ import { Geist } from 'next/font/google';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
 import { ThemeProvider } from '@/components/theme-provider';
+import { PushResync } from '@/components/shared/PushResync';
 import { Toaster } from '@/components/ui/sonner';
 import { cn } from '@/lib/utils';
 import './globals.css';
@@ -39,6 +40,7 @@ export default function RootLayout({
         >
           <AuthProvider>
             <NotificationProvider>{children}</NotificationProvider>
+            <PushResync />
           </AuthProvider>
           <Toaster richColors position="top-right" />
         </ThemeProvider>

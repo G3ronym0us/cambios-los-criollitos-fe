@@ -44,3 +44,16 @@ self.addEventListener('notificationclick', (event) => {
     })
   );
 });
+
+/* Si el navegador rota la suscripción (update del browser/SW), re-suscribirse
+   localmente con la misma clave; el backend se entera en el próximo re-sync
+   al abrir la app (PushResync). Sin esto, la rotación mata las alertas. */
+self.addEventListener('pushsubscriptionchange', (event) => {
+  const key = event.oldSubscription?.options?.applicationServerKey;
+  if (!key) return;
+  event.waitUntil(
+    self.registration.pushManager
+      .subscribe({ userVisibleOnly: true, applicationServerKey: key })
+      .catch(() => null)
+  );
+});
