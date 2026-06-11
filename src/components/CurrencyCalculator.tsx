@@ -49,6 +49,8 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
     bcvAmount: "",
   });
 
+  // Último campo de monto editado por el usuario; define qué lado queda fijo al ajustar el porcentaje
+  const [lastEdited, setLastEdited] = useState<'from' | 'to'>('from');
   const [bcvRate, setBcvRate] = useState<BCVRate | null>(null);
   const [euroRate, setEuroRate] = useState<BCVRate | null>(null);
   const [bcvMode, setBcvMode] = useState<'usd' | 'eur'>('usd');
@@ -171,6 +173,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
 
     if (toAmount !== undefined) {
       // Usuario editó campo TO → calcular FROM
+      setLastEdited('to');
       const calculated = applyRateConversion(
         toAmount,
         directRate.rate,
@@ -181,6 +184,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
       finalToAmount = bcvValue ? roundToDecimals(toAmount, 2) : toAmount;
     } else {
       // Usuario editó campo FROM → calcular TO
+      setLastEdited('from');
       const calculated = applyRateConversion(
         fromAmount!,
         directRate.rate,
@@ -226,6 +230,27 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
     };
     loadRates();
   }, [bcvService]);
+
+  // Rellenar el equivalente BCV cuando ya hay conversión pero el campo quedó vacío
+  // (en la primera carga, las tasas BCV y las del par llegan en orden no determinista)
+  useEffect(() => {
+    const activeRate = bcvMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
+    if (!activeRate) return;
+    setCalculator((prev) => {
+      if (prev.bcvAmount || prev.result == null || prev.amount === undefined) {
+        return prev;
+      }
+      const bcv = getBCVAmount(
+        prev.amount,
+        prev.result,
+        prev.fromCurrency,
+        prev.toCurrency,
+        activeRate
+      );
+      return bcv !== undefined ? { ...prev, bcvAmount: bcv.toString() } : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bcvRate, euroRate, bcvMode, calculator.result]);
 
   const firstCalculation = useCallback(() => {
     // Par por defecto ZELLE→VES; si no existe, cae a la primera tasa disponible.
@@ -275,13 +300,45 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
     const clamped = Math.max(0, Math.min(20, isNaN(newPct) ? 0 : newPct));
     setSliderValue(clamped);
 
-    if (currentRate?.base_rate == null || calculator.amount === undefined) return;
+    if (currentRate?.base_rate == null) return;
 
     const previewRate = calcPreviewRate(
       currentRate.base_rate,
       clamped,
       currentRate.inverse_percentage
     );
+    const activeRate = bcvMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
+
+    if (lastEdited === 'to' && calculator.result != null) {
+      // El usuario escribió el monto TO: mantenerlo fijo y recalcular FROM
+      const newAmount = roundToDecimals(
+        applyRateConversion(
+          calculator.result,
+          previewRate,
+          currentRate.inverse_percentage,
+          true
+        ),
+        2
+      );
+      const newBcv = getBCVAmount(
+        newAmount,
+        calculator.result,
+        calculator.fromCurrency,
+        calculator.toCurrency,
+        activeRate
+      );
+
+      setCalculator((prev) => ({
+        ...prev,
+        amount: newAmount,
+        rate: previewRate,
+        bcvAmount: newBcv !== undefined ? newBcv.toString() : prev.bcvAmount,
+      }));
+      return;
+    }
+
+    if (calculator.amount === undefined) return;
+
     const newResult = applyRateConversion(
       calculator.amount,
       previewRate,
@@ -289,7 +346,6 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
       false
     );
 
-    const activeRate = bcvMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
     const newBcv = getBCVAmount(
       calculator.amount,
       roundToDecimals(newResult, 2),
