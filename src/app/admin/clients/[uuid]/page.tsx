@@ -24,13 +24,13 @@ function formatPhone(phone: string) {
   return phone.replace(/@c\.us$/, '');
 }
 
+// Fecha en hora local del operador (el timestamp viene en UTC del backend).
 function formatDate(value: string | null) {
   if (!value) return '—';
   return new Date(value).toLocaleDateString('es-ES', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
-    timeZone: 'UTC',
   });
 }
 

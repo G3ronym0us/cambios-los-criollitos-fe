@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import Link from 'next/link';
 import { Ban, ChevronRight, Coins, Eye, Users } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -19,17 +20,18 @@ function formatPhone(phone: string) {
   return phone.replace(/@c\.us$/, '');
 }
 
+// Fecha en hora local del operador (el timestamp viene en UTC del backend).
 function formatDate(value: string | null) {
   if (!value) return null;
   return new Date(value).toLocaleDateString('es-ES', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
-    timeZone: 'UTC',
   });
 }
 
-export function ClientItem({ client }: ClientItemProps) {
+// Memoizado: la búsqueda filtra en memoria y re-renderiza la lista en cada tecla.
+export const ClientItem = memo(function ClientItem({ client }: ClientItemProps) {
   const group = isGroup(client.phone);
   const displayName = client.display_name || (group ? 'Grupo sin nombre' : 'Sin nombre');
   const initial = (client.display_name || (group ? 'G' : '?')).charAt(0).toUpperCase();
@@ -47,15 +49,15 @@ export function ClientItem({ client }: ClientItemProps) {
             <div className="flex min-w-0 flex-1 items-start gap-3">
               <div
                 aria-hidden
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/80 to-primary text-primary-foreground"
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground"
               >
                 {group ? <Users className="h-5 w-5" /> : <span className="text-base font-bold">{initial}</span>}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="truncate text-base font-semibold text-foreground sm:text-lg">
+                  <p className="truncate text-base font-semibold text-foreground sm:text-lg">
                     {displayName}
-                  </h3>
+                  </p>
                   {group ? (
                     <StatusBadge tone="neutral" icon={Users}>Grupo</StatusBadge>
                   ) : null}
@@ -90,4 +92,4 @@ export function ClientItem({ client }: ClientItemProps) {
       </Card>
     </Link>
   );
-}
+});

@@ -7,10 +7,10 @@ interface ClientsStatsProps {
 
 export function ClientsStats({ stats }: ClientsStatsProps) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
-      <StatCard icon={Contact} label="Total Clientes" value={stats.total} accent="primary" />
-      <StatCard icon={Eye} label="Seguidos" value={stats.tracked} accent="info" />
-      <StatCard icon={Ban} label="Bloqueados" value={stats.blocked} accent="destructive" />
+    <div className="grid grid-cols-3 gap-2 sm:gap-4">
+      <StatCard icon={Contact} label="Clientes" value={stats.total} accent="primary" compact />
+      <StatCard icon={Eye} label="Seguidos" value={stats.tracked} accent="info" compact />
+      <StatCard icon={Ban} label="Bloqueados" value={stats.blocked} accent="destructive" compact />
     </div>
   );
 }

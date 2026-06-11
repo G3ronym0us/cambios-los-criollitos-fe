@@ -37,7 +37,7 @@ export function ClientsFilters({ filters, hasActiveFilters, onChange, onReset }:
               value={filters.search}
               onChange={(e) => onChange({ ...filters, search: e.target.value })}
               placeholder="Nombre o teléfono"
-              className="h-10 pl-9"
+              className="h-11 pl-9"
             />
           </div>
         </div>
@@ -50,7 +50,7 @@ export function ClientsFilters({ filters, hasActiveFilters, onChange, onReset }:
             value={filters.tracked}
             onValueChange={(value) => onChange({ ...filters, tracked: value as Filters['tracked'] })}
           >
-            <SelectTrigger id="clients-tracked-filter" className="h-10 w-full sm:w-[160px]">
+            <SelectTrigger id="clients-tracked-filter" className="h-11 w-full sm:w-[160px]">
               <SelectValue placeholder="Todos" />
             </SelectTrigger>
             <SelectContent>
@@ -69,7 +69,7 @@ export function ClientsFilters({ filters, hasActiveFilters, onChange, onReset }:
             value={filters.blocked}
             onValueChange={(value) => onChange({ ...filters, blocked: value as Filters['blocked'] })}
           >
-            <SelectTrigger id="clients-blocked-filter" className="h-10 w-full sm:w-[160px]">
+            <SelectTrigger id="clients-blocked-filter" className="h-11 w-full sm:w-[160px]">
               <SelectValue placeholder="Todos" />
             </SelectTrigger>
             <SelectContent>

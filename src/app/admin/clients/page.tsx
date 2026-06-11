@@ -28,8 +28,11 @@ export default function ClientsAdminPage() {
       <ClientsList
         clients={state.clients}
         loading={state.loading}
+        error={state.error}
         hasActiveFilters={state.hasActiveFilters}
+        hiddenCount={state.hiddenCount}
         onResetFilters={actions.resetFilters}
+        onRetry={actions.reload}
       />
     </div>
   );

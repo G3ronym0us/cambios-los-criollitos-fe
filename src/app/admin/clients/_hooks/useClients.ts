@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { toast } from 'sonner';
 import { clientService } from '@/services/clientService';
 import { ClientData } from '@/types/client';
 
@@ -17,16 +16,21 @@ const emptyFilters: ClientsFilters = { search: '', blocked: 'ALL', tracked: 'ALL
 
 export function useClients() {
   const [clients, setClients] = useState<ClientData[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<ClientsFilters>(emptyFilters);
 
   const loadClients = useCallback(async () => {
     setLoading(true);
+    setError(null);
     const result = await clientService.getClients({ limit: 500 });
     if (result.success && result.data) {
-      setClients(result.data.items || []);
+      const items = result.data.items || [];
+      setClients(items);
+      setTotal(result.data.total ?? items.length);
     } else {
-      toast.error(result.error || 'Error al cargar los clientes');
+      setError(result.error || 'Error al cargar los clientes');
     }
     setLoading(false);
   }, []);
@@ -54,21 +58,26 @@ export function useClients() {
 
   const stats = useMemo(
     () => ({
-      total: clients.length,
+      total,
       blocked: clients.filter((c) => c.is_blocked).length,
       tracked: clients.filter((c) => c.is_tracked).length,
     }),
-    [clients]
+    [clients, total]
   );
+
+  // Clientes que exceden el límite de carga y no están en memoria (ni en la búsqueda).
+  const hiddenCount = Math.max(0, total - clients.length);
 
   return {
     state: {
       clients: filteredClients,
       loading,
+      error,
       filters,
       stats,
       hasActiveFilters,
+      hiddenCount,
     },
-    actions: { setFilters, resetFilters },
+    actions: { setFilters, resetFilters, reload: loadClients },
   };
 }
