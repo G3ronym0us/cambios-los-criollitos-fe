@@ -6,8 +6,9 @@ import { AlertTriangle, RefreshCw, Settings } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import CurrencyCalculator from '../components/CurrencyCalculator';
 import { Button } from '@/components/ui/button';
+import Image from 'next/image';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { LoadingState } from '@/components/shared/LoadingState';
+import { LogoLoader } from '@/components/shared/LogoLoader';
 import { ratesService } from '@/services/ratesService';
 import { ExchangeRateResponse } from '@/types/currency';
 import { Role } from '@/utils/enums';
@@ -39,7 +40,7 @@ const ExchangeRatesDashboard = () => {
   if (loading && rates.length === 0) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <LoadingState label="Cargando tasas..." />
+        <LogoLoader label="Cargando tasas..." />
       </div>
     );
   }
@@ -70,10 +71,10 @@ const ExchangeRatesDashboard = () => {
         <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 sm:py-4 lg:px-8">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 sm:gap-4">
-              <div className="text-2xl sm:text-3xl" aria-hidden>💱</div>
+              <Image src="/logo.svg" alt="Cambios Los Criollitos" width={40} height={40} className="shrink-0" />
               <div>
                 <h1 className="text-lg font-bold text-foreground sm:text-xl lg:text-2xl">
-                  Calculadora P2P
+                  Cambios Los Criollitos
                 </h1>
                 <p className="text-xs text-muted-foreground sm:text-sm">
                   Tasas de cambio en tiempo real

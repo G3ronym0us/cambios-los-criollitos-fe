@@ -1,11 +1,11 @@
 {
-  "name": "Tasas Project",
-  "short_name": "Tasas",
+  "name": "Cambios Los Criollitos",
+  "short_name": "Los Criollitos",
   "description": "Aplicación de tasas de cambio",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0a0a",
-  "theme_color": "#10b981",
+  "theme_color": "#E8821E",
   "icons": [
     {
       "src": "/icon-192.png",

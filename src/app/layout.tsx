@@ -11,15 +11,16 @@ import './globals.css';
 const geist = Geist({ subsets: ['latin'], variable: '--font-sans' });
 
 export const metadata: Metadata = {
-  title: 'Tasas Project',
+  title: 'Cambios Los Criollitos',
   description: 'Aplicación de tasas de cambio',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Tasas',
+    title: 'Los Criollitos',
   },
   icons: {
+    icon: '/favicon.ico',
     apple: '/apple-touch-icon.png',
   },
 };

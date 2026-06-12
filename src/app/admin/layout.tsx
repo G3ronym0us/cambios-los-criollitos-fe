@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   LayoutDashboard,
   Coins,
@@ -105,7 +106,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         >
           <div className="flex h-full flex-col">
             <div className="flex items-center justify-between border-b border-border px-4 py-4">
-              <h2 className="text-lg font-bold tracking-tight">Admin Panel</h2>
+              <div className="flex min-w-0 items-center gap-2.5">
+                <Image src="/logo.svg" alt="Cambios Los Criollitos" width={36} height={36} className="shrink-0" />
+                <h2 className="truncate text-lg font-bold tracking-tight">Los Criollitos</h2>
+              </div>
               <Button
                 variant="ghost"
                 size="icon"

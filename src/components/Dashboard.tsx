@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import { Currency, Rate, CurrencyConfig } from '@/types/currency';
 import { LogOut, RefreshCw, Clock, X, ArrowRight } from 'lucide-react';
@@ -152,13 +153,16 @@ export const Dashboard: React.FC = () => {
         {/* Header con información del admin */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-                💱 Dashboard de Administrador
-              </h1>
-              <p className="text-gray-600">
-                Bienvenido, {user?.full_name} | {user?.email}
-              </p>
+            <div className="flex items-center gap-3">
+              <Image src="/logo.svg" alt="Cambios Los Criollitos" width={48} height={48} className="shrink-0" />
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+                  Cambios Los Criollitos
+                </h1>
+                <p className="text-gray-600">
+                  Bienvenido, {user?.full_name} | {user?.email}
+                </p>
+              </div>
             </div>
             <button
               onClick={logout}
