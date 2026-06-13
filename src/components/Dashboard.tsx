@@ -121,9 +121,9 @@ export const Dashboard: React.FC = () => {
 
   if (loading && Object.keys(rates).length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <RefreshCw className="h-12 w-12 text-blue-600 mx-auto mb-4 animate-spin" />
+          <RefreshCw className="h-12 w-12 text-primary mx-auto mb-4 animate-spin" />
           <p className="text-xl text-gray-600">Cargando dashboard...</p>
         </div>
       </div>
@@ -132,12 +132,12 @@ export const Dashboard: React.FC = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <div className="text-red-600 text-xl mb-4">{error}</div>
           <button
             onClick={fetchRates}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-colors"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-2 rounded-lg transition-colors"
           >
             Reintentar
           </button>
@@ -147,7 +147,7 @@ export const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 sm:p-6">
+    <div className="min-h-screen bg-background p-4 sm:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         
         {/* Header con información del admin */}
@@ -190,7 +190,7 @@ export const Dashboard: React.FC = () => {
               <button
                 onClick={refreshData}
                 disabled={loading}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg transition-colors w-full sm:w-auto"
+                className="flex items-center gap-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground px-4 py-2 rounded-lg transition-colors w-full sm:w-auto"
               >
                 <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                 {loading ? 'Actualizando...' : 'Actualizar Tasas'}
@@ -264,7 +264,7 @@ export const Dashboard: React.FC = () => {
                   step="0.0001"
                   value={modalForm.rate}
                   onChange={(e) => setModalForm({ rate: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
                   placeholder="Ingrese la nueva tasa"
                 />
               </div>
@@ -279,7 +279,7 @@ export const Dashboard: React.FC = () => {
                 </button>
                 <button
                   onClick={handleSaveRate}
-                  className="flex-1 px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                  className="flex-1 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-md transition-colors"
                 >
                   Guardar
                 </button>
