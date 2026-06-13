@@ -7,6 +7,7 @@ import { PaymentData, PaymentTable } from '@/types/payment';
 import { PaymentsFilters } from './_components/PaymentsFilters';
 import { PaymentsList } from './_components/PaymentsList';
 import { LinkOperationDialog } from './_components/LinkOperationDialog';
+import { OutgoingPaymentActionDialog } from './_components/OutgoingPaymentActionDialog';
 import { PaymentRawTextDialog } from './_components/PaymentRawTextDialog';
 import { OperationDetailDialog } from './_components/OperationDetailDialog';
 import { usePayments } from './_hooks/usePayments';
@@ -14,6 +15,7 @@ import { usePayments } from './_hooks/usePayments';
 export default function PaymentsAdminPage() {
   const { state, actions } = usePayments();
   const [linking, setLinking] = useState<PaymentData | null>(null);
+  const [actioning, setActioning] = useState<PaymentData | null>(null);
   const [viewingRawText, setViewingRawText] = useState<PaymentData | null>(null);
   const [viewingOperation, setViewingOperation] = useState<string | null>(null);
 
@@ -68,7 +70,7 @@ export default function PaymentsAdminPage() {
             loading={state.loading}
             hasActiveFilters={state.hasActiveFilters}
             onResetFilters={actions.resetFilters}
-            onLink={setLinking}
+            onLink={setActioning}
             onViewRawText={setViewingRawText}
             onViewOperation={setViewingOperation}
           />
@@ -80,6 +82,12 @@ export default function PaymentsAdminPage() {
         table={state.tab}
         onClose={() => setLinking(null)}
         onLinked={actions.reload}
+      />
+
+      <OutgoingPaymentActionDialog
+        payment={actioning}
+        onClose={() => setActioning(null)}
+        onDone={actions.reload}
       />
 
       <PaymentRawTextDialog

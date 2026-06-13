@@ -31,5 +31,6 @@ export interface PaymentData {
   is_personal_expense?: number;
   personal_description?: string | null;
   is_irrelevant?: number;
+  irrelevant_description?: string | null;
   source_payment_id?: number | null;
 }

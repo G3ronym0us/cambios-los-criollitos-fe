@@ -74,6 +74,9 @@ export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText, onVie
         {personal && p.personal_description ? (
           <p className="truncate text-xs text-muted-foreground">Gasto: {p.personal_description}</p>
         ) : null}
+        {irrelevant && p.irrelevant_description ? (
+          <p className="truncate text-xs text-muted-foreground">Motivo: {p.irrelevant_description}</p>
+        ) : null}
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -118,7 +121,7 @@ export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText, onVie
             {onLink ? (
               <Button variant="outline" size="sm" className="h-8" onClick={() => onLink(p)}>
                 <Link2 className="h-3.5 w-3.5" />
-                {p.operation_uuid ? 'Cambiar' : 'Vincular'}
+                {outgoing ? 'Gestionar' : p.operation_uuid ? 'Cambiar' : 'Vincular'}
               </Button>
             ) : null}
             {created ? <span className="text-xs text-muted-foreground">{created}</span> : null}
