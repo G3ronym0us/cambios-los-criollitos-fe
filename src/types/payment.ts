@@ -5,6 +5,19 @@ import type { OperationStatus } from '@/types/operation';
 
 export type PaymentTable = 'incoming' | 'outgoing';
 
+// Respuesta paginada de GET /payments/{table}.
+export interface PaymentPage {
+  items: PaymentData[];
+  total: number;
+}
+
+export interface PaymentQuery {
+  limit?: number;
+  offset?: number;
+  search?: string;
+  outClass?: string;
+}
+
 export interface PaymentData {
   id: number;
   uuid: string;

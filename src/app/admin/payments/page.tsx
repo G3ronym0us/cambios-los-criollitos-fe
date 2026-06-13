@@ -32,7 +32,10 @@ export default function PaymentsAdminPage() {
           <TabsTrigger value="outgoing">Salientes ({state.totalOutgoing})</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="incoming" className="space-y-4">
+        <TabsContent
+          value="incoming"
+          className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200"
+        >
           <PaymentsFilters
             search={state.search}
             onSearchChange={actions.setSearch}
@@ -43,9 +46,12 @@ export default function PaymentsAdminPage() {
             onReset={actions.resetFilters}
           />
           <PaymentsList
-            payments={state.incoming}
+            payments={state.payments}
             outgoing={false}
             loading={state.loading}
+            loadingMore={state.loadingMore}
+            hasMore={state.hasMore}
+            onLoadMore={actions.loadMore}
             hasActiveFilters={state.hasActiveFilters}
             onResetFilters={actions.resetFilters}
             onLink={setLinking}
@@ -54,7 +60,10 @@ export default function PaymentsAdminPage() {
           />
         </TabsContent>
 
-        <TabsContent value="outgoing" className="space-y-4">
+        <TabsContent
+          value="outgoing"
+          className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200"
+        >
           <PaymentsFilters
             search={state.search}
             onSearchChange={actions.setSearch}
@@ -65,9 +74,12 @@ export default function PaymentsAdminPage() {
             onReset={actions.resetFilters}
           />
           <PaymentsList
-            payments={state.outgoing}
+            payments={state.payments}
             outgoing
             loading={state.loading}
+            loadingMore={state.loadingMore}
+            hasMore={state.hasMore}
+            onLoadMore={actions.loadMore}
             hasActiveFilters={state.hasActiveFilters}
             onResetFilters={actions.resetFilters}
             onLink={setActioning}

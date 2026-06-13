@@ -1,11 +1,16 @@
 import { ApiResponse } from '@/types/auth';
 import { httpClient } from '@/utils/httpInterceptor';
-import { PaymentData, PaymentTable } from '@/types/payment';
+import { PaymentData, PaymentPage, PaymentQuery, PaymentTable } from '@/types/payment';
 
 export class PaymentService {
-  // Lista pagos entrantes o salientes del bot. Requiere operador autenticado (JWT).
-  async getPayments(table: PaymentTable, limit = 300): Promise<ApiResponse<PaymentData[]>> {
-    const result = await httpClient.get<PaymentData[]>(`/payments/${table}?limit=${limit}`);
+  // Página de pagos entrantes/salientes (paginada + búsqueda/clasificación server-side).
+  async getPayments(table: PaymentTable, query: PaymentQuery = {}): Promise<ApiResponse<PaymentPage>> {
+    const sp = new URLSearchParams();
+    sp.set('limit', String(query.limit ?? 50));
+    sp.set('offset', String(query.offset ?? 0));
+    if (query.search) sp.set('search', query.search);
+    if (query.outClass && query.outClass !== 'ALL') sp.set('out_class', query.outClass);
+    const result = await httpClient.get<PaymentPage>(`/payments/${table}?${sp.toString()}`);
     return { success: result.success, data: result.data, error: result.error };
   }
 
