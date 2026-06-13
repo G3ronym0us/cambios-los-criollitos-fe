@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Link2Off, Search, Globe, Users, UserRound } from 'lucide-react';
+import { Link2Off, Plus, Search, Globe, Users, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import { formatNumber } from '@/utils/functions';
 import type { OperationData } from '@/types/operation';
 import type { FundGroup } from '@/types/fund';
 import type { PaymentData, PaymentTable } from '@/types/payment';
+import { CreateOperationForm } from './CreateOperationForm';
 
 interface LinkOperationPanelProps {
   payment: PaymentData;
@@ -49,6 +50,7 @@ export function LinkOperationPanel({
   const [scope, setScope] = useState<Scope>('auto');
   const [selected, setSelected] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [mode, setMode] = useState<'pick' | 'create'>('pick');
 
   useEffect(() => {
     setSelected(payment.operation_uuid);
@@ -156,17 +158,34 @@ export function LinkOperationPanel({
     }
   };
 
+  if (mode === 'create') {
+    return (
+      <CreateOperationForm
+        payment={payment}
+        table={table}
+        onSuccess={onSuccess}
+        onBack={() => setMode('pick')}
+      />
+    );
+  }
+
   return (
     <>
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Cliente, teléfono, par, monto o ID"
-          className="h-10 pl-9"
-          autoFocus
-        />
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Cliente, teléfono, par, monto o ID"
+            className="h-10 pl-9"
+            autoFocus
+          />
+        </div>
+        <Button variant="outline" className="h-10 shrink-0" onClick={() => setMode('create')}>
+          <Plus className="h-4 w-4" />
+          Crear
+        </Button>
       </div>
 
       <div className="flex items-center justify-between gap-2">

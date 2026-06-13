@@ -53,6 +53,35 @@ export class PaymentService {
     return { success: result.success, data: result.data, error: result.error };
   }
 
+  // Crea una operación a mano desde un pago y lo vincula (soporta fondo + EXCHANGE en salida).
+  async createOperation(
+    table: PaymentTable,
+    paymentId: number,
+    body: {
+      fromCurrency: string;
+      toCurrency: string;
+      fromAmount: number;
+      toAmount: number;
+      amountSide: 'SEND' | 'RECEIVE';
+      fundGroupUuid?: string | null;
+      exchangeUserUuid?: string | null;
+    },
+  ): Promise<ApiResponse<unknown>> {
+    const result = await httpClient.post<unknown>(
+      `/payments/${table}/${paymentId}/create-operation`,
+      {
+        from_currency: body.fromCurrency,
+        to_currency: body.toCurrency,
+        from_amount: body.fromAmount,
+        to_amount: body.toAmount,
+        amount_side: body.amountSide,
+        fund_group_uuid: body.fundGroupUuid ?? null,
+        exchange_user_uuid: body.exchangeUserUuid ?? null,
+      },
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
   // Registra un pago entrante como depósito (FundMovement DEPOSIT) a un fondo.
   async createDeposit(
     paymentId: number,
