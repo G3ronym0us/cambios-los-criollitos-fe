@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PaymentData, PaymentTable } from '@/types/payment';
 import { PaymentsFilters } from './_components/PaymentsFilters';
 import { PaymentsList } from './_components/PaymentsList';
-import { LinkOperationDialog } from './_components/LinkOperationDialog';
+import { IncomingPaymentActionDialog } from './_components/IncomingPaymentActionDialog';
 import { OutgoingPaymentActionDialog } from './_components/OutgoingPaymentActionDialog';
 import { PaymentRawTextDialog } from './_components/PaymentRawTextDialog';
 import { OperationDetailDialog } from './_components/OperationDetailDialog';
@@ -14,7 +14,7 @@ import { usePayments } from './_hooks/usePayments';
 
 export default function PaymentsAdminPage() {
   const { state, actions } = usePayments();
-  const [linking, setLinking] = useState<PaymentData | null>(null);
+  const [actioningIncoming, setActioningIncoming] = useState<PaymentData | null>(null);
   const [actioning, setActioning] = useState<PaymentData | null>(null);
   const [viewingRawText, setViewingRawText] = useState<PaymentData | null>(null);
   const [viewingOperation, setViewingOperation] = useState<string | null>(null);
@@ -54,7 +54,7 @@ export default function PaymentsAdminPage() {
             onLoadMore={actions.loadMore}
             hasActiveFilters={state.hasActiveFilters}
             onResetFilters={actions.resetFilters}
-            onLink={setLinking}
+            onLink={setActioningIncoming}
             onViewRawText={setViewingRawText}
             onViewOperation={setViewingOperation}
           />
@@ -89,11 +89,10 @@ export default function PaymentsAdminPage() {
         </TabsContent>
       </Tabs>
 
-      <LinkOperationDialog
-        payment={linking}
-        table={state.tab}
-        onClose={() => setLinking(null)}
-        onLinked={actions.reload}
+      <IncomingPaymentActionDialog
+        payment={actioningIncoming}
+        onClose={() => setActioningIncoming(null)}
+        onDone={actions.reload}
       />
 
       <OutgoingPaymentActionDialog

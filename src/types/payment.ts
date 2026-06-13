@@ -46,4 +46,18 @@ export interface PaymentData {
   is_irrelevant?: number;
   irrelevant_description?: string | null;
   source_payment_id?: number | null;
+  // solo incoming: depósito a fondo registrado desde este pago (inyectado por list_payments_page).
+  deposit?: PaymentDeposit | null;
+}
+
+export type DepositMethod = 'ZELLE' | 'BINANCE' | 'KRAKEN' | 'TRANSFER' | 'OTHER';
+
+export const DEPOSIT_METHODS: DepositMethod[] = ['ZELLE', 'BINANCE', 'KRAKEN', 'TRANSFER', 'OTHER'];
+
+export interface PaymentDeposit {
+  uuid: string;
+  method: string | null;
+  amount: number | null;
+  currency: string | null;
+  group_name: string | null;
 }

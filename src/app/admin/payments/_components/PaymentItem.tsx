@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Banknote, Eye, FileText, Forward, Link2, Link2Off, Tag, Wallet } from 'lucide-react';
+import { Banknote, Eye, FileText, Forward, Link2, Link2Off, PiggyBank, Tag, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -33,6 +33,7 @@ export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText, onVie
   const bank = p.bank_to || p.bank_from || p.provider;
   const personal = !!p.is_personal_expense;
   const irrelevant = !!p.is_irrelevant;
+  const deposit = p.deposit ?? null;
   const opMeta = getStatusMeta(p.operation_status);
 
   return (
@@ -77,11 +78,18 @@ export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText, onVie
         {irrelevant && p.irrelevant_description ? (
           <p className="truncate text-xs text-muted-foreground">Motivo: {p.irrelevant_description}</p>
         ) : null}
+        {deposit?.group_name ? (
+          <p className="truncate text-xs text-muted-foreground">Fondo: {deposit.group_name}</p>
+        ) : null}
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
             {p.operation_uuid ? (
               <StatusBadge tone={opMeta.tone} icon={opMeta.icon}>{opMeta.label}</StatusBadge>
+            ) : deposit ? (
+              <StatusBadge tone="success" icon={PiggyBank}>
+                Depósito{deposit.method ? ` · ${deposit.method}` : ''}
+              </StatusBadge>
             ) : (
               <StatusBadge tone="neutral" icon={Link2Off}>Sin vincular</StatusBadge>
             )}
@@ -121,7 +129,7 @@ export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText, onVie
             {onLink ? (
               <Button variant="outline" size="sm" className="h-8" onClick={() => onLink(p)}>
                 <Link2 className="h-3.5 w-3.5" />
-                {outgoing ? 'Gestionar' : p.operation_uuid ? 'Cambiar' : 'Vincular'}
+                Gestionar
               </Button>
             ) : null}
             {created ? <span className="text-xs text-muted-foreground">{created}</span> : null}

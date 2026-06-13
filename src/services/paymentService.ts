@@ -52,6 +52,34 @@ export class PaymentService {
     );
     return { success: result.success, data: result.data, error: result.error };
   }
+
+  // Registra un pago entrante como depósito (FundMovement DEPOSIT) a un fondo.
+  async createDeposit(
+    paymentId: number,
+    body: {
+      groupUuid: string;
+      userUuid: string;
+      amount: number;
+      currency: string;
+      depositMethod: string;
+      reference?: string | null;
+      notes?: string | null;
+    },
+  ): Promise<ApiResponse<PaymentData>> {
+    const result = await httpClient.post<PaymentData>(
+      `/payments/incoming/${paymentId}/deposit`,
+      {
+        group_uuid: body.groupUuid,
+        user_uuid: body.userUuid,
+        amount: body.amount,
+        currency: body.currency,
+        deposit_method: body.depositMethod,
+        reference: body.reference ?? null,
+        notes: body.notes ?? null,
+      },
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
 }
 
 export const paymentService = new PaymentService();
