@@ -5,7 +5,9 @@ import { toast } from 'sonner';
 import { paymentService } from '@/services/paymentService';
 import { PaymentData, PaymentTable } from '@/types/payment';
 
-export type OutgoingClass = 'ALL' | 'OPERATIONAL' | 'PERSONAL' | 'IRRELEVANT';
+export type OutgoingClass = 'ALL' | 'UNLINKED' | 'OPERATIONAL' | 'PERSONAL' | 'IRRELEVANT';
+
+const TAB_STORAGE_KEY = 'payments-active-tab';
 
 function matchSearch(p: PaymentData, q: string) {
   if (!q) return true;
@@ -26,6 +28,17 @@ export function usePayments() {
   const [tab, setTab] = useState<PaymentTable>('incoming');
   const [search, setSearch] = useState('');
   const [outClass, setOutClass] = useState<OutgoingClass>('ALL');
+
+  // Restaura la pestaña activa tras recargar (persistida en localStorage).
+  useEffect(() => {
+    const saved = window.localStorage.getItem(TAB_STORAGE_KEY);
+    if (saved === 'incoming' || saved === 'outgoing') setTab(saved);
+  }, []);
+
+  const selectTab = useCallback((value: PaymentTable) => {
+    setTab(value);
+    window.localStorage.setItem(TAB_STORAGE_KEY, value);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,6 +70,8 @@ export function usePayments() {
       if (outClass === 'OPERATIONAL' && (personal || irrelevant)) return false;
       if (outClass === 'PERSONAL' && !personal) return false;
       if (outClass === 'IRRELEVANT' && !irrelevant) return false;
+      // Sin vincular: operativos (no personal, no irrelevante) que aún no tienen operación.
+      if (outClass === 'UNLINKED' && (personal || irrelevant || !!p.operation_uuid)) return false;
       return matchSearch(p, q);
     });
   }, [outgoing, search, outClass]);
@@ -79,6 +94,6 @@ export function usePayments() {
       outClass,
       hasActiveFilters,
     },
-    actions: { setTab, setSearch, setOutClass, resetFilters, reload: load },
+    actions: { setTab: selectTab, setSearch, setOutClass, resetFilters, reload: load },
   };
 }

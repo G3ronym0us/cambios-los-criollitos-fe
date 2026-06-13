@@ -64,6 +64,7 @@ export function PaymentsFilters({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">Todos</SelectItem>
+                <SelectItem value="UNLINKED">Sin vincular</SelectItem>
                 <SelectItem value="OPERATIONAL">Operativos</SelectItem>
                 <SelectItem value="PERSONAL">Gastos personales</SelectItem>
                 <SelectItem value="IRRELEVANT">Irrelevantes</SelectItem>
