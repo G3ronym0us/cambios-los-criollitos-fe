@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -38,6 +38,7 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
   const [fundGroupUuid, setFundGroupUuid] = useState('');
   const [exchangeUserUuid, setExchangeUserUuid] = useState('');
   const [creating, setCreating] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     Promise.all([adminService.getCurrencyPairs(0, 200, true), fundService.getGroups()]).then(
@@ -111,25 +112,12 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
           <Label htmlFor="op-pair">Par</Label>
           <Select value={pairUuid} onValueChange={(v) => setPairUuid(v ?? '')}>
             <SelectTrigger id="op-pair" className="h-10 w-full">
-              <SelectValue placeholder="Selecciona el par" />
+              <SelectValue>{pair?.pair_symbol ?? 'Selecciona el par'}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {pairs.map((p) => (
                 <SelectItem key={p.uuid} value={p.uuid}>{p.pair_symbol}</SelectItem>
               ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="op-direction">Dirección</Label>
-          <Select value={direction} onValueChange={(v) => setDirection((v as 'SEND' | 'RECEIVE') ?? 'SEND')}>
-            <SelectTrigger id="op-direction" className="h-10 w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="SEND">Salida</SelectItem>
-              <SelectItem value="RECEIVE">Entrada</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -165,7 +153,11 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
               <Label htmlFor="op-fund">Fondo (opcional)</Label>
               <Select value={fundGroupUuid} onValueChange={(v) => setFundGroupUuid(v ?? '')} disabled={!pair}>
                 <SelectTrigger id="op-fund" className="h-10 w-full">
-                  <SelectValue placeholder={pair ? 'Sin fondo' : 'Elige un par primero'} />
+                  <SelectValue>
+                    {selectedGroup
+                      ? `${selectedGroup.name}${selectedGroup.currency ? ` · ${selectedGroup.currency}` : ''}`
+                      : pair ? 'Sin fondo' : 'Elige un par primero'}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {fundOptions.map((g) => (
@@ -185,7 +177,9 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
                 <Label htmlFor="op-gestor">Gestor (movimiento del fondo)</Label>
                 <Select value={exchangeUserUuid} onValueChange={(v) => setExchangeUserUuid(v ?? '')}>
                   <SelectTrigger id="op-gestor" className="h-10 w-full">
-                    <SelectValue placeholder="Selecciona el gestor" />
+                    <SelectValue>
+                      {members.find((m) => m.user_uuid === exchangeUserUuid)?.username ?? 'Selecciona el gestor'}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {members.map((m) => (
@@ -199,6 +193,34 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
             ) : null}
           </>
         ) : null}
+
+        <div className="border-t border-border pt-3">
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((v) => !v)}
+            className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+          >
+            {showAdvanced ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            Opciones avanzadas
+          </button>
+          {showAdvanced ? (
+            <div className="mt-3 space-y-1.5">
+              <Label htmlFor="op-direction">Dirección</Label>
+              <Select value={direction} onValueChange={(v) => setDirection((v as 'SEND' | 'RECEIVE') ?? 'SEND')}>
+                <SelectTrigger id="op-direction" className="h-10 w-full">
+                  <SelectValue>{direction === 'SEND' ? 'Salida' : 'Entrada'}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SEND">Salida</SelectItem>
+                  <SelectItem value="RECEIVE">Entrada</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Las salientes casi siempre son “Salida”. El fondo solo aplica en salida.
+              </p>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <DialogFooter className="gap-2 sm:justify-between">

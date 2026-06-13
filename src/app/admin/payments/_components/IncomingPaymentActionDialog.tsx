@@ -188,7 +188,11 @@ export function IncomingPaymentActionDialog({ payment, onClose, onDone }: Incomi
                 <Label htmlFor="deposit-fund">Fondo</Label>
                 <Select value={groupUuid} onValueChange={(v) => setGroupUuid(v ?? '')}>
                   <SelectTrigger id="deposit-fund" className="h-10 w-full">
-                    <SelectValue placeholder="Selecciona un fondo" />
+                    <SelectValue>
+                      {group
+                        ? `${group.name}${group.currency ? ` · ${group.currency}` : ''}`
+                        : 'Selecciona un fondo'}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {groups.map((g) => (
@@ -204,7 +208,7 @@ export function IncomingPaymentActionDialog({ payment, onClose, onDone }: Incomi
                 <Label htmlFor="deposit-method">Método / origen</Label>
                 <Select value={method} onValueChange={(v) => setMethod(v ?? 'ZELLE')}>
                   <SelectTrigger id="deposit-method" className="h-10 w-full">
-                    <SelectValue />
+                    <SelectValue>{method}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {DEPOSIT_METHODS.map((m) => (
@@ -218,7 +222,10 @@ export function IncomingPaymentActionDialog({ payment, onClose, onDone }: Incomi
                 <Label htmlFor="deposit-by">Depositó</Label>
                 <Select value={depositorUuid} onValueChange={(v) => setDepositorUuid(v ?? '')} disabled={!group}>
                   <SelectTrigger id="deposit-by" className="h-10 w-full">
-                    <SelectValue placeholder={group ? 'Selecciona el gestor' : 'Elige un fondo primero'} />
+                    <SelectValue>
+                      {members.find((m) => m.user_uuid === depositorUuid)?.username
+                        ?? (group ? 'Selecciona el gestor' : 'Elige un fondo primero')}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {members.map((m) => (

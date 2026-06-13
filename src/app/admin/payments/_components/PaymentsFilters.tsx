@@ -14,6 +14,14 @@ import {
 } from '@/components/ui/select';
 import type { OutgoingClass } from '../_hooks/usePayments';
 
+const OUT_CLASS_LABELS: Record<OutgoingClass, string> = {
+  ALL: 'Todos',
+  UNLINKED: 'Sin vincular',
+  OPERATIONAL: 'Operativos',
+  PERSONAL: 'Gastos personales',
+  IRRELEVANT: 'Irrelevantes',
+};
+
 interface PaymentsFiltersProps {
   search: string;
   onSearchChange: (value: string) => void;
@@ -58,9 +66,9 @@ export function PaymentsFilters({
             <Label htmlFor="payments-class-filter" className="text-xs uppercase tracking-wide text-muted-foreground">
               Clasificación
             </Label>
-            <Select value={outClass} onValueChange={(value) => onClassChange(value as OutgoingClass)}>
+            <Select value={outClass} onValueChange={(value) => onClassChange((value as OutgoingClass) ?? 'ALL')}>
               <SelectTrigger id="payments-class-filter" className="h-10 w-full sm:w-[180px]">
-                <SelectValue placeholder="Todos" />
+                <SelectValue>{OUT_CLASS_LABELS[outClass] ?? 'Todos'}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">Todos</SelectItem>
