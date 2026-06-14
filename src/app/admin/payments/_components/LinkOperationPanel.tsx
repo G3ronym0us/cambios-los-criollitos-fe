@@ -81,7 +81,12 @@ export function LinkOperationPanel({
   // Operaciones según el alcance: por defecto las del cliente (o las del grupo si el pago es
   // a un grupo); con "Ver todas" se muestran todas. La operación ya vinculada siempre se incluye.
   const scoped = useMemo(() => {
-    if (scope === 'global') return operations;
+    // Ocultar operaciones que ya tienen un pago del mismo lado (entrante/saliente) vinculado,
+    // salvo la que ya está vinculada a ESTE pago (para poder verla / desvincular).
+    const takenKey = table === 'incoming' ? 'has_incoming_payment' : 'has_outgoing_payment';
+    const notTaken = (op: OperationData) => !op[takenKey] || op.uuid === payment.operation_uuid;
+
+    if (scope === 'global') return operations.filter(notTaken);
 
     let list: OperationData[];
     if (isGroup) {
@@ -115,8 +120,8 @@ export function LinkOperationPanel({
       const linked = operations.find((op) => op.uuid === payment.operation_uuid);
       if (linked) list = [linked, ...list];
     }
-    return list;
-  }, [payment, operations, scope, isGroup, matchedGroup]);
+    return list.filter(notTaken);
+  }, [payment, operations, scope, isGroup, matchedGroup, table]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();

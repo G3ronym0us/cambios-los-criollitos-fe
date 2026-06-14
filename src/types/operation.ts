@@ -40,6 +40,8 @@ export interface OperationData {
   cancelled_at: string | null;
   created_at: string;
   updated_at: string | null;
+  has_incoming_payment?: boolean;
+  has_outgoing_payment?: boolean;
 }
 
 export interface OperationListResponse {
