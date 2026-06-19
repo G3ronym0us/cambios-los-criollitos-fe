@@ -404,7 +404,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
       const blob = await toBlob(shareCardRef.current, {
         pixelRatio: 2,
         cacheBust: true,
-        backgroundColor: '#1e1b4b',
+        backgroundColor: '#FBFAF6',
       });
       if (!blob) throw new Error('No se pudo generar la imagen');
 
