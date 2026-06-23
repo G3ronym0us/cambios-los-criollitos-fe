@@ -90,15 +90,13 @@ export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText, onVie
               <StatusBadge tone="success" icon={PiggyBank}>
                 Depósito{deposit.method ? ` · ${deposit.method}` : ''}
               </StatusBadge>
+            ) : outgoing && personal ? (
+              <StatusBadge tone="warning" icon={Tag}>Personal</StatusBadge>
+            ) : outgoing && irrelevant ? (
+              <StatusBadge tone="neutral" icon={Tag}>Irrelevante</StatusBadge>
             ) : (
               <StatusBadge tone="neutral" icon={Link2Off}>Sin vincular</StatusBadge>
             )}
-            {outgoing && personal ? (
-              <StatusBadge tone="warning" icon={Tag}>Personal</StatusBadge>
-            ) : null}
-            {outgoing && irrelevant ? (
-              <StatusBadge tone="neutral" icon={Tag}>Irrelevante</StatusBadge>
-            ) : null}
             {outgoing && p.source_payment_id ? (
               <StatusBadge tone="info" icon={Forward}>Reenvío</StatusBadge>
             ) : null}
