@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Banknote, Eye, FileText, Forward, Link2, Link2Off, PiggyBank, Tag, Wallet } from 'lucide-react';
+import { Banknote, Eye, FileText, Forward, Link2, Link2Off, PiggyBank, Tag, Users, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -89,6 +89,10 @@ export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText, onVie
             ) : deposit ? (
               <StatusBadge tone="success" icon={PiggyBank}>
                 Depósito{deposit.method ? ` · ${deposit.method}` : ''}
+              </StatusBadge>
+            ) : !outgoing && p.fund_group_name ? (
+              <StatusBadge tone="info" icon={Users}>
+                Contabilizado · {p.fund_group_name}
               </StatusBadge>
             ) : outgoing && personal ? (
               <StatusBadge tone="warning" icon={Tag}>Personal</StatusBadge>

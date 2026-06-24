@@ -37,6 +37,9 @@ export interface PaymentData {
   operation_uuid: string | null;
   // Estado de la operación vinculada (si la hay), inyectado por list_payments.
   operation_status?: OperationStatus | null;
+  // solo incoming: grupo (FundGroup) donde se contabilizó el Zelle al reenviarlo (ZELLE_DIRECT).
+  fund_group_uuid?: string | null;
+  fund_group_name?: string | null;
   corrected_at: string | null;
   correction_original: string | null;
   created_at: string | null;

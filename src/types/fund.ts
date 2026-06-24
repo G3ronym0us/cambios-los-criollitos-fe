@@ -141,3 +141,30 @@ export interface CreateFundMovement {
   movement_date: string;
   notes?: string;
 }
+
+// Depósito detectado por el bot (gestor sube comprobante al grupo), pendiente de confirmar.
+export interface PendingDeposit {
+  uuid: string;
+  group_uuid: string | null;
+  group_name: string | null;
+  detected_user_uuid: string | null;
+  detected_username: string | null;
+  amount: number | null;
+  currency: string | null;
+  provider: string | null;
+  reference: string | null;
+  raw_text: string | null;
+  status: 'PENDING' | 'CONFIRMED' | 'REJECTED';
+  confirmed_movement_uuid: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ConfirmPendingDeposit {
+  deposit_method: string;
+  amount?: number;
+  currency?: string;
+  user_uuid?: string;
+  reference?: string;
+  notes?: string;
+}

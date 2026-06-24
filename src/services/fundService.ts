@@ -11,6 +11,8 @@ import {
   AddFundMember,
   UpdateFundMember,
   CreateFundMovement,
+  PendingDeposit,
+  ConfirmPendingDeposit,
 } from '@/types/fund';
 import { ApiResponse } from '@/types/auth';
 import { httpClient } from '@/utils/httpInterceptor';
@@ -87,6 +89,23 @@ export class FundService {
 
   async deleteMovement(uuid: string): Promise<ApiResponse<void>> {
     const result = await httpClient.delete<void>(`/funds/movements/${uuid}`);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  // ===== Depósitos pendientes (detectados por el bot) =====
+
+  async listPendingDeposits(status = 'PENDING'): Promise<ApiResponse<PendingDeposit[]>> {
+    const result = await httpClient.get<PendingDeposit[]>(`/funds/pending-deposits?status=${status}`);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  async confirmPendingDeposit(uuid: string, data: ConfirmPendingDeposit): Promise<ApiResponse<PendingDeposit>> {
+    const result = await httpClient.post<PendingDeposit>(`/funds/pending-deposits/${uuid}/confirm`, data);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  async rejectPendingDeposit(uuid: string): Promise<ApiResponse<PendingDeposit>> {
+    const result = await httpClient.post<PendingDeposit>(`/funds/pending-deposits/${uuid}/reject`, {});
     return { success: result.success, data: result.data, error: result.error };
   }
 }

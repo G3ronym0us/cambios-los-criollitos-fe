@@ -14,6 +14,7 @@ import { MemberPositionsList } from './_components/MemberPositionsList';
 import { MembersList } from './_components/MembersList';
 import { MovementsFilters } from './_components/MovementsFilters';
 import { MovementsList } from './_components/MovementsList';
+import { PendingDepositsList } from './_components/PendingDepositsList';
 import { RegisterMovementDialog } from './_components/RegisterMovementDialog';
 import { useFunds } from './_hooks/useFunds';
 
@@ -62,6 +63,11 @@ export default function FundsAdminPage() {
 
           {state.isModeratorOrAbove ? (
             <>
+              <PendingDepositsList
+                groupUuid={state.selectedGroupUuid || null}
+                onConfirmed={actions.reloadGroupData}
+              />
+
               <MembersList
                 members={state.selectedGroupMembers}
                 canEdit={state.isModeratorOrAbove}

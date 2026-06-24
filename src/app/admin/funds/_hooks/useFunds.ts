@@ -440,6 +440,7 @@ export function useFunds() {
       handleRegisterMovement,
       handleDeleteMovement,
       getUserDisplayName,
+      reloadGroupData: loadGroupData,
     },
   };
 }
