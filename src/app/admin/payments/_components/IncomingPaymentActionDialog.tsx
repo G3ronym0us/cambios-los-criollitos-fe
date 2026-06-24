@@ -81,6 +81,9 @@ export function IncomingPaymentActionDialog({ payment, onClose, onDone }: Incomi
 
   if (!payment) return null;
 
+  const isLinked = !!payment.operation_uuid;
+  const isDeposit = !!payment.deposit;
+
   const finish = () => {
     onDone();
     onClose();
@@ -128,28 +131,36 @@ export function IncomingPaymentActionDialog({ payment, onClose, onDone }: Incomi
               <button
                 type="button"
                 onClick={() => setStep('operation')}
-                className="flex w-full items-center gap-3 rounded-lg border border-border px-3 py-3 text-left transition-colors hover:bg-muted/50"
+                className={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition-colors ${
+                  isLinked ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                }`}
               >
                 <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
                   <Link2 className="h-4.5 w-4.5" />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium text-foreground">Vincular a una operación</span>
-                  <span className="block truncate text-xs text-muted-foreground">Asociar el pago a una cotización del cliente.</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {isLinked ? 'Ya vinculada — ábrela para ver o cambiar la operación.' : 'Asociar el pago a una cotización del cliente.'}
+                  </span>
                 </span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
               </button>
               <button
                 type="button"
                 onClick={() => setStep('deposit')}
-                className="flex w-full items-center gap-3 rounded-lg border border-border px-3 py-3 text-left transition-colors hover:bg-muted/50"
+                className={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition-colors ${
+                  isDeposit ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
+                }`}
               >
                 <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
                   <PiggyBank className="h-4.5 w-4.5" />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium text-foreground">Registrar como depósito a fondo</span>
-                  <span className="block truncate text-xs text-muted-foreground">Suma al fondo como depósito del gestor (Zelle, Binance…).</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {isDeposit ? 'Ya registrado como depósito al fondo.' : 'Suma al fondo como depósito del gestor (Zelle, Binance…).'}
+                  </span>
                 </span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
               </button>
