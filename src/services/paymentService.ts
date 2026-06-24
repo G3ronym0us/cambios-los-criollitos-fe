@@ -109,6 +109,18 @@ export class PaymentService {
     );
     return { success: result.success, data: result.data, error: result.error };
   }
+
+  // Convierte un saliente (Zelle reenviado al grupo) en un entrante contabilizado en el grupo.
+  async toGroupIncoming(
+    paymentId: number,
+    body: { groupUuid?: string | null; groupJid?: string | null } = {},
+  ): Promise<ApiResponse<PaymentData>> {
+    const result = await httpClient.post<PaymentData>(
+      `/payments/outgoing/${paymentId}/to-group-incoming`,
+      { group_uuid: body.groupUuid ?? null, group_jid: body.groupJid ?? null },
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
 }
 
 export const paymentService = new PaymentService();
