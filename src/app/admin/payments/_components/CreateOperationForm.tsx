@@ -62,8 +62,13 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
   }, [pair, payment.amount, payment.currency, fromCur, toCur]);
 
   const withFund = direction === 'SEND';
+  // ZELLE/PAYPAL son métodos de pago en USD: para elegir fondo se liquidan como USD.
+  const settle = (c: string) => (c?.toUpperCase() === 'ZELLE' || c?.toUpperCase() === 'PAYPAL' ? 'USD' : c?.toUpperCase());
   const fundOptions = useMemo(
-    () => groups.filter((g) => g.currency && (g.currency === fromCur || g.currency === toCur)),
+    () =>
+      groups.filter(
+        (g) => g.currency && (settle(g.currency) === settle(fromCur) || settle(g.currency) === settle(toCur)),
+      ),
     [groups, fromCur, toCur],
   );
   const selectedGroup = useMemo(() => groups.find((g) => g.uuid === fundGroupUuid), [groups, fundGroupUuid]);
