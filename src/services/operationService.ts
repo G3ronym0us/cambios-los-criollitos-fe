@@ -7,6 +7,12 @@ import {
   OperationStats,
   UpdateScenarioPayload,
 } from '@/types/operation';
+import type { PaymentData } from '@/types/payment';
+
+export interface OperationPayments {
+  incoming: PaymentData[];
+  outgoing: PaymentData[];
+}
 
 export class OperationService {
   // Lista operaciones del bot. Requiere operador autenticado (JWT).
@@ -29,6 +35,12 @@ export class OperationService {
 
   async getOperation(uuid: string): Promise<ApiResponse<OperationData>> {
     const result = await httpClient.get<OperationData>(`/operations/${uuid}`);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  // Pagos entrantes y salientes vinculados a la operación (para el detalle).
+  async getOperationPayments(uuid: string): Promise<ApiResponse<OperationPayments>> {
+    const result = await httpClient.get<OperationPayments>(`/operations/${uuid}/payments`);
     return { success: result.success, data: result.data, error: result.error };
   }
 

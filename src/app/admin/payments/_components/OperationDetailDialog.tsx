@@ -2,7 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, ExternalLink, Handshake, PackageCheck, Send, Truck, Users } from 'lucide-react';
+import {
+  ArrowDownLeft,
+  ArrowRight,
+  ArrowUpRight,
+  ExternalLink,
+  Handshake,
+  PackageCheck,
+  PiggyBank,
+  Send,
+  Tag,
+  Truck,
+  Users,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -12,10 +24,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { StatusBadge } from '@/components/shared/StatusBadge';
-import { operationService } from '@/services/operationService';
+import { operationService, type OperationPayments } from '@/services/operationService';
 import { getStatusMeta } from '@/utils/operationStatus';
 import { formatNumber } from '@/utils/functions';
 import type { OperationData } from '@/types/operation';
+import type { PaymentData } from '@/types/payment';
 
 interface OperationDetailDialogProps {
   operationUuid: string | null;
@@ -53,19 +66,62 @@ const SCENARIO_LABEL: Record<string, string> = {
   VIA_PARTNER: 'Vía socio',
 };
 
+function PayRow({ p, incoming }: { p: PaymentData; incoming: boolean }) {
+  const sub = [incoming ? 'Entrante' : 'Saliente', p.provider, p.bank_to || p.bank_from]
+    .filter(Boolean)
+    .join(' · ');
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <span
+          aria-hidden
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
+        >
+          {incoming ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground">
+            {p.amount != null ? formatNumber(p.amount) : '—'} {p.currency ?? ''}
+          </p>
+          <p className="truncate text-xs text-muted-foreground">{sub}</p>
+        </div>
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+        {incoming && p.deposit ? (
+          <StatusBadge tone="success" icon={PiggyBank}>Depósito</StatusBadge>
+        ) : incoming && p.fund_group_name ? (
+          <StatusBadge tone="info" icon={Users}>Contabilizado</StatusBadge>
+        ) : null}
+        {!incoming && p.is_personal_expense ? (
+          <StatusBadge tone="warning" icon={Tag}>Personal</StatusBadge>
+        ) : null}
+        {!incoming && p.is_irrelevant ? (
+          <StatusBadge tone="neutral" icon={Tag}>Irrelevante</StatusBadge>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function OperationDetailDialog({ operationUuid, onClose }: OperationDetailDialogProps) {
   const [op, setOp] = useState<OperationData | null>(null);
+  const [payments, setPayments] = useState<OperationPayments | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!operationUuid) return;
     let active = true;
     setOp(null);
+    setPayments(null);
     setLoading(true);
-    operationService.getOperation(operationUuid).then((res) => {
+    Promise.all([
+      operationService.getOperation(operationUuid),
+      operationService.getOperationPayments(operationUuid),
+    ]).then(([opRes, payRes]) => {
       if (!active) return;
-      if (res.success && res.data) setOp(res.data);
-      else toast.error(res.error || 'No se pudo cargar la operación');
+      if (opRes.success && opRes.data) setOp(opRes.data);
+      else toast.error(opRes.error || 'No se pudo cargar la operación');
+      if (payRes.success && payRes.data) setPayments(payRes.data);
       setLoading(false);
     });
     return () => {
@@ -82,7 +138,7 @@ export function OperationDetailDialog({ operationUuid, onClose }: OperationDetai
       <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Detalle de la operación</DialogTitle>
-          <DialogDescription>Información de la cotización vinculada a este pago.</DialogDescription>
+          <DialogDescription>Datos de la operación y sus pagos entrantes y salientes.</DialogDescription>
         </DialogHeader>
 
         {loading ? (
@@ -163,6 +219,26 @@ export function OperationDetailDialog({ operationUuid, onClose }: OperationDetai
                   </Link>
                 </Row>
               ) : null}
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Pagos
+              </p>
+              {payments && (payments.incoming.length > 0 || payments.outgoing.length > 0) ? (
+                <div className="space-y-2">
+                  {payments.incoming.map((p) => (
+                    <PayRow key={`in-${p.id}`} p={p} incoming />
+                  ))}
+                  {payments.outgoing.map((p) => (
+                    <PayRow key={`out-${p.id}`} p={p} incoming={false} />
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-lg border border-dashed border-border px-3 py-3 text-center text-xs text-muted-foreground">
+                  Sin pagos vinculados a esta operación.
+                </p>
+              )}
             </div>
           </div>
         )}
