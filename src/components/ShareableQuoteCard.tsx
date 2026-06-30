@@ -192,7 +192,7 @@ const ShareableQuoteCard = React.forwardRef<HTMLDivElement, ShareableQuoteCardPr
           <div style={{ fontSize: 11, color: BRAND.inkSoft, fontVariantNumeric: "tabular-nums" }}>
             {(() => {
               const o = orientRateForDisplay(rate, inversePercentage, fromCurrency, toCurrency);
-              return `Tasa: ${fmt(o.value, 6)} ${o.manyCurrency} = 1 ${o.unitCurrency}`;
+              return `Tasa: ${fmt(o.value, 2)}`;
             })()}
           </div>
         </div>

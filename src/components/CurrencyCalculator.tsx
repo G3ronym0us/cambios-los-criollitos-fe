@@ -131,7 +131,8 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
     toCurrency: string,
     fromAmount?: number,
     toAmount?: number,
-    bcvValue?: number
+    bcvValue?: number,
+    seedToOnZero = false
   ) => {
     // Limpiar estado si no hay montos proporcionados
     if (!fromAmount && !toAmount) {
@@ -194,6 +195,17 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
       );
       finalFromAmount = bcvValue ? roundToDecimals(fromAmount!, 2) : fromAmount!;
       finalToAmount = roundToDecimals(calculated, 2);
+
+      // Al cambiar de moneda, si el monto TO queda en 0 (tasa muy chica para
+      // ese FROM), sembrar TO=1 y recalcular FROM para que la carga sea útil.
+      if (seedToOnZero && finalToAmount === 0) {
+        setLastEdited('to');
+        finalToAmount = 1;
+        finalFromAmount = roundToDecimals(
+          applyRateConversion(1, directRate.rate, directRate.inverse_percentage, true),
+          2
+        );
+      }
     }
 
     // Calcular equivalente BCV usando la tasa activa (USD o EUR según bcvMode)
@@ -397,8 +409,8 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
         calculator.fromCurrency,
         calculator.toCurrency
       );
-      const v = oriented.value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
-      lines.push(`Tasa: ${v} ${oriented.manyCurrency} = 1 ${oriented.unitCurrency}`);
+      const v = oriented.value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+      lines.push(`Tasa: ${v}`);
     }
     return lines.join('\n');
   };
@@ -475,11 +487,11 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
   };
 
   const handleFromCurrencyChange = (currency: string) => {
-    calculateConversion(currency, calculator.toCurrency, calculator.amount);
+    calculateConversion(currency, calculator.toCurrency, calculator.amount, undefined, undefined, true);
   };
 
   const handleToCurrencyChange = (currency: string) => {
-    calculateConversion(calculator.fromCurrency, currency, calculator.amount);
+    calculateConversion(calculator.fromCurrency, currency, calculator.amount, undefined, undefined, true);
   };
 
   const handleBCVAmountChange = (bcvAmount: string) => {
@@ -549,6 +561,22 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
           bcvAmount={calculator.bcvAmount}
           onBCVAmountChange={handleBCVAmountChange}
         />
+
+        {/* Tasa pública — solo el valor (sin porcentaje) */}
+        {currentRate && calculator.rate != null && (
+          <div className="mt-4 flex items-center justify-center gap-2 rounded-lg border border-border bg-muted/40 px-4 py-2.5">
+            <TrendingUp className="h-4 w-4 text-primary" aria-hidden />
+            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tasa</span>
+            <span className="text-base font-bold tabular-nums text-foreground">
+              {orientRateForDisplay(
+                calculator.rate,
+                currentRate.inverse_percentage,
+                calculator.fromCurrency,
+                calculator.toCurrency
+              ).value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+            </span>
+          </div>
+        )}
 
         {/* Botón compartir cotización */}
         {calculator.result != null && calculator.amount !== undefined && (
@@ -679,8 +707,8 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
                     const o = orientRateForDisplay(preview, currentRate.inverse_percentage, calculator.fromCurrency, calculator.toCurrency);
                     return (
                       <>
-                        {o.value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}{' '}
-                        <span className="text-sm font-medium text-primary">{o.manyCurrency} = 1 {o.unitCurrency}</span>
+                        {o.value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}{' '}
+                        <span className="text-sm font-medium text-primary">{o.manyCurrency}</span>
                       </>
                     );
                   })()}
