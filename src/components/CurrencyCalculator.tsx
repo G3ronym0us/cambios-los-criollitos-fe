@@ -583,7 +583,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
                 <span>Tasa base (<span translate="no">Binance</span>)</span>
               </div>
               <span className="font-semibold tabular-nums text-foreground">
-                {currentRate.base_rate.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+                {orientRateForDisplay(currentRate.base_rate, currentRate.inverse_percentage, calculator.fromCurrency, calculator.toCurrency).value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
               </span>
             </div>
 
@@ -674,8 +674,16 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
               <div className="min-w-0" aria-live="polite" aria-atomic="true">
                 <p className="text-xs font-medium text-muted-foreground">Nueva tasa</p>
                 <p className="truncate text-base font-bold tabular-nums text-foreground sm:text-lg">
-                  {calcPreviewRate(currentRate.base_rate, sliderValue, currentRate.inverse_percentage).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}{' '}
-                  <span className="text-sm font-medium text-primary">{calculator.toCurrency}</span>
+                  {(() => {
+                    const preview = calcPreviewRate(currentRate.base_rate, sliderValue, currentRate.inverse_percentage);
+                    const o = orientRateForDisplay(preview, currentRate.inverse_percentage, calculator.fromCurrency, calculator.toCurrency);
+                    return (
+                      <>
+                        {o.value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}{' '}
+                        <span className="text-sm font-medium text-primary">{o.manyCurrency} = 1 {o.unitCurrency}</span>
+                      </>
+                    );
+                  })()}
                 </p>
               </div>
               <Button
