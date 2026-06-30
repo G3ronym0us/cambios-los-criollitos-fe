@@ -8,6 +8,7 @@ import BCVService from "../services/bcvService";
 import { adminService } from "../services/adminService";
 import { getCurrencyName } from "../utils/currencyConfig";
 import { Role } from "../utils/enums";
+import { orientRateForDisplay } from "../utils/functions";
 
 interface Rate {
   from_currency: string;
@@ -390,12 +391,14 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
       lines.push(`Equivalente BCV (${bcvMode.toUpperCase()}): ${fmt(parseFloat(calculator.bcvAmount))}`);
     }
     if (calculator.rate) {
-      const r = calculator.rate.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
-      lines.push(
-        currentRate?.inverse_percentage
-          ? `Tasa: ${r} ${calculator.fromCurrency} = 1 ${calculator.toCurrency}`
-          : `Tasa: 1 ${calculator.fromCurrency} = ${r} ${calculator.toCurrency}`
+      const oriented = orientRateForDisplay(
+        calculator.rate,
+        currentRate?.inverse_percentage ?? false,
+        calculator.fromCurrency,
+        calculator.toCurrency
       );
+      const v = oriented.value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+      lines.push(`Tasa: ${v} ${oriented.manyCurrency} = 1 ${oriented.unitCurrency}`);
     }
     return lines.join('\n');
   };

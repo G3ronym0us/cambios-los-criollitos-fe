@@ -1,4 +1,5 @@
 import React from "react";
+import { orientRateForDisplay } from "../utils/functions";
 
 interface ShareableQuoteCardProps {
   fromAmount: number;
@@ -189,9 +190,10 @@ const ShareableQuoteCard = React.forwardRef<HTMLDivElement, ShareableQuoteCardPr
         {/* Pie con la tasa */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontSize: 11, color: BRAND.inkSoft, fontVariantNumeric: "tabular-nums" }}>
-            {inversePercentage
-              ? `Tasa: ${fmt(rate, 6)} ${fromCurrency} = 1 ${toCurrency}`
-              : `Tasa: 1 ${fromCurrency} = ${fmt(rate, 6)} ${toCurrency}`}
+            {(() => {
+              const o = orientRateForDisplay(rate, inversePercentage, fromCurrency, toCurrency);
+              return `Tasa: ${fmt(o.value, 6)} ${o.manyCurrency} = 1 ${o.unitCurrency}`;
+            })()}
           </div>
         </div>
       </div>

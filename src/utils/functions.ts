@@ -7,6 +7,33 @@ export const formatNumber = (num: number) => {
   });
 };
 
+/**
+ * Orienta una tasa para mostrarla SIEMPRE con el número >= 1 (el más legible),
+ * eligiendo la dirección que corresponda. Es solo presentación: no altera el
+ * `rate` almacenado ni los cálculos del backend.
+ *
+ * Ej.: VES->COP da 0.235 (1 VES = 0.235... ) -> se muestra "4.24 COP = 1 VES".
+ *      VES->USDT da 0.00135 -> se muestra "738.69 VES = 1 USDT".
+ *
+ * Devuelve las piezas de la etiqueta "{value} {manyCurrency} = 1 {unitCurrency}"
+ * para que cada componente aplique su propio formateo numérico.
+ */
+export const orientRateForDisplay = (
+  rate: number,
+  inversePercentage: boolean,
+  fromCurrency: string,
+  toCurrency: string
+): { value: number; manyCurrency: string; unitCurrency: string } => {
+  // effRate = cuántas unidades de TO equivalen a 1 de FROM
+  const effRate = inversePercentage ? 1 / rate : rate;
+  if (!isFinite(effRate) || effRate <= 0) {
+    return { value: rate, manyCurrency: toCurrency, unitCurrency: fromCurrency };
+  }
+  return effRate >= 1
+    ? { value: effRate, manyCurrency: toCurrency, unitCurrency: fromCurrency }
+    : { value: 1 / effRate, manyCurrency: fromCurrency, unitCurrency: toCurrency };
+};
+
 export const getRoleOptions = () => {
   return Object.values(Role).map((role) => ({
     value: role,
