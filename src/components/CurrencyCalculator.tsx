@@ -390,7 +390,12 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
       lines.push(`Equivalente BCV (${bcvMode.toUpperCase()}): ${fmt(parseFloat(calculator.bcvAmount))}`);
     }
     if (calculator.rate) {
-      lines.push(`Tasa: 1 ${calculator.fromCurrency} = ${calculator.rate.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 6 })} ${calculator.toCurrency}`);
+      const r = calculator.rate.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+      lines.push(
+        currentRate?.inverse_percentage
+          ? `Tasa: ${r} ${calculator.fromCurrency} = 1 ${calculator.toCurrency}`
+          : `Tasa: 1 ${calculator.fromCurrency} = ${r} ${calculator.toCurrency}`
+      );
     }
     return lines.join('\n');
   };
@@ -758,6 +763,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
             fromCurrency={calculator.fromCurrency}
             toCurrency={calculator.toCurrency}
             rate={calculator.rate}
+            inversePercentage={currentRate?.inverse_percentage ?? false}
             bcvAmount={calculator.bcvAmount}
             bcvMode={bcvMode}
           />

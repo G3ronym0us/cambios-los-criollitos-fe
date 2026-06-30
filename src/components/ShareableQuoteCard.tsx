@@ -6,6 +6,7 @@ interface ShareableQuoteCardProps {
   fromCurrency: string;
   toCurrency: string;
   rate: number;
+  inversePercentage?: boolean;
   bcvAmount?: string;
   bcvMode?: "usd" | "eur";
   generatedAt?: Date;
@@ -54,7 +55,7 @@ const BrandLogo = ({ size = 40 }: { size?: number }) => (
 
 const ShareableQuoteCard = React.forwardRef<HTMLDivElement, ShareableQuoteCardProps>(
   (
-    { fromAmount, toAmount, fromCurrency, toCurrency, rate, bcvAmount, bcvMode = "usd", generatedAt },
+    { fromAmount, toAmount, fromCurrency, toCurrency, rate, inversePercentage = false, bcvAmount, bcvMode = "usd", generatedAt },
     ref
   ) => {
     const date = generatedAt ?? new Date();
@@ -188,7 +189,9 @@ const ShareableQuoteCard = React.forwardRef<HTMLDivElement, ShareableQuoteCardPr
         {/* Pie con la tasa */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontSize: 11, color: BRAND.inkSoft, fontVariantNumeric: "tabular-nums" }}>
-            Tasa: 1 {fromCurrency} = {fmt(rate, 6)} {toCurrency}
+            {inversePercentage
+              ? `Tasa: ${fmt(rate, 6)} ${fromCurrency} = 1 ${toCurrency}`
+              : `Tasa: 1 ${fromCurrency} = ${fmt(rate, 6)} ${toCurrency}`}
           </div>
         </div>
       </div>
