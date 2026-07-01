@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Mail, Lock, AlertCircle, CheckCircle } from 'lucide-react';
@@ -10,10 +10,20 @@ import { InputField } from './InputField';
 import { LoadingButton } from './LoadingButton';
 import { Message } from '@/types/auth';
 import { validateEmail } from '@/utils/validation';
+import { Role } from '@/utils/enums';
 
 export const LoginForm: React.FC = () => {
-  const { login, loading } = useAuth();
+  const { login, loading, user, initializing } = useAuth();
   const router = useRouter();
+
+  // Si el usuario ya está autenticado, no debe ver el login: enviarlo a su
+  // pantalla según rol (admin para MOD/ROOT, calculadora para el resto).
+  useEffect(() => {
+    if (!initializing && user) {
+      const dest = user.role === Role.ROOT || user.role === Role.MODERATOR ? '/admin' : '/';
+      router.replace(dest);
+    }
+  }, [user, initializing, router]);
   const [formData, setFormData] = useState<{email: string, password: string}>({
     email: '',
     password: ''
@@ -72,11 +82,7 @@ export const LoginForm: React.FC = () => {
           type: 'success',
           text: '¡Bienvenido Administrador!'
         });
-        
-        // Redirigir al admin después de login exitoso
-        setTimeout(() => {
-          router.push('/admin');
-        }, 1000);
+        // El redirect lo maneja el guard de arriba, según el rol del usuario.
       } else {
         setMessage({
           type: 'error',

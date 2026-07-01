@@ -45,6 +45,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           const result = await authService.getCurrentUser();
           if (result.success && result.data) {
             setUser(result.data);
+            // Reescribir la cookie con sameSite 'lax' para "actualizar" sesiones
+            // viejas que quedaron en 'strict' (evita que el middleware no vea el
+            // token en navegaciones y rebote a /auth/login).
+            Cookies.set('access_token', token, {
+              expires: 7,
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'lax',
+            });
           } else {
             // Token inválido, limpiar cookies
             Cookies.remove('access_token');
@@ -76,12 +84,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         Cookies.set('access_token', tokens.access_token, { 
           expires: 7, // 7 días
           secure: process.env.NODE_ENV === 'production',
-          sameSite: 'strict'
+          sameSite: 'lax'
         });
         Cookies.set('refresh_token', tokens.refresh_token, { 
           expires: 30, // 30 días
           secure: process.env.NODE_ENV === 'production',
-          sameSite: 'strict'
+          sameSite: 'lax'
         });
         
         setUser(user);
@@ -134,7 +142,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         Cookies.set('access_token', result.data.access_token, {
           expires: 7,
           secure: process.env.NODE_ENV === 'production',
-          sameSite: 'strict'
+          sameSite: 'lax'
         });
         return true;
       }
