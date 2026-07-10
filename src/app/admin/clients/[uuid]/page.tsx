@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, Ban, Coins, Eye, Receipt, Users, UserX } from 'lucide-react';
+import { ArrowLeft, Ban, Coins, Eye, Receipt, Users, UserX, Wallet } from 'lucide-react';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { cn } from '@/lib/utils';
 import { OperationItem } from '../../operations/_components/OperationItem';
+import { ClientBalanceTab } from './_components/ClientBalanceTab';
 import { ClientSettingsTab } from './_components/ClientSettingsTab';
 import { useClientProfile } from './_hooks/useClientProfile';
 
@@ -46,7 +47,7 @@ function Field({ label, value }: { label: string; value: string }) {
 export default function ClientProfilePage() {
   const { uuid } = useParams<{ uuid: string }>();
   const { state, actions } = useClientProfile(uuid);
-  const { client, loading, notFound, saving, operations, operationsLoading, pairs } = state;
+  const { client, loading, notFound, saving, operations, operationsLoading, pairs, balance, balanceLoading } = state;
 
   if (loading) {
     return <LoadingState label="Cargando cliente..." />;
@@ -91,6 +92,11 @@ export default function ClientProfilePage() {
         {client.is_blocked ? <StatusBadge tone="destructive" icon={Ban}>Bloqueado</StatusBadge> : null}
         {client.is_tracked ? <StatusBadge tone="info" icon={Eye}>Seguido</StatusBadge> : null}
         {client.is_usdt_authorized ? <StatusBadge tone="success" icon={Coins}>USDT</StatusBadge> : null}
+        {client.balance > 0 ? (
+          <StatusBadge tone="success" icon={Wallet}>
+            ${client.balance.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} a favor
+          </StatusBadge>
+        ) : null}
       </div>
 
       <Tabs defaultValue="settings">
@@ -98,6 +104,9 @@ export default function ClientProfilePage() {
           <TabsTrigger value="settings">Configuración</TabsTrigger>
           <TabsTrigger value="transactions">
             Transacciones{!operationsLoading ? ` (${operations.length})` : ''}
+          </TabsTrigger>
+          <TabsTrigger value="balance">
+            Saldo{!balanceLoading && balance ? ` ($${balance.balance.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : ''}
           </TabsTrigger>
         </TabsList>
 
@@ -134,6 +143,10 @@ export default function ClientProfilePage() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="balance">
+          <ClientBalanceTab balance={balance} loading={balanceLoading} onAdjust={actions.adjustBalance} />
         </TabsContent>
       </Tabs>
     </div>

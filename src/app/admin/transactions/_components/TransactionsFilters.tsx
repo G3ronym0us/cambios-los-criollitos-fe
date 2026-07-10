@@ -88,6 +88,7 @@ export function TransactionsFilters({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={ALL}>Todos los estados</SelectItem>
+                    <SelectItem value={TransactionStatus.QUOTED}>Cotizada</SelectItem>
                     <SelectItem value={TransactionStatus.COMPLETED}>Completada</SelectItem>
                     <SelectItem value={TransactionStatus.PENDING}>Pendiente</SelectItem>
                     <SelectItem value={TransactionStatus.CANCELLED}>Cancelada</SelectItem>

@@ -2,7 +2,7 @@
 
 import { memo } from 'react';
 import Link from 'next/link';
-import { Ban, ChevronRight, Coins, Eye, Users } from 'lucide-react';
+import { Ban, ChevronRight, Coins, Eye, Users, Wallet } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import type { ClientData } from '@/types/client';
@@ -69,6 +69,11 @@ export const ClientItem = memo(function ClientItem({ client }: ClientItemProps) 
                   ) : null}
                   {client.is_usdt_authorized ? (
                     <StatusBadge tone="success" icon={Coins}>USDT</StatusBadge>
+                  ) : null}
+                  {client.balance > 0 ? (
+                    <StatusBadge tone="success" icon={Wallet}>
+                      ${client.balance.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} a favor
+                    </StatusBadge>
                   ) : null}
                 </div>
                 <p className="mt-1 truncate text-sm text-muted-foreground">

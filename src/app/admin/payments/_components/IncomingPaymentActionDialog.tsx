@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ChevronRight, Landmark, Link2, PiggyBank } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Landmark, Link2, PiggyBank, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -34,7 +34,10 @@ interface IncomingPaymentActionDialogProps {
   onDone: () => void;
 }
 
-type Step = 'choose' | 'operation' | 'deposit';
+type Step = 'choose' | 'operation' | 'deposit' | 'balance';
+
+// Métodos que liquidan en USD: los únicos que el backend acepta como crédito de saldo.
+const BALANCE_CURRENCIES = new Set(['USD', 'ZELLE', 'PAYPAL']);
 
 function digitsOnly(phone: string | null | undefined) {
   return (phone || '').replace(/@(c|g)\.us$/, '').replace(/\D/g, '');
@@ -50,6 +53,8 @@ export function IncomingPaymentActionDialog({ payment, onClose, onDone }: Incomi
   const [currency, setCurrency] = useState('');
   const [reference, setReference] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [balanceAmount, setBalanceAmount] = useState('');
+  const [balanceNotes, setBalanceNotes] = useState('');
 
   useEffect(() => {
     if (!payment) return;
@@ -61,6 +66,8 @@ export function IncomingPaymentActionDialog({ payment, onClose, onDone }: Incomi
     setCurrency(payment.currency || '');
     setReference(payment.reference || '');
     setSubmitting(false);
+    setBalanceAmount(payment.amount != null ? String(payment.amount) : '');
+    setBalanceNotes('');
     fundService.getGroups().then((res) => {
       if (res.success && res.data) setGroups(res.data.filter((g) => g.is_active));
     });
@@ -114,6 +121,25 @@ export function IncomingPaymentActionDialog({ payment, onClose, onDone }: Incomi
     }
   };
 
+  const saveBalanceCredit = async () => {
+    const amt = parseFloat(balanceAmount.replace(',', '.'));
+    if (!Number.isFinite(amt) || amt <= 0) return toast.error('El monto debe ser mayor a 0');
+
+    setSubmitting(true);
+    const res = await paymentService.creditBalance(payment.id, {
+      amount: amt,
+      notes: balanceNotes.trim() || null,
+    });
+    setSubmitting(false);
+    if (res.success) {
+      toast.success('Pago acreditado como saldo a favor del cliente');
+      finish();
+    } else {
+      toast.error(res.error || 'No se pudo acreditar el saldo');
+    }
+  };
+
+  const balanceEligible = BALANCE_CURRENCIES.has((payment.currency || '').toUpperCase());
   const members = group?.members ?? [];
 
   return (
@@ -164,6 +190,24 @@ export function IncomingPaymentActionDialog({ payment, onClose, onDone }: Incomi
                 </span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
               </button>
+              {balanceEligible ? (
+                <button
+                  type="button"
+                  onClick={() => setStep('balance')}
+                  className="flex w-full items-center gap-3 rounded-lg border border-border px-3 py-3 text-left transition-colors hover:bg-muted/50"
+                >
+                  <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                    <Wallet className="h-4.5 w-4.5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium text-foreground">Acreditar como saldo a favor</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      El cliente deja el dinero en cuenta y se le paga en abonos a la tasa del día.
+                    </span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </button>
+              ) : null}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={onClose}>Cancelar</Button>
@@ -184,6 +228,50 @@ export function IncomingPaymentActionDialog({ payment, onClose, onDone }: Incomi
               onCancel={() => setStep('choose')}
               cancelLabel="Volver"
             />
+          </>
+        ) : step === 'balance' ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Acreditar como saldo a favor</DialogTitle>
+              <DialogDescription>
+                Suma el monto al saldo del cliente. Cada abono posterior se cotiza a la tasa del día y lo descuenta.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 overflow-y-auto">
+              <div className="space-y-1.5">
+                <Label htmlFor="balance-amount">Monto (USD)</Label>
+                <Input
+                  id="balance-amount"
+                  inputMode="decimal"
+                  value={balanceAmount}
+                  onChange={(e) => setBalanceAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="h-10"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="balance-notes">Nota (opcional)</Label>
+                <Input
+                  id="balance-notes"
+                  value={balanceNotes}
+                  onChange={(e) => setBalanceNotes(e.target.value)}
+                  placeholder="Ej.: pagos parciales acordados con el cliente"
+                  className="h-10"
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:justify-between">
+              <Button variant="ghost" onClick={() => setStep('choose')} disabled={submitting}>
+                <ArrowLeft className="h-4 w-4" />
+                Volver
+              </Button>
+              <Button onClick={saveBalanceCredit} disabled={submitting}>
+                <Wallet className="h-4 w-4" />
+                {submitting ? 'Guardando…' : 'Acreditar saldo'}
+              </Button>
+            </DialogFooter>
           </>
         ) : (
           <>

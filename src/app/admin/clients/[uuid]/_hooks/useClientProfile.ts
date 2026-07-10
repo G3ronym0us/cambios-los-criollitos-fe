@@ -6,7 +6,7 @@ import { adminService } from '@/services/adminService';
 import { clientService } from '@/services/clientService';
 import { operationService } from '@/services/operationService';
 import { CurrencyPairData } from '@/types/admin';
-import { ClientData, ClientUpdate } from '@/types/client';
+import { BalanceAdjust, BalanceSummary, ClientData, ClientUpdate } from '@/types/client';
 import { OperationData } from '@/types/operation';
 
 export function useClientProfile(uuid: string) {
@@ -17,6 +17,20 @@ export function useClientProfile(uuid: string) {
   const [operations, setOperations] = useState<OperationData[]>([]);
   const [operationsLoading, setOperationsLoading] = useState(true);
   const [pairs, setPairs] = useState<CurrencyPairData[]>([]);
+  const [balance, setBalance] = useState<BalanceSummary | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(true);
+
+  // Saldo a favor + movimientos del ledger.
+  const loadBalance = useCallback(async () => {
+    setBalanceLoading(true);
+    const result = await clientService.getClientBalance(uuid);
+    setBalance(result.success && result.data ? result.data : null);
+    setBalanceLoading(false);
+  }, [uuid]);
+
+  useEffect(() => {
+    loadBalance();
+  }, [loadBalance]);
 
   // Carga las operaciones (transacciones) del cliente filtrando por su teléfono.
   const loadOperations = useCallback(async (phone: string) => {
@@ -69,8 +83,23 @@ export function useClientProfile(uuid: string) {
     [uuid]
   );
 
+  // Ajuste manual del saldo (CREDIT/DEBIT). Refresca el resumen al guardar.
+  const adjustBalance = useCallback(
+    async (data: BalanceAdjust): Promise<boolean> => {
+      const result = await clientService.adjustClientBalance(uuid, data);
+      if (result.success) {
+        toast.success(data.entry_type === 'CREDIT' ? 'Saldo acreditado' : 'Saldo debitado');
+        loadBalance();
+        return true;
+      }
+      toast.error(result.error || 'No se pudo ajustar el saldo');
+      return false;
+    },
+    [uuid, loadBalance]
+  );
+
   return {
-    state: { client, loading, notFound, saving, operations, operationsLoading, pairs },
-    actions: { updateFields, reload: load },
+    state: { client, loading, notFound, saving, operations, operationsLoading, pairs, balance, balanceLoading },
+    actions: { updateFields, reload: load, adjustBalance },
   };
 }

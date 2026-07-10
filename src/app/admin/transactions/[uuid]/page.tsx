@@ -21,6 +21,7 @@ const formatDate = (dateString: string) =>
   });
 
 const STATUS_CONFIG: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
+  [TransactionStatus.QUOTED]:    { color: 'bg-gray-100 text-gray-800', icon: <Clock size={14} />, label: 'Cotizada' },
   [TransactionStatus.COMPLETED]: { color: 'bg-green-100 text-green-800', icon: <CheckCircle size={14} />, label: 'Completada' },
   [TransactionStatus.PENDING]:   { color: 'bg-yellow-100 text-yellow-800', icon: <Clock size={14} />, label: 'Pendiente' },
   [TransactionStatus.CANCELLED]: { color: 'bg-gray-100 text-gray-800', icon: <XCircle size={14} />, label: 'Cancelada' },

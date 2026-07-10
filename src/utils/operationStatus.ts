@@ -11,7 +11,6 @@ export interface OperationStatusMeta {
 }
 
 // Mapeo único estado→tono/icono/label, reutilizado por OperationItem, PaymentItem y el detalle.
-// PENDING se mantiene por robustez aunque el flujo actual no lo dispare.
 export function getStatusMeta(status: OperationStatus | null | undefined): OperationStatusMeta {
   switch (status) {
     case 'COMPLETED':

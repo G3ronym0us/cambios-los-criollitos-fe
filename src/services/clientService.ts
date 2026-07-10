@@ -1,6 +1,9 @@
 import { ApiResponse } from '@/types/auth';
 import { httpClient } from '@/utils/httpInterceptor';
 import {
+  BalanceAdjust,
+  BalanceEntry,
+  BalanceSummary,
   ClientData,
   ClientFilters,
   ClientListResponse,
@@ -30,6 +33,24 @@ export class ClientService {
   // Editar requiere moderador+ en el backend.
   async updateClient(uuid: string, data: ClientUpdate): Promise<ApiResponse<ClientData>> {
     const result = await httpClient.patch<ClientData>(`/clients/${uuid}`, data);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  // Saldo a favor del cliente + movimientos del ledger.
+  async getClientBalance(uuid: string): Promise<ApiResponse<BalanceSummary>> {
+    const result = await httpClient.get<BalanceSummary>(`/clients/${uuid}/balance`);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  // Ajuste manual del saldo (CREDIT/DEBIT). Requiere moderador+ en el backend.
+  async adjustClientBalance(
+    uuid: string,
+    data: BalanceAdjust,
+  ): Promise<ApiResponse<BalanceEntry & { balance_after: number }>> {
+    const result = await httpClient.post<BalanceEntry & { balance_after: number }>(
+      `/clients/${uuid}/balance/adjust`,
+      data,
+    );
     return { success: result.success, data: result.data, error: result.error };
   }
 }

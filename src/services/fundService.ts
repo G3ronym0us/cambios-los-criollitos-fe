@@ -18,8 +18,9 @@ import { ApiResponse } from '@/types/auth';
 import { httpClient } from '@/utils/httpInterceptor';
 
 export class FundService {
-  async getGroups(): Promise<ApiResponse<FundGroup[]>> {
-    const result = await httpClient.get<FundGroup[]>('/funds/groups');
+  async getGroups(activeOnly = true): Promise<ApiResponse<FundGroup[]>> {
+    const endpoint = activeOnly ? '/funds/groups' : '/funds/groups?active_only=false';
+    const result = await httpClient.get<FundGroup[]>(endpoint);
     return { success: result.success, data: result.data, error: result.error };
   }
 

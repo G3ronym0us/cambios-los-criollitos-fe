@@ -12,7 +12,6 @@ interface OperationsListProps {
   loading: boolean;
   hasActiveFilters: boolean;
   onResetFilters: () => void;
-  onEdit?: (operation: OperationData) => void;
 }
 
 export function OperationsList({
@@ -20,7 +19,6 @@ export function OperationsList({
   loading,
   hasActiveFilters,
   onResetFilters,
-  onEdit,
 }: OperationsListProps) {
   if (loading) {
     return <LoadingState label="Cargando operaciones..." />;
@@ -51,7 +49,7 @@ export function OperationsList({
   return (
     <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
       {operations.map((op) => (
-        <OperationItem key={op.uuid} operation={op} onEdit={onEdit} />
+        <OperationItem key={op.uuid} operation={op} />
       ))}
     </div>
   );

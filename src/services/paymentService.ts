@@ -110,6 +110,18 @@ export class PaymentService {
     return { success: result.success, data: result.data, error: result.error };
   }
 
+  // Acredita un pago entrante (Zelle/PayPal/USD) como saldo a favor del cliente.
+  async creditBalance(
+    paymentId: number,
+    body: { amount?: number | null; notes?: string | null } = {},
+  ): Promise<ApiResponse<unknown>> {
+    const result = await httpClient.post<unknown>(
+      `/payments/incoming/${paymentId}/credit-balance`,
+      { amount: body.amount ?? null, notes: body.notes ?? null },
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
   // Convierte un saliente (Zelle reenviado al grupo) en un entrante contabilizado en el grupo.
   async toGroupIncoming(
     paymentId: number,

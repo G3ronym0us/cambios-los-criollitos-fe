@@ -63,13 +63,3 @@ export interface OperationFilters {
   phone?: string;
   limit?: number;
 }
-
-export interface UpdateOperationPayload {
-  client_phone?: string;
-  client_display_name?: string | null;
-  scenario?: OperationScenario;
-  fund_group_uuid?: string | null;
-  received_by_user_uuid?: string | null;
-  clear_fund_group?: boolean;
-  clear_received_by?: boolean;
-}

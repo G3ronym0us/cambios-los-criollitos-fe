@@ -10,6 +10,7 @@ type StatusMeta = {
 };
 
 const STATUS_META: Record<TransactionStatus, StatusMeta> = {
+  [TransactionStatus.QUOTED]: { label: 'Cotizada', tone: 'neutral', icon: Clock },
   [TransactionStatus.COMPLETED]: { label: 'Completada', tone: 'success', icon: CheckCircle },
   [TransactionStatus.PENDING]: { label: 'Pendiente', tone: 'warning', icon: Clock },
   [TransactionStatus.CANCELLED]: { label: 'Cancelada', tone: 'neutral', icon: XCircle },

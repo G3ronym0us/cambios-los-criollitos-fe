@@ -4,8 +4,8 @@ import {
   OperationData,
   OperationFilters,
   OperationListResponse,
+  OperationStatus,
   OperationStats,
-  UpdateOperationPayload,
 } from '@/types/operation';
 import type { PaymentData } from '@/types/payment';
 
@@ -44,9 +44,30 @@ export class OperationService {
     return { success: result.success, data: result.data, error: result.error };
   }
 
-  // Edita cliente, escenario, grupo y receptor en una sola transacción.
-  async updateOperation(uuid: string, payload: UpdateOperationPayload): Promise<ApiResponse<OperationData>> {
-    const result = await httpClient.patch<OperationData>(`/operations/${uuid}`, payload);
+  async updatePair(uuid: string, currencyPairUuid: string): Promise<ApiResponse<OperationData>> {
+    const result = await httpClient.patch<OperationData>(`/operations/${uuid}`, {
+      currency_pair_uuid: currencyPairUuid,
+    });
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  async updateDetails(
+    uuid: string,
+    data: { currency_pair_uuid?: string; applied_percentage?: number },
+  ): Promise<ApiResponse<OperationData>> {
+    const result = await httpClient.patch<OperationData>(`/operations/${uuid}`, data);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  async updateFund(uuid: string, fundGroupUuid: string | null): Promise<ApiResponse<OperationData>> {
+    const result = await httpClient.patch<OperationData>(`/operations/${uuid}`, fundGroupUuid
+      ? { fund_group_uuid: fundGroupUuid }
+      : { clear_fund_group: true });
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  async updateStatus(uuid: string, status: OperationStatus): Promise<ApiResponse<OperationData>> {
+    const result = await httpClient.patch<OperationData>(`/operations/${uuid}/status`, { status });
     return { success: result.success, data: result.data, error: result.error };
   }
 }
