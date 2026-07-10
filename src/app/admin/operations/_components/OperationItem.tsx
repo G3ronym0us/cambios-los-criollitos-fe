@@ -77,9 +77,9 @@ export function OperationItem({ operation: op, onEdit }: OperationItemProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-11 w-11"
                 onClick={() => onEdit(op)}
-                aria-label="Editar escenario"
+                aria-label="Editar operación"
               >
                 <Pencil className="h-4 w-4" />
               </Button>

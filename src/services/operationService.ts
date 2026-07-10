@@ -5,7 +5,7 @@ import {
   OperationFilters,
   OperationListResponse,
   OperationStats,
-  UpdateScenarioPayload,
+  UpdateOperationPayload,
 } from '@/types/operation';
 import type { PaymentData } from '@/types/payment';
 
@@ -44,9 +44,9 @@ export class OperationService {
     return { success: result.success, data: result.data, error: result.error };
   }
 
-  // Edición manual del escenario/grupo/receptor del entrante de una operación.
-  async updateScenario(uuid: string, payload: UpdateScenarioPayload): Promise<ApiResponse<OperationData>> {
-    const result = await httpClient.patch<OperationData>(`/operations/${uuid}/scenario`, payload);
+  // Edita cliente, escenario, grupo y receptor en una sola transacción.
+  async updateOperation(uuid: string, payload: UpdateOperationPayload): Promise<ApiResponse<OperationData>> {
+    const result = await httpClient.patch<OperationData>(`/operations/${uuid}`, payload);
     return { success: result.success, data: result.data, error: result.error };
   }
 }

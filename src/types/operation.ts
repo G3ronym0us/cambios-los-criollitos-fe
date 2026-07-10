@@ -64,7 +64,9 @@ export interface OperationFilters {
   limit?: number;
 }
 
-export interface UpdateScenarioPayload {
+export interface UpdateOperationPayload {
+  client_phone?: string;
+  client_display_name?: string | null;
   scenario?: OperationScenario;
   fund_group_uuid?: string | null;
   received_by_user_uuid?: string | null;
