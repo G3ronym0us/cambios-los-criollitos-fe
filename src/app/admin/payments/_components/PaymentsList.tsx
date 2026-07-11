@@ -19,7 +19,6 @@ interface PaymentsListProps {
   onResetFilters: () => void;
   onLink?: (payment: PaymentData) => void;
   onViewRawText?: (payment: PaymentData) => void;
-  onViewOperation?: (operationUuid: string) => void;
 }
 
 export function PaymentsList({
@@ -33,7 +32,6 @@ export function PaymentsList({
   onResetFilters,
   onLink,
   onViewRawText,
-  onViewOperation,
 }: PaymentsListProps) {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -88,7 +86,6 @@ export function PaymentsList({
             outgoing={outgoing}
             onLink={onLink}
             onViewRawText={onViewRawText}
-            onViewOperation={onViewOperation}
           />
         ))}
       </div>

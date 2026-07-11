@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { Banknote, Eye, FileText, Forward, Link2, Link2Off, PiggyBank, Tag, Users, Wallet } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { getStatusMeta } from '@/utils/operationStatus';
 import { formatNumber } from '@/utils/functions';
@@ -14,7 +15,6 @@ interface PaymentItemProps {
   outgoing: boolean;
   onLink?: (payment: PaymentData) => void;
   onViewRawText?: (payment: PaymentData) => void;
-  onViewOperation?: (operationUuid: string) => void;
 }
 
 function formatDate(value: string | null) {
@@ -27,7 +27,7 @@ function formatDate(value: string | null) {
   });
 }
 
-export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText, onViewOperation }: PaymentItemProps) {
+export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText }: PaymentItemProps) {
   const client = p.client_name || p.client_phone?.replace(/@(c|g)\.us$/, '') || 'Sin identificar';
   const created = formatDate(p.created_at);
   const bank = p.bank_to || p.bank_from || p.provider;
@@ -117,16 +117,14 @@ export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText, onVie
                 Ver texto
               </Button>
             ) : null}
-            {onViewOperation && p.operation_uuid ? (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8"
-                onClick={() => onViewOperation(p.operation_uuid!)}
+            {p.operation_uuid ? (
+              <Link
+                href={`/admin/operations/${p.operation_uuid}`}
+                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-8')}
               >
                 <Eye className="h-3.5 w-3.5" />
-                Ver
-              </Button>
+                Ver operación
+              </Link>
             ) : null}
             {onLink ? (
               <Button variant="outline" size="sm" className="h-8" onClick={() => onLink(p)}>
