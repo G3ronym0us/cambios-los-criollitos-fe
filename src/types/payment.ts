@@ -16,6 +16,7 @@ export interface PaymentQuery {
   offset?: number;
   search?: string;
   outClass?: string;
+  unlinkedOnly?: boolean;
 }
 
 export interface PaymentData {

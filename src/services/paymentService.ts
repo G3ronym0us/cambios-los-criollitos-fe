@@ -10,6 +10,7 @@ export class PaymentService {
     sp.set('offset', String(query.offset ?? 0));
     if (query.search) sp.set('search', query.search);
     if (query.outClass && query.outClass !== 'ALL') sp.set('out_class', query.outClass);
+    if (query.unlinkedOnly) sp.set('unlinked_only', 'true');
     const result = await httpClient.get<PaymentPage>(`/payments/${table}?${sp.toString()}`);
     return { success: result.success, data: result.data, error: result.error };
   }

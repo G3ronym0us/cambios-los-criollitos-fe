@@ -72,7 +72,11 @@ export function LinkPaymentDialog({ operation, open, onClose, onLinked }: LinkPa
     setLoading(true);
     const timer = setTimeout(() => {
       paymentService
-        .getPayments(table, { limit: 100, search: search.trim() || undefined })
+        .getPayments(table, {
+          limit: 100,
+          search: search.trim() || undefined,
+          unlinkedOnly: true,
+        })
         .then((res) => {
           if (!active) return;
           if (res.success && res.data) setPayments(res.data.items);
@@ -86,8 +90,8 @@ export function LinkPaymentDialog({ operation, open, onClose, onLinked }: LinkPa
     };
   }, [open, table, search]);
 
-  // Candidatos: pagos sin operación (los ya vinculados a otra op no se roban desde aquí)
-  // y, en salientes, que no estén clasificados personal/irrelevante.
+  // El backend devuelve exclusivamente pagos libres. Se conserva el filtro local
+  // como defensa ante una respuesta antigua durante un despliegue escalonado.
   const candidates = useMemo(() => {
     let list = payments.filter((p) => !p.operation_uuid);
     if (table === 'outgoing') {
