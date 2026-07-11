@@ -36,6 +36,9 @@ function samePhone(a: string | null, b: string | null) {
 
 type Scope = 'auto' | 'global';
 
+// Lados "from" que liquidan en USD y por lo tanto pueden acreditar excedente al saldo a favor.
+const USD_SIDES = new Set(['USD', 'ZELLE', 'PAYPAL']);
+
 export function LinkOperationPanel({
   payment,
   table,
@@ -51,6 +54,7 @@ export function LinkOperationPanel({
   const [selected, setSelected] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [mode, setMode] = useState<'pick' | 'create'>('pick');
+  const [settleAmount, setSettleAmount] = useState('');
 
   useEffect(() => {
     setSelected(payment.operation_uuid);
@@ -151,12 +155,45 @@ export function LinkOperationPanel({
     return `Cotizaciones de ${who}`;
   })();
 
+  // Liquidación parcial: solo al vincular un SALIENTE a una op activa cuyo lado origen
+  // liquida en USD. El operador indica cuánto cambió realmente el cliente; el resto de
+  // la op se acredita como saldo a favor al completar.
+  const selectedOp = useMemo(
+    () => operations.find((op) => op.uuid === selected) ?? null,
+    [operations, selected],
+  );
+  const canPartial =
+    table === 'outgoing' &&
+    !!selectedOp &&
+    USD_SIDES.has((selectedOp.from_currency || '').toUpperCase()) &&
+    (selectedOp.status === 'QUOTED' || selectedOp.status === 'PENDING');
+
+  const settleValue = parseFloat(settleAmount.replace(',', '.'));
+  const settleValid =
+    !Number.isNaN(settleValue) && settleValue > 0 && selectedOp != null && settleValue < selectedOp.from_amount - 0.01;
+  const surplus =
+    canPartial && settleValid && selectedOp
+      ? Math.round((selectedOp.from_amount - settleValue) * 100) / 100
+      : null;
+  const settleBlocking = canPartial && settleAmount.trim() !== '' && !settleValid;
+
+  useEffect(() => {
+    setSettleAmount('');
+  }, [selected]);
+
   const doLink = async (operationUuid: string | null) => {
     setSubmitting(true);
-    const res = await paymentService.linkOperation(table, payment.id, operationUuid);
+    const settle = operationUuid && surplus !== null ? settleValue : null;
+    const res = await paymentService.linkOperation(table, payment.id, operationUuid, settle);
     setSubmitting(false);
     if (res.success) {
-      toast.success(operationUuid ? 'Pago vinculado a la operación' : 'Pago desvinculado');
+      if (settle !== null && surplus !== null) {
+        toast.success(
+          `Operación completada por ${formatNumber(settle)} — ${formatNumber(surplus)} USD acreditados como saldo a favor`,
+        );
+      } else {
+        toast.success(operationUuid ? 'Pago vinculado a la operación' : 'Pago desvinculado');
+      }
       onSuccess();
     } else {
       toast.error(res.error || 'No se pudo actualizar el vínculo');
@@ -262,6 +299,41 @@ export function LinkOperationPanel({
         )}
       </div>
 
+      {canPartial && selectedOp && (
+        <div className="space-y-1.5 rounded-lg border border-border bg-muted/40 p-3">
+          <label htmlFor="settle-amount" className="text-xs font-medium text-foreground">
+            Monto realmente cambiado ({selectedOp.from_currency}) — opcional
+          </label>
+          <Input
+            id="settle-amount"
+            type="text"
+            inputMode="decimal"
+            value={settleAmount}
+            onChange={(e) => setSettleAmount(e.target.value)}
+            placeholder={`${formatNumber(selectedOp.from_amount)} (todo)`}
+            className="h-10"
+          />
+          {surplus !== null ? (
+            <p className="text-xs text-muted-foreground">
+              La operación se completa por {formatNumber(settleValue)} {selectedOp.from_currency} y se
+              acreditan{' '}
+              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                {formatNumber(surplus)} USD
+              </span>{' '}
+              como saldo a favor del cliente.
+            </p>
+          ) : settleBlocking ? (
+            <p className="text-xs text-destructive">
+              Debe ser mayor a 0 y menor que {formatNumber(selectedOp.from_amount)}.
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Si el cliente cambió menos del total, el resto queda como saldo a favor.
+            </p>
+          )}
+        </div>
+      )}
+
       <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-between">
         <Button
           variant="ghost"
@@ -275,8 +347,8 @@ export function LinkOperationPanel({
           <Button variant="outline" onClick={onCancel} disabled={submitting}>
             {cancelLabel}
           </Button>
-          <Button onClick={() => doLink(selected)} disabled={submitting || !selected}>
-            {submitting ? 'Guardando…' : 'Vincular'}
+          <Button onClick={() => doLink(selected)} disabled={submitting || !selected || settleBlocking}>
+            {submitting ? 'Guardando…' : surplus !== null ? 'Vincular y acreditar' : 'Vincular'}
           </Button>
         </div>
       </DialogFooter>

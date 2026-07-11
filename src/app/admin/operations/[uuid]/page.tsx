@@ -19,10 +19,12 @@ import {
   Send,
   Tag,
   Truck,
+  Undo2,
   UserRound,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select,
@@ -49,6 +51,9 @@ const SCENARIO_LABELS = {
   ZELLE_DIRECT: 'Zelle directo',
   VIA_PARTNER: 'Vía socio',
 } as const;
+
+// Lados "from" que liquidan en USD: solo estos pueden acreditar excedente al saldo a favor.
+const USD_SIDES = new Set(['USD', 'ZELLE', 'PAYPAL']);
 
 const NO_FUND_VALUE = '__no_fund__';
 
@@ -152,12 +157,16 @@ export default function OperationDetailPage() {
     reloadPayments,
     updateFund,
     updateDetails,
+    partialSettle,
   } = useOperationDetail(uuid);
   const [editOpen, setEditOpen] = useState(false);
   const [linkPaymentOpen, setLinkPaymentOpen] = useState(false);
   const [editingFund, setEditingFund] = useState(false);
   const [selectedFundUuid, setSelectedFundUuid] = useState(NO_FUND_VALUE);
   const [savingFund, setSavingFund] = useState(false);
+  const [correcting, setCorrecting] = useState(false);
+  const [settleAmount, setSettleAmount] = useState('');
+  const [savingSettle, setSavingSettle] = useState(false);
 
   if (loading) {
     return <LoadingState label="Cargando operación..." fullHeight />;
@@ -189,6 +198,34 @@ export default function OperationDetailPage() {
   const linkedPayments = [...(payments?.incoming ?? []), ...(payments?.outgoing ?? [])];
   const operationNotes = operation.notes ? formatOperationNotes(operation.notes) : null;
   const selectedFund = funds.find((fund) => fund.uuid === selectedFundUuid);
+
+  // Corrección retroactiva: op COMPLETED con lado origen USD que se completó por el
+  // total cuando el cliente solo cambió una parte.
+  const canCorrect =
+    operation.status === 'COMPLETED' &&
+    USD_SIDES.has((operation.from_currency || '').toUpperCase());
+  const settleValue = parseFloat(settleAmount.replace(',', '.'));
+  const settleValid =
+    !Number.isNaN(settleValue) && settleValue > 0 && settleValue < operation.from_amount - 0.01;
+  const surplus = settleValid
+    ? Math.round((operation.from_amount - settleValue) * 100) / 100
+    : null;
+
+  const saveSettle = async () => {
+    if (surplus === null) return;
+    setSavingSettle(true);
+    const result = await partialSettle(settleValue);
+    setSavingSettle(false);
+    if (result.success && result.data) {
+      toast.success(
+        `Operación corregida — ${formatNumber(result.data.credited)} USD acreditados como saldo a favor (saldo: ${formatNumber(result.data.balance_after)})`,
+      );
+      setCorrecting(false);
+      setSettleAmount('');
+    } else {
+      toast.error(result.error || 'No se pudo corregir la operación');
+    }
+  };
 
   const saveDetails = async (
     currencyPairUuid: string,
@@ -298,11 +335,82 @@ export default function OperationDetailPage() {
               <span>{formatNumber(operation.to_amount)} {operation.to_currency}</span>
             </div>
           </div>
-          <div className="sm:text-right">
-            <p className="text-sm text-muted-foreground">Tasa utilizada</p>
-            <p className="mt-1 text-lg font-semibold text-foreground">{formatNumber(operation.rate_used)}</p>
+          <div className="flex items-center gap-3 sm:flex-col sm:items-end">
+            <div className="sm:text-right">
+              <p className="text-sm text-muted-foreground">Tasa utilizada</p>
+              <p className="mt-1 text-lg font-semibold text-foreground">{formatNumber(operation.rate_used)}</p>
+            </div>
+            {canCorrect && !correcting ? (
+              <Button
+                variant="ghost"
+                className="min-h-11 px-3"
+                onClick={() => setCorrecting(true)}
+              >
+                <Undo2 className="h-4 w-4" />
+                Corregir monto
+              </Button>
+            ) : null}
           </div>
         </CardContent>
+        {canCorrect && correcting ? (
+          <CardContent className="border-t px-4 pt-4 sm:px-6">
+            <div className="space-y-2 rounded-lg bg-muted/60 p-3">
+              <label htmlFor="settle-amount" className="text-sm font-medium text-foreground">
+                Monto realmente cambiado ({operation.from_currency})
+              </label>
+              <Input
+                id="settle-amount"
+                type="text"
+                inputMode="decimal"
+                value={settleAmount}
+                onChange={(e) => setSettleAmount(e.target.value)}
+                placeholder={`Menor que ${formatNumber(operation.from_amount)}`}
+                className="h-11"
+                autoFocus
+              />
+              {surplus !== null ? (
+                <p className="text-xs leading-5 text-muted-foreground">
+                  La operación (y su transacción) quedará en {formatNumber(settleValue)}{' '}
+                  {operation.from_currency} → {formatNumber(Math.round(settleValue * (operation.to_amount / operation.from_amount) * 100) / 100)}{' '}
+                  {operation.to_currency}, y se acreditarán{' '}
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                    {formatNumber(surplus)} USD
+                  </span>{' '}
+                  como saldo a favor del cliente.
+                </p>
+              ) : settleAmount.trim() !== '' ? (
+                <p className="text-xs text-destructive">
+                  Debe ser mayor a 0 y menor que {formatNumber(operation.from_amount)}.
+                </p>
+              ) : (
+                <p className="text-xs leading-5 text-muted-foreground">
+                  El resto del monto original se acredita como saldo a favor. Solo se puede
+                  corregir una vez por operación.
+                </p>
+              )}
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  variant="ghost"
+                  className="min-h-11"
+                  onClick={() => {
+                    setCorrecting(false);
+                    setSettleAmount('');
+                  }}
+                  disabled={savingSettle}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  className="min-h-11"
+                  onClick={saveSettle}
+                  disabled={savingSettle || surplus === null}
+                >
+                  {savingSettle ? 'Corrigiendo…' : 'Corregir y acreditar'}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        ) : null}
       </Card>
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]">

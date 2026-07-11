@@ -70,6 +70,19 @@ export class OperationService {
     const result = await httpClient.patch<OperationData>(`/operations/${uuid}/status`, { status });
     return { success: result.success, data: result.data, error: result.error };
   }
+
+  // Corrección retroactiva de una op COMPLETED: redimensiona al monto realmente
+  // cambiado, sincroniza la transacción y acredita el excedente como saldo a favor.
+  async partialSettle(
+    uuid: string,
+    settleAmount: number,
+  ): Promise<ApiResponse<{ operation: OperationData; credited: number; balance_after: number }>> {
+    const result = await httpClient.post<{ operation: OperationData; credited: number; balance_after: number }>(
+      `/operations/${uuid}/partial-settle`,
+      { settle_amount: settleAmount },
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
 }
 
 export const operationService = new OperationService();

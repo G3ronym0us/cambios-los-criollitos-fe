@@ -131,6 +131,16 @@ export function useOperationDetail(uuid: string) {
     return { success: true, data: updatedOperation ?? undefined };
   };
 
+  // Corrección retroactiva de una op COMPLETED (monto realmente cambiado);
+  // el backend acredita el excedente como saldo a favor y sincroniza la transacción.
+  const partialSettle = async (settleAmount: number) => {
+    const result = await operationService.partialSettle(uuid, settleAmount);
+    if (result.success && result.data) {
+      setOperation(result.data.operation);
+    }
+    return result;
+  };
+
   return {
     operation,
     payments,
@@ -145,5 +155,6 @@ export function useOperationDetail(uuid: string) {
     updatePair,
     updateFund,
     updateDetails,
+    partialSettle,
   };
 }

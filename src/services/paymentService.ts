@@ -16,14 +16,17 @@ export class PaymentService {
   }
 
   // Vincula (operationUuid) o desvincula (null) un pago a una operación.
+  // settleAmount (solo salientes): monto USD realmente cambiado; la op se
+  // redimensiona y el excedente se acredita como saldo a favor al completar.
   async linkOperation(
     table: PaymentTable,
     paymentId: number,
     operationUuid: string | null,
+    settleAmount?: number | null,
   ): Promise<ApiResponse<PaymentData>> {
     const result = await httpClient.patch<PaymentData>(
       `/payments/${table}/${paymentId}/operation`,
-      { operation_uuid: operationUuid },
+      { operation_uuid: operationUuid, settle_amount: settleAmount ?? null },
     );
     return { success: result.success, data: result.data, error: result.error };
   }
