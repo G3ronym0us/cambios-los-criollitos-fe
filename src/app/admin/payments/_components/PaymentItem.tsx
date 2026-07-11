@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { getStatusMeta } from '@/utils/operationStatus';
 import { formatCaracasDateTime, formatNumber } from '@/utils/functions';
+import { PAYMENT_FOCUS_KEY } from '../_hooks/usePayments';
 import type { PaymentData } from '@/types/payment';
 
 interface PaymentItemProps {
@@ -32,7 +33,10 @@ export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText }: Pay
   const opMeta = getStatusMeta(p.operation_status);
 
   return (
-    <Card className="overflow-hidden transition-shadow hover:shadow-md">
+    <Card
+      id={`payment-card-${outgoing ? 'out' : 'in'}-${p.id}`}
+      className="overflow-hidden transition-shadow hover:shadow-md"
+    >
       <CardContent className="space-y-3 p-4 sm:p-5">
         <header className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
@@ -116,6 +120,17 @@ export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText }: Pay
               <Link
                 href={`/admin/operations/${p.operation_uuid}`}
                 className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-8')}
+                onClick={() => {
+                  // Al volver atrás, la lista restaura filtros (URL) y hace scroll a esta card.
+                  try {
+                    window.sessionStorage.setItem(
+                      PAYMENT_FOCUS_KEY,
+                      JSON.stringify({ table: outgoing ? 'outgoing' : 'incoming', id: p.id }),
+                    );
+                  } catch {
+                    /* storage no disponible */
+                  }
+                }}
               >
                 <Eye className="h-3.5 w-3.5" />
                 Ver operación

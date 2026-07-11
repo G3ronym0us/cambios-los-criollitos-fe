@@ -19,6 +19,9 @@ interface PaymentsListProps {
   onResetFilters: () => void;
   onLink?: (payment: PaymentData) => void;
   onViewRawText?: (payment: PaymentData) => void;
+  // Card a la que volver (retorno desde "Ver operación"): scroll + highlight.
+  focusId?: number | null;
+  onFocusHandled?: () => void;
 }
 
 export function PaymentsList({
@@ -32,8 +35,22 @@ export function PaymentsList({
   onResetFilters,
   onLink,
   onViewRawText,
+  focusId,
+  onFocusHandled,
 }: PaymentsListProps) {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // Retorno desde el detalle de operación: centra la card y la resalta un momento.
+  useEffect(() => {
+    if (focusId == null) return;
+    const el = document.getElementById(`payment-card-${outgoing ? 'out' : 'in'}-${focusId}`);
+    if (!el) return;
+    el.scrollIntoView({ block: 'center' });
+    el.classList.add('ring-2', 'ring-primary/60');
+    const t = setTimeout(() => el.classList.remove('ring-2', 'ring-primary/60'), 2500);
+    onFocusHandled?.();
+    return () => clearTimeout(t);
+  }, [focusId, payments, outgoing, onFocusHandled]);
 
   // Scroll infinito: observa un centinela al final de la lista y pide más al entrar en viewport.
   useEffect(() => {

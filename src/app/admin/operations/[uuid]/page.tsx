@@ -12,7 +12,7 @@ import {
   FileQuestion,
   Handshake,
   Link2,
-  Link2Off,
+  ChevronRight,
   PackageCheck,
   Pencil,
   PiggyBank,
@@ -47,6 +47,7 @@ import type { PaymentData } from '@/types/payment';
 import type { OperationStatus } from '@/types/operation';
 import { LinkPaymentDialog } from './_components/LinkPaymentDialog';
 import { OperationEditDrawer } from './_components/OperationEditDrawer';
+import { PaymentDetailDrawer } from './_components/PaymentDetailDrawer';
 import { useOperationDetail } from './_hooks/useOperationDetail';
 
 const SCENARIO_LABELS = {
@@ -97,11 +98,11 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
 function PaymentItem({
   payment,
   incoming,
-  onUnlink,
+  onOpen,
 }: {
   payment: PaymentData;
   incoming: boolean;
-  onUnlink?: () => void;
+  onOpen: () => void;
 }) {
   const description = [
     incoming ? 'Entrante' : 'Saliente',
@@ -112,7 +113,11 @@ function PaymentItem({
     .join(' · ');
 
   return (
-    <div className="flex items-start justify-between gap-3 rounded-lg border border-border px-3 py-3 sm:px-4">
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex w-full items-start justify-between gap-3 rounded-lg border border-border px-3 py-3 text-left transition-colors hover:bg-muted/50 sm:px-4"
+    >
       <div className="flex min-w-0 items-start gap-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
           {incoming ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
@@ -128,28 +133,21 @@ function PaymentItem({
         </div>
       </div>
 
-      <div className="flex shrink-0 flex-col items-end gap-1.5">
-        <div className="flex max-w-36 flex-wrap justify-end gap-1.5">
-          {incoming && payment.deposit ? (
-            <StatusBadge tone="success" icon={PiggyBank}>Depósito</StatusBadge>
-          ) : incoming && payment.fund_group_name ? (
-            <StatusBadge tone="info" icon={PiggyBank}>Contabilizado</StatusBadge>
-          ) : null}
-          {!incoming && payment.is_personal_expense ? (
-            <StatusBadge tone="warning" icon={Tag}>Personal</StatusBadge>
-          ) : null}
-          {!incoming && payment.is_irrelevant ? (
-            <StatusBadge tone="neutral" icon={Tag}>Irrelevante</StatusBadge>
-          ) : null}
-        </div>
-        {onUnlink ? (
-          <Button variant="ghost" size="sm" className="h-8 px-2 text-muted-foreground" onClick={onUnlink}>
-            <Link2Off className="h-3.5 w-3.5" />
-            Desvincular
-          </Button>
+      <div className="flex max-w-36 shrink-0 flex-wrap items-center justify-end gap-1.5 self-center">
+        {incoming && payment.deposit ? (
+          <StatusBadge tone="success" icon={PiggyBank}>Depósito</StatusBadge>
+        ) : incoming && payment.fund_group_name ? (
+          <StatusBadge tone="info" icon={PiggyBank}>Contabilizado</StatusBadge>
         ) : null}
+        {!incoming && payment.is_personal_expense ? (
+          <StatusBadge tone="warning" icon={Tag}>Personal</StatusBadge>
+        ) : null}
+        {!incoming && payment.is_irrelevant ? (
+          <StatusBadge tone="neutral" icon={Tag}>Irrelevante</StatusBadge>
+        ) : null}
+        <ChevronRight className="h-4 w-4 text-muted-foreground" />
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -180,6 +178,10 @@ export default function OperationDetailPage() {
   const [settleAmount, setSettleAmount] = useState('');
   const [savingSettle, setSavingSettle] = useState(false);
   const [markingDelivered, setMarkingDelivered] = useState(false);
+  const [viewingPayment, setViewingPayment] = useState<{
+    table: 'incoming' | 'outgoing';
+    payment: PaymentData;
+  } | null>(null);
   const confirm = useConfirm();
 
   if (loading) {
@@ -245,20 +247,22 @@ export default function OperationDetailPage() {
 
   // Desvincula un pago de esta operación (queda libre para vincularlo a otra desde
   // Pagos o desde el detalle de la op correcta). No revierte estados ni transacciones.
+  // Devuelve true si se desvinculó (el drawer se cierra con eso).
   const unlinkPayment = async (table: 'incoming' | 'outgoing', payment: PaymentData) => {
     const ok = await confirm({
       title: 'Desvincular pago',
       description: `El pago de ${payment.amount != null ? formatNumber(payment.amount) : '—'} ${payment.currency ?? ''} quedará sin operación y podrás vincularlo a la correcta desde Pagos.`,
       confirmText: 'Desvincular',
     });
-    if (!ok) return;
+    if (!ok) return false;
     const res = await paymentService.linkOperation(table, payment.id, null);
     if (res.success) {
       toast.success('Pago desvinculado de la operación');
       reloadPayments();
-    } else {
-      toast.error(res.error || 'No se pudo desvincular el pago');
+      return true;
     }
+    toast.error(res.error || 'No se pudo desvincular el pago');
+    return false;
   };
 
   const saveSettle = async () => {
@@ -373,6 +377,13 @@ export default function OperationDetailPage() {
         open={linkPaymentOpen}
         onClose={() => setLinkPaymentOpen(false)}
         onLinked={reloadPayments}
+      />
+
+      <PaymentDetailDrawer
+        payment={viewingPayment?.payment ?? null}
+        table={viewingPayment?.table ?? 'incoming'}
+        onClose={() => setViewingPayment(null)}
+        onUnlink={unlinkPayment}
       />
 
       <Card>
@@ -575,7 +586,7 @@ export default function OperationDetailPage() {
                       key={`incoming-${payment.id}`}
                       payment={payment}
                       incoming
-                      onUnlink={() => unlinkPayment('incoming', payment)}
+                      onOpen={() => setViewingPayment({ table: 'incoming', payment })}
                     />
                   ))}
                   {payments?.outgoing.map((payment) => (
@@ -583,7 +594,7 @@ export default function OperationDetailPage() {
                       key={`outgoing-${payment.id}`}
                       payment={payment}
                       incoming={false}
-                      onUnlink={() => unlinkPayment('outgoing', payment)}
+                      onOpen={() => setViewingPayment({ table: 'outgoing', payment })}
                     />
                   ))}
                 </>

@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { LoadingState } from '@/components/shared/LoadingState';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PaymentData, PaymentTable } from '@/types/payment';
 import { PaymentsFilters } from './_components/PaymentsFilters';
@@ -11,7 +12,7 @@ import { OutgoingPaymentActionDialog } from './_components/OutgoingPaymentAction
 import { PaymentRawTextDialog } from './_components/PaymentRawTextDialog';
 import { usePayments } from './_hooks/usePayments';
 
-export default function PaymentsAdminPage() {
+function PaymentsAdminContent() {
   const { state, actions } = usePayments();
   const [actioningIncoming, setActioningIncoming] = useState<PaymentData | null>(null);
   const [actioning, setActioning] = useState<PaymentData | null>(null);
@@ -54,6 +55,8 @@ export default function PaymentsAdminPage() {
             onResetFilters={actions.resetFilters}
             onLink={setActioningIncoming}
             onViewRawText={setViewingRawText}
+            focusId={state.tab === 'incoming' ? state.focusId : null}
+            onFocusHandled={actions.clearFocus}
           />
         </TabsContent>
 
@@ -81,20 +84,24 @@ export default function PaymentsAdminPage() {
             onResetFilters={actions.resetFilters}
             onLink={setActioning}
             onViewRawText={setViewingRawText}
+            focusId={state.tab === 'outgoing' ? state.focusId : null}
+            onFocusHandled={actions.clearFocus}
           />
         </TabsContent>
       </Tabs>
 
+      {/* Tras vincular/marcar, refrescar EN SITIO: la lista conserva las páginas ya
+          cargadas y el scroll (no vuelve al principio). */}
       <IncomingPaymentActionDialog
         payment={actioningIncoming}
         onClose={() => setActioningIncoming(null)}
-        onDone={actions.reload}
+        onDone={actions.refreshInPlace}
       />
 
       <OutgoingPaymentActionDialog
         payment={actioning}
         onClose={() => setActioning(null)}
-        onDone={actions.reload}
+        onDone={actions.refreshInPlace}
       />
 
       <PaymentRawTextDialog
@@ -103,5 +110,14 @@ export default function PaymentsAdminPage() {
       />
 
     </div>
+  );
+}
+
+// useSearchParams (filtros en la URL) exige un boundary de Suspense al prerenderizar.
+export default function PaymentsAdminPage() {
+  return (
+    <Suspense fallback={<LoadingState label="Cargando pagos..." fullHeight />}>
+      <PaymentsAdminContent />
+    </Suspense>
   );
 }
