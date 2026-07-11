@@ -71,6 +71,12 @@ export class OperationService {
     return { success: result.success, data: result.data, error: result.error };
   }
 
+  // Marca como recibidos los USD efectivo de una op con entrega pendiente.
+  async markDelivered(uuid: string): Promise<ApiResponse<OperationData>> {
+    const result = await httpClient.patch<OperationData>(`/operations/${uuid}/delivered`, {});
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
   // Corrección retroactiva de una op COMPLETED: redimensiona al monto realmente
   // cambiado, sincroniza la transacción y acredita el excedente como saldo a favor.
   async partialSettle(

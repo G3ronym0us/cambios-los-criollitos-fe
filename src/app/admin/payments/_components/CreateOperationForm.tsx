@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { adminService } from '@/services/adminService';
+import { clientService } from '@/services/clientService';
 import { fundService } from '@/services/fundService';
 import { paymentService } from '@/services/paymentService';
 import type { CurrencyPairData } from '@/types/admin';
@@ -41,13 +42,22 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
-    Promise.all([adminService.getCurrencyPairs(0, 200, true), fundService.getGroups()]).then(
-      ([pairsRes, groupsRes]) => {
-        if (pairsRes.success && pairsRes.data) setPairs(pairsRes.data.pairs);
-        if (groupsRes.success && groupsRes.data) setGroups(groupsRes.data.filter((g) => g.is_active));
-      },
-    );
-  }, []);
+    Promise.all([
+      adminService.getCurrencyPairs(0, 200, true),
+      fundService.getGroups(),
+      payment.client_uuid ? clientService.getClient(payment.client_uuid) : Promise.resolve(null),
+    ]).then(([pairsRes, groupsRes, clientRes]) => {
+      if (pairsRes.success && pairsRes.data) setPairs(pairsRes.data.pairs);
+      if (groupsRes.success && groupsRes.data) setGroups(groupsRes.data.filter((g) => g.is_active));
+
+      // Prefill: par por defecto del cliente (editable). Solo si aún no se eligió
+      // uno y el par preferido está entre los pares activos.
+      const preferred = clientRes?.success ? clientRes.data?.preferred_pair_uuid : null;
+      if (preferred && pairsRes.success && pairsRes.data?.pairs.some((p) => p.uuid === preferred)) {
+        setPairUuid((current) => current || preferred);
+      }
+    });
+  }, [payment.client_uuid]);
 
   const pair = useMemo(() => pairs.find((p) => p.uuid === pairUuid), [pairs, pairUuid]);
   const fromCur = pair?.from_currency?.symbol ?? '';

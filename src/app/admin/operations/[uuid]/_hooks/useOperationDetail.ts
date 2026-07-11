@@ -131,6 +131,15 @@ export function useOperationDetail(uuid: string) {
     return { success: true, data: updatedOperation ?? undefined };
   };
 
+  // Marca la entrega de USD efectivo como recibida (PENDING → RECEIVED).
+  const markDelivered = async () => {
+    const result = await operationService.markDelivered(uuid);
+    if (result.success && result.data) {
+      setOperation(result.data);
+    }
+    return result;
+  };
+
   // Corrección retroactiva de una op COMPLETED (monto realmente cambiado);
   // el backend acredita el excedente como saldo a favor y sincroniza la transacción.
   const partialSettle = async (settleAmount: number) => {
@@ -156,5 +165,6 @@ export function useOperationDetail(uuid: string) {
     updateFund,
     updateDetails,
     partialSettle,
+    markDelivered,
   };
 }

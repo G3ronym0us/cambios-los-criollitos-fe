@@ -169,6 +169,7 @@ export default function OperationDetailPage() {
     updateFund,
     updateDetails,
     partialSettle,
+    markDelivered,
   } = useOperationDetail(uuid);
   const [editOpen, setEditOpen] = useState(false);
   const [linkPaymentOpen, setLinkPaymentOpen] = useState(false);
@@ -178,6 +179,7 @@ export default function OperationDetailPage() {
   const [correcting, setCorrecting] = useState(false);
   const [settleAmount, setSettleAmount] = useState('');
   const [savingSettle, setSavingSettle] = useState(false);
+  const [markingDelivered, setMarkingDelivered] = useState(false);
   const confirm = useConfirm();
 
   if (loading) {
@@ -222,6 +224,24 @@ export default function OperationDetailPage() {
   const surplus = settleValid
     ? Math.round((operation.from_amount - settleValue) * 100) / 100
     : null;
+
+  // Entrega de USD efectivo: PENDING → RECEIVED (una sola dirección).
+  const confirmDelivered = async () => {
+    const ok = await confirm({
+      title: 'Marcar entrega recibida',
+      description: 'Confirmas que ya recibiste los USD en efectivo de esta operación. Esta acción no se puede deshacer.',
+      confirmText: 'Marcar entregada',
+    });
+    if (!ok) return;
+    setMarkingDelivered(true);
+    const res = await markDelivered();
+    setMarkingDelivered(false);
+    if (res.success) {
+      toast.success('Entrega marcada como recibida');
+    } else {
+      toast.error(res.error || 'No se pudo marcar la entrega');
+    }
+  };
 
   // Desvincula un pago de esta operación (queda libre para vincularlo a otra desde
   // Pagos o desde el detalle de la op correcta). No revierte estados ni transacciones.
@@ -477,7 +497,19 @@ export default function OperationDetailPage() {
                     {operation.delivery_status === 'RECEIVED' ? (
                       <StatusBadge tone="success" icon={PackageCheck}>Entregada</StatusBadge>
                     ) : (
-                      <StatusBadge tone="warning" icon={Truck}>Por entregar</StatusBadge>
+                      <span className="inline-flex flex-wrap items-center justify-end gap-2">
+                        <StatusBadge tone="warning" icon={Truck}>Por entregar</StatusBadge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8"
+                          onClick={confirmDelivered}
+                          disabled={markingDelivered}
+                        >
+                          <PackageCheck className="h-3.5 w-3.5" />
+                          {markingDelivered ? 'Marcando…' : 'Marcar entregada'}
+                        </Button>
+                      </span>
                     )}
                   </DetailRow>
                 ) : null}
