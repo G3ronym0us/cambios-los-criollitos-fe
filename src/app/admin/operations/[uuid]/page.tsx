@@ -695,18 +695,22 @@ export default function OperationDetailPage() {
               <CardTitle>Fechas</CardTitle>
             </CardHeader>
             <CardContent className="divide-y divide-border px-4">
-              <DetailRow label="Cotizada">{formatDate(operation.quoted_at)}</DetailRow>
-              <DetailRow label="Expira">{formatDate(operation.expires_at)}</DetailRow>
-              {operation.approved_at ? (
-                <DetailRow label="Aprobada">{formatDate(operation.approved_at)}</DetailRow>
-              ) : null}
-              {operation.completed_at ? (
-                <DetailRow label="Completada">{formatDate(operation.completed_at)}</DetailRow>
-              ) : null}
+              <DetailRow label="Cotización">{formatDate(operation.quoted_at)}</DetailRow>
+              {(payments?.outgoing ?? []).length > 0 ? (
+                payments!.outgoing.map((p, i) => (
+                  <DetailRow
+                    key={p.id}
+                    label={payments!.outgoing.length > 1 ? `Pago saliente ${i + 1}` : 'Pago saliente'}
+                  >
+                    {formatDate(p.created_at)}
+                  </DetailRow>
+                ))
+              ) : (
+                <DetailRow label="Pago saliente">—</DetailRow>
+              )}
               {operation.cancelled_at ? (
                 <DetailRow label="Cancelada">{formatDate(operation.cancelled_at)}</DetailRow>
               ) : null}
-              <DetailRow label="Creada">{formatDate(operation.created_at)}</DetailRow>
             </CardContent>
           </Card>
 
