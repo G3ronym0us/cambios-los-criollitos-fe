@@ -12,6 +12,7 @@ import {
   FileQuestion,
   Handshake,
   Link2,
+  Link2Off,
   PackageCheck,
   Pencil,
   PiggyBank,
@@ -40,6 +41,8 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { cn } from '@/lib/utils';
 import { formatNumber } from '@/utils/functions';
 import { getStatusMeta } from '@/utils/operationStatus';
+import { paymentService } from '@/services/paymentService';
+import { useConfirm } from '@/hooks/useConfirm';
 import type { PaymentData } from '@/types/payment';
 import type { OperationStatus } from '@/types/operation';
 import { LinkPaymentDialog } from './_components/LinkPaymentDialog';
@@ -99,7 +102,15 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
-function PaymentItem({ payment, incoming }: { payment: PaymentData; incoming: boolean }) {
+function PaymentItem({
+  payment,
+  incoming,
+  onUnlink,
+}: {
+  payment: PaymentData;
+  incoming: boolean;
+  onUnlink?: () => void;
+}) {
   const description = [
     incoming ? 'Entrante' : 'Saliente',
     payment.provider,
@@ -125,17 +136,25 @@ function PaymentItem({ payment, incoming }: { payment: PaymentData; incoming: bo
         </div>
       </div>
 
-      <div className="flex max-w-36 shrink-0 flex-wrap justify-end gap-1.5">
-        {incoming && payment.deposit ? (
-          <StatusBadge tone="success" icon={PiggyBank}>Depósito</StatusBadge>
-        ) : incoming && payment.fund_group_name ? (
-          <StatusBadge tone="info" icon={PiggyBank}>Contabilizado</StatusBadge>
-        ) : null}
-        {!incoming && payment.is_personal_expense ? (
-          <StatusBadge tone="warning" icon={Tag}>Personal</StatusBadge>
-        ) : null}
-        {!incoming && payment.is_irrelevant ? (
-          <StatusBadge tone="neutral" icon={Tag}>Irrelevante</StatusBadge>
+      <div className="flex shrink-0 flex-col items-end gap-1.5">
+        <div className="flex max-w-36 flex-wrap justify-end gap-1.5">
+          {incoming && payment.deposit ? (
+            <StatusBadge tone="success" icon={PiggyBank}>Depósito</StatusBadge>
+          ) : incoming && payment.fund_group_name ? (
+            <StatusBadge tone="info" icon={PiggyBank}>Contabilizado</StatusBadge>
+          ) : null}
+          {!incoming && payment.is_personal_expense ? (
+            <StatusBadge tone="warning" icon={Tag}>Personal</StatusBadge>
+          ) : null}
+          {!incoming && payment.is_irrelevant ? (
+            <StatusBadge tone="neutral" icon={Tag}>Irrelevante</StatusBadge>
+          ) : null}
+        </div>
+        {onUnlink ? (
+          <Button variant="ghost" size="sm" className="h-8 px-2 text-muted-foreground" onClick={onUnlink}>
+            <Link2Off className="h-3.5 w-3.5" />
+            Desvincular
+          </Button>
         ) : null}
       </div>
     </div>
@@ -167,6 +186,7 @@ export default function OperationDetailPage() {
   const [correcting, setCorrecting] = useState(false);
   const [settleAmount, setSettleAmount] = useState('');
   const [savingSettle, setSavingSettle] = useState(false);
+  const confirm = useConfirm();
 
   if (loading) {
     return <LoadingState label="Cargando operación..." fullHeight />;
@@ -210,6 +230,24 @@ export default function OperationDetailPage() {
   const surplus = settleValid
     ? Math.round((operation.from_amount - settleValue) * 100) / 100
     : null;
+
+  // Desvincula un pago de esta operación (queda libre para vincularlo a otra desde
+  // Pagos o desde el detalle de la op correcta). No revierte estados ni transacciones.
+  const unlinkPayment = async (table: 'incoming' | 'outgoing', payment: PaymentData) => {
+    const ok = await confirm({
+      title: 'Desvincular pago',
+      description: `El pago de ${payment.amount != null ? formatNumber(payment.amount) : '—'} ${payment.currency ?? ''} quedará sin operación y podrás vincularlo a la correcta desde Pagos.`,
+      confirmText: 'Desvincular',
+    });
+    if (!ok) return;
+    const res = await paymentService.linkOperation(table, payment.id, null);
+    if (res.success) {
+      toast.success('Pago desvinculado de la operación');
+      reloadPayments();
+    } else {
+      toast.error(res.error || 'No se pudo desvincular el pago');
+    }
+  };
 
   const saveSettle = async () => {
     if (surplus === null) return;
@@ -509,10 +547,20 @@ export default function OperationDetailPage() {
               ) : (
                 <>
                   {payments?.incoming.map((payment) => (
-                    <PaymentItem key={`incoming-${payment.id}`} payment={payment} incoming />
+                    <PaymentItem
+                      key={`incoming-${payment.id}`}
+                      payment={payment}
+                      incoming
+                      onUnlink={() => unlinkPayment('incoming', payment)}
+                    />
                   ))}
                   {payments?.outgoing.map((payment) => (
-                    <PaymentItem key={`outgoing-${payment.id}`} payment={payment} incoming={false} />
+                    <PaymentItem
+                      key={`outgoing-${payment.id}`}
+                      payment={payment}
+                      incoming={false}
+                      onUnlink={() => unlinkPayment('outgoing', payment)}
+                    />
                   ))}
                 </>
               )}
