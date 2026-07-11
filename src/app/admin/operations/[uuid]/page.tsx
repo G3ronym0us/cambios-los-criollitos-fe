@@ -39,7 +39,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { cn } from '@/lib/utils';
-import { formatNumber } from '@/utils/functions';
+import { formatCaracasDateTime, formatNumber } from '@/utils/functions';
 import { getStatusMeta } from '@/utils/operationStatus';
 import { paymentService } from '@/services/paymentService';
 import { useConfirm } from '@/hooks/useConfirm';
@@ -65,15 +65,7 @@ function stripPhone(phone: string | null) {
 }
 
 function formatDate(value: string | null) {
-  if (!value) return '—';
-  return new Date(value).toLocaleString('es-ES', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'UTC',
-  });
+  return formatCaracasDateTime(value);
 }
 
 function formatOperationNotes(notes: string) {

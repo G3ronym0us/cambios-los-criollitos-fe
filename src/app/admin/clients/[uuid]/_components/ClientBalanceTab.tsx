@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/select';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { formatCaracasDateTime } from '@/utils/functions';
 import type { BalanceAdjust, BalanceEntry, BalanceSummary } from '@/types/client';
 
 interface ClientBalanceTabProps {
@@ -37,15 +38,9 @@ function formatUsd(value: number) {
   return `$${value.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-// Fecha+hora en hora local del operador (el timestamp viene en UTC del backend).
+// Fecha+hora en hora de Venezuela (el timestamp viene en UTC del backend).
 function formatDateTime(value: string) {
-  return new Date(value).toLocaleString('es-ES', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatCaracasDateTime(value);
 }
 
 function EntryRow({ entry }: { entry: BalanceEntry }) {

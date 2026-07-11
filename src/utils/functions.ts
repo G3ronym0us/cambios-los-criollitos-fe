@@ -40,3 +40,30 @@ export const getRoleOptions = () => {
     label: role,
   }));
 };
+// ── Fechas del negocio en hora de Venezuela ──────────────────────────────────
+// Los timestamps llegan en UTC del backend; el operador trabaja en hora de
+// Venezuela (America/Caracas, UTC-4). Usar SIEMPRE estos helpers para mostrar
+// fechas de pagos/operaciones en vez de formatear con el timezone del browser.
+
+export const formatCaracasDateTime = (value: string | null | undefined): string => {
+  if (!value) return '—';
+  return new Date(value).toLocaleString('es-VE', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'America/Caracas',
+  });
+};
+
+export const formatCaracasDate = (value: string | null | undefined): string => {
+  if (!value) return '—';
+  return new Date(value).toLocaleDateString('es-VE', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'America/Caracas',
+  });
+};

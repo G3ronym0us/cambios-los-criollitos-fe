@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { getStatusMeta } from '@/utils/operationStatus';
-import { formatNumber } from '@/utils/functions';
+import { formatCaracasDateTime, formatNumber } from '@/utils/functions';
 import type { PaymentData } from '@/types/payment';
 
 interface PaymentItemProps {
@@ -19,12 +19,7 @@ interface PaymentItemProps {
 
 function formatDate(value: string | null) {
   if (!value) return null;
-  return new Date(value).toLocaleDateString('es-ES', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  });
+  return formatCaracasDateTime(value);
 }
 
 export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText }: PaymentItemProps) {

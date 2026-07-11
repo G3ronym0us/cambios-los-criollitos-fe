@@ -14,6 +14,7 @@ import type { LucideIcon } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { getStatusMeta } from '@/utils/operationStatus';
+import { formatCaracasDateTime } from '@/utils/functions';
 import type { OperationData, OperationScenario } from '@/types/operation';
 
 interface OperationItemProps {
@@ -40,12 +41,7 @@ function formatAmount(n: number) {
 
 function formatDate(value: string | null) {
   if (!value) return null;
-  return new Date(value).toLocaleDateString('es-ES', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  });
+  return formatCaracasDateTime(value);
 }
 
 export function OperationItem({ operation: op }: OperationItemProps) {
