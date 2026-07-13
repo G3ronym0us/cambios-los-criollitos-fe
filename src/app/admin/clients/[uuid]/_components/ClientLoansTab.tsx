@@ -19,7 +19,7 @@ import {
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { StatusBadge } from '@/components/shared/StatusBadge';
-import { formatCaracasDateTime } from '@/utils/functions';
+import { formatAmountForInput, formatCaracasDateTime, sanitizeAmountInput } from '@/utils/functions';
 import type { LoanData } from '@/types/client';
 
 interface ClientLoansTabProps {
@@ -30,7 +30,7 @@ interface ClientLoansTabProps {
 
 function formatAmount(value: number, currency: string) {
   const label = currency === 'USD_BCV' ? 'USD (BCV)' : currency;
-  return `${value.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 8 })} ${label}`;
+  return `${value.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${label}`;
 }
 
 function statusLabel(status: LoanData['status']) {
@@ -62,7 +62,7 @@ export function ClientLoansTab({ loans, loading, onRepayment }: ClientLoansTabPr
 
   const openRepayment = (loan: LoanData) => {
     setSelected(loan);
-    setAmount(String(loan.outstanding_amount));
+    setAmount(formatAmountForInput(loan.outstanding_amount));
     setNotes('');
   };
 
@@ -216,7 +216,12 @@ export function ClientLoansTab({ loans, loading, onRepayment }: ClientLoansTabPr
                 id="loan-repayment-amount"
                 inputMode="decimal"
                 value={amount}
-                onChange={(event) => setAmount(event.target.value)}
+                onChange={(event) => {
+                  const sanitized = sanitizeAmountInput(event.target.value);
+                  if (sanitized != null) setAmount(sanitized);
+                }}
+                min="0"
+                step="0.01"
                 placeholder="0.00"
               />
               {selected?.current_fiat_due != null ? (

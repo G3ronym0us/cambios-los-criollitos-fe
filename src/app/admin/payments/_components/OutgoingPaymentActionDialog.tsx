@@ -25,8 +25,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { paymentService } from '@/services/paymentService';
 import { fundService } from '@/services/fundService';
+import { adminService } from '@/services/adminService';
 import { cn } from '@/lib/utils';
-import { formatCaracasDateTime, formatNumber } from '@/utils/functions';
+import { formatAmountForInput, formatCaracasDateTime, formatNumber, sanitizeAmountInput } from '@/utils/functions';
+import { CurrencyType, type CurrencyData } from '@/types/admin';
 import type { LoanPreferredValue, LoanValuation, PaymentData } from '@/types/payment';
 import type { FundGroup } from '@/types/fund';
 import { LinkOperationPanel } from './LinkOperationPanel';
@@ -44,6 +46,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
   const [desc, setDesc] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [groups, setGroups] = useState<FundGroup[]>([]);
+  const [fiatCurrencies, setFiatCurrencies] = useState<CurrencyData[]>([]);
   const [groupUuid, setGroupUuid] = useState('');
   const [fiatCurrency, setFiatCurrency] = useState('VES');
   const [fiatAmount, setFiatAmount] = useState('');
@@ -63,8 +66,8 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
     const paymentCurrency = (payment?.currency || '').toUpperCase();
     const normalizedCurrency = ['ZELLE', 'PAYPAL'].includes(paymentCurrency) ? 'USD' : paymentCurrency;
     setFiatCurrency(normalizedCurrency && normalizedCurrency !== 'USDT' ? normalizedCurrency : 'VES');
-    setFiatAmount(payment?.amount != null && paymentCurrency !== 'USDT' ? String(payment.amount) : '');
-    setUsdtAmount(payment?.amount != null && paymentCurrency === 'USDT' ? String(payment.amount) : '');
+    setFiatAmount(payment?.amount != null && paymentCurrency !== 'USDT' ? formatAmountForInput(payment.amount) : '');
+    setUsdtAmount(payment?.amount != null && paymentCurrency === 'USDT' ? formatAmountForInput(payment.amount) : '');
     setBcvAmount('');
     setPreferredValue(paymentCurrency === 'USDT' ? 'USDT' : 'FIAT');
     setLoanNotes('');
@@ -76,6 +79,16 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
   useEffect(() => {
     fundService.getGroups().then((res) => {
       if (res.success && res.data) setGroups(res.data.filter((g) => g.is_active));
+    });
+    adminService.getCurrencyPairs(0, 100, true).then((res) => {
+      if (!res.success || !res.data) return;
+      const currencies = new Map<string, CurrencyData>();
+      for (const pair of res.data.pairs) {
+        for (const currency of [pair.from_currency, pair.to_currency]) {
+          if (currency.currency_type === CurrencyType.FIAT) currencies.set(currency.symbol, currency);
+        }
+      }
+      setFiatCurrencies(Array.from(currencies.values()).sort((a, b) => a.symbol.localeCompare(b.symbol)));
     });
   }, []);
 
@@ -118,9 +131,9 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
   const applyValuation = (data: LoanValuation) => {
     setValuation(data);
     setFiatCurrency(data.fiat_currency);
-    setFiatAmount(data.fiat_amount != null ? String(data.fiat_amount) : '');
-    setUsdtAmount(data.usdt_amount != null ? String(data.usdt_amount) : '');
-    setBcvAmount(data.bcv_amount != null ? String(data.bcv_amount) : '');
+    setFiatAmount(formatAmountForInput(data.fiat_amount));
+    setUsdtAmount(formatAmountForInput(data.usdt_amount));
+    setBcvAmount(formatAmountForInput(data.bcv_amount));
   };
 
   const loadLoanValuation = async (currency = fiatCurrency) => {
@@ -140,6 +153,18 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
     setStep('loan');
     if (!isLoan && !valuation) loadLoanValuation();
   };
+
+  const setAmountWithTwoDecimals = (
+    setter: (value: string) => void,
+    value: string,
+  ) => {
+    const sanitized = sanitizeAmountInput(value);
+    if (sanitized != null) setter(sanitized);
+  };
+
+  const fiatCurrencySymbols = Array.from(
+    new Set([fiatCurrency, ...fiatCurrencies.map((currency) => currency.symbol)]),
+  ).filter((symbol) => symbol && symbol !== 'USDT');
 
   const saveGroup = async () => {
     if (!groupUuid) {
@@ -387,14 +412,14 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-sm text-muted-foreground">Principal</span>
                   <span className="text-sm font-semibold text-foreground">
-                    {payment.loan.principal_amount.toLocaleString('es-VE', { maximumFractionDigits: 8 })}{' '}
+                    {payment.loan.principal_amount.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
                     {payment.loan.preferred_currency === 'USD_BCV' ? 'USD (BCV)' : payment.loan.preferred_currency}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-sm text-muted-foreground">Pendiente</span>
                   <span className="text-sm font-semibold text-foreground">
-                    {payment.loan.outstanding_amount.toLocaleString('es-VE', { maximumFractionDigits: 8 })}{' '}
+                    {payment.loan.outstanding_amount.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
                     {payment.loan.preferred_currency === 'USD_BCV' ? 'USD (BCV)' : payment.loan.preferred_currency}
                   </span>
                 </div>
@@ -467,8 +492,10 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
                     <Input
                       id="loan-fiat-amount"
                       inputMode="decimal"
+                      min="0"
+                      step="0.01"
                       value={fiatAmount}
-                      onChange={(event) => setFiatAmount(event.target.value)}
+                      onChange={(event) => setAmountWithTwoDecimals(setFiatAmount, event.target.value)}
                       placeholder="0.00"
                     />
                   </div>
@@ -477,8 +504,10 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
                     <Input
                       id="loan-usdt-amount"
                       inputMode="decimal"
+                      min="0"
+                      step="0.01"
                       value={usdtAmount}
-                      onChange={(event) => setUsdtAmount(event.target.value)}
+                      onChange={(event) => setAmountWithTwoDecimals(setUsdtAmount, event.target.value)}
                       placeholder="0.00"
                     />
                   </div>
@@ -487,8 +516,10 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
                     <Input
                       id="loan-bcv-amount"
                       inputMode="decimal"
+                      min="0"
+                      step="0.01"
                       value={bcvAmount}
-                      onChange={(event) => setBcvAmount(event.target.value)}
+                      onChange={(event) => setAmountWithTwoDecimals(setBcvAmount, event.target.value)}
                       placeholder={fiatCurrency === 'VES' ? '0.00' : 'No aplica'}
                       disabled={fiatCurrency !== 'VES'}
                     />
@@ -515,18 +546,30 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
                   <div className="flex-1 space-y-1.5">
                     <Label htmlFor="loan-fiat-currency">Moneda fiat de pago</Label>
-                    <Input
-                      id="loan-fiat-currency"
+                    <Select
                       value={fiatCurrency}
-                      onChange={(event) => {
-                        const value = event.target.value.toUpperCase();
+                      onValueChange={(value) => {
+                        if (!value) return;
                         setFiatCurrency(value);
                         if (preferredValue === 'BCV' && value !== 'VES') setPreferredValue('FIAT');
                         if (value !== 'VES') setBcvAmount('');
+                        void loadLoanValuation(value);
                       }}
-                      placeholder="VES"
-                      maxLength={10}
-                    />
+                    >
+                      <SelectTrigger id="loan-fiat-currency" className="h-10 w-full">
+                        <SelectValue placeholder="Selecciona una moneda" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {fiatCurrencySymbols.map((symbol) => {
+                          const currency = fiatCurrencies.find((item) => item.symbol === symbol);
+                          return (
+                            <SelectItem key={symbol} value={symbol}>
+                              {symbol}{currency?.name ? ` · ${currency.name}` : ''}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <Button
                     type="button"

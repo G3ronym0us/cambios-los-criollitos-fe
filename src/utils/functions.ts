@@ -7,6 +7,16 @@ export const formatNumber = (num: number) => {
   });
 };
 
+export const formatAmountForInput = (num: number | null | undefined) => {
+  if (num == null || !Number.isFinite(num)) return "";
+  return String(Math.round((num + Number.EPSILON) * 100) / 100);
+};
+
+export const sanitizeAmountInput = (value: string) => {
+  const normalized = value.replace(",", ".");
+  return /^\d*(?:\.\d{0,2})?$/.test(normalized) ? normalized : null;
+};
+
 /**
  * Orienta una tasa para mostrarla SIEMPRE con el número >= 1 (el más legible),
  * eligiendo la dirección que corresponda. Es solo presentación: no altera el
