@@ -11,6 +11,7 @@ import { operationService } from '@/services/operationService';
 import { paymentService } from '@/services/paymentService';
 import { fundService } from '@/services/fundService';
 import { formatNumber } from '@/utils/functions';
+import { getStatusMeta } from '@/utils/operationStatus';
 import type { OperationData } from '@/types/operation';
 import type { FundGroup } from '@/types/fund';
 import type { PaymentData, PaymentTable } from '@/types/payment';
@@ -35,6 +36,7 @@ function samePhone(a: string | null, b: string | null) {
 }
 
 type Scope = 'auto' | 'global';
+type StatusView = 'active' | 'completed';
 
 // Lados "from" que liquidan en USD y por lo tanto pueden acreditar excedente al saldo a favor.
 const USD_SIDES = new Set(['USD', 'ZELLE', 'PAYPAL']);
@@ -51,6 +53,7 @@ export function LinkOperationPanel({
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [scope, setScope] = useState<Scope>('auto');
+  const [statusView, setStatusView] = useState<StatusView>('active');
   const [selected, setSelected] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [mode, setMode] = useState<'pick' | 'create'>('pick');
@@ -60,13 +63,27 @@ export function LinkOperationPanel({
     setSelected(payment.operation_uuid);
     setSearch('');
     setScope('auto');
+    setStatusView('active');
     let active = true;
     setLoading(true);
-    Promise.all([operationService.getOperations({ limit: 500 }), fundService.getGroups()]).then(
-      ([opsRes, groupsRes]) => {
+    Promise.all([
+      operationService.getOperations({ limit: 500 }),
+      table === 'outgoing'
+        ? operationService.getOperations({ status: 'COMPLETED', limit: 500 })
+        : Promise.resolve(null),
+      fundService.getGroups(),
+    ]).then(
+      ([opsRes, completedRes, groupsRes]) => {
         if (!active) return;
-        if (opsRes.success && opsRes.data) setOperations(opsRes.data.operations || []);
-        else toast.error(opsRes.error || 'No se pudieron cargar las operaciones');
+        const loaded = new Map<string, OperationData>();
+        if (opsRes.success && opsRes.data) {
+          for (const op of opsRes.data.operations || []) loaded.set(op.uuid, op);
+        }
+        if (completedRes?.success && completedRes.data) {
+          for (const op of completedRes.data.operations || []) loaded.set(op.uuid, op);
+        }
+        if (loaded.size > 0) setOperations(Array.from(loaded.values()));
+        else toast.error(opsRes.error || completedRes?.error || 'No se pudieron cargar las operaciones');
         if (groupsRes.success && groupsRes.data) setGroups(groupsRes.data);
         setLoading(false);
       },
@@ -74,7 +91,7 @@ export function LinkOperationPanel({
     return () => {
       active = false;
     };
-  }, [payment]);
+  }, [payment, table]);
 
   const isGroup = (payment.client_phone || '').endsWith('@g.us');
   const matchedGroup = useMemo(
@@ -127,11 +144,21 @@ export function LinkOperationPanel({
     return list.filter(notTaken);
   }, [payment, operations, scope, isGroup, matchedGroup, table]);
 
+  const availableByStatus = useMemo(() => {
+    if (table !== 'outgoing') return scoped;
+    return scoped.filter((op) => {
+      if (op.uuid === payment.operation_uuid) return true;
+      return statusView === 'completed'
+        ? op.status === 'COMPLETED'
+        : op.status === 'QUOTED' || op.status === 'PENDING';
+    });
+  }, [payment.operation_uuid, scoped, statusView, table]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = !q
-      ? scoped
-      : scoped.filter((op) => {
+      ? availableByStatus
+      : availableByStatus.filter((op) => {
           const amounts = `${op.from_amount} ${op.to_amount}`;
           return (
             (op.client_display_name || '').toLowerCase().includes(q) ||
@@ -142,7 +169,7 @@ export function LinkOperationPanel({
           );
         });
     return list.slice(0, 60);
-  }, [scoped, search]);
+  }, [availableByStatus, search]);
 
   const scopeLabel = (() => {
     if (scope === 'global') return 'Todas las operaciones';
@@ -261,12 +288,42 @@ export function LinkOperationPanel({
         </Button>
       </div>
 
+      {table === 'outgoing' ? (
+        <div className="space-y-1.5">
+          <div className="flex rounded-lg bg-muted p-1" role="group" aria-label="Estado de las operaciones disponibles">
+            <Button
+              type="button"
+              variant={statusView === 'active' ? 'secondary' : 'ghost'}
+              className="h-11 flex-1"
+              onClick={() => setStatusView('active')}
+            >
+              Activas
+            </Button>
+            <Button
+              type="button"
+              variant={statusView === 'completed' ? 'secondary' : 'ghost'}
+              className="h-11 flex-1"
+              onClick={() => setStatusView('completed')}
+            >
+              Completadas
+            </Button>
+          </div>
+          <p className="px-1 text-xs text-muted-foreground">
+            {statusView === 'completed'
+              ? 'Solo se muestran las completadas que todavía no tienen pago saliente.'
+              : 'Operaciones cotizadas o pendientes disponibles para completar.'}
+          </p>
+        </div>
+      ) : null}
+
       <div className="-mx-1 flex-1 space-y-2 overflow-y-auto px-1 py-1">
         {loading ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Cargando operaciones…</p>
         ) : filtered.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            {scope === 'global'
+            {table === 'outgoing' && statusView === 'completed'
+              ? 'No hay operaciones completadas sin pago saliente en este alcance.'
+              : scope === 'global'
               ? 'Sin operaciones que coincidan.'
               : 'Sin cotizaciones en este alcance. Prueba "Ver todas".'}
           </p>
@@ -274,6 +331,7 @@ export function LinkOperationPanel({
           filtered.map((op) => {
             const isSel = selected === op.uuid;
             const client = op.client_display_name || stripPhone(op.client_phone) || 'Cliente';
+            const statusMeta = getStatusMeta(op.status);
             return (
               <button
                 key={op.uuid}
@@ -291,7 +349,7 @@ export function LinkOperationPanel({
                   <span>
                     {formatNumber(op.from_amount)} {op.from_currency} → {formatNumber(op.to_amount)} {op.to_currency}
                   </span>
-                  <StatusBadge tone="neutral">{op.status}</StatusBadge>
+                  <StatusBadge tone={statusMeta.tone} icon={statusMeta.icon}>{statusMeta.label}</StatusBadge>
                 </div>
               </button>
             );

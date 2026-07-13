@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ChevronDown, ChevronRight, Plus } from 'lucide-react';
+import { ArrowLeft, Calculator, ChevronDown, ChevronRight, CircleAlert, Info, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -18,9 +18,12 @@ import { adminService } from '@/services/adminService';
 import { clientService } from '@/services/clientService';
 import { fundService } from '@/services/fundService';
 import { paymentService } from '@/services/paymentService';
+import { ratesService } from '@/services/ratesService';
 import type { CurrencyPairData } from '@/types/admin';
+import type { ExchangeRateResponse } from '@/types/currency';
 import type { FundGroup } from '@/types/fund';
 import type { PaymentData, PaymentTable } from '@/types/payment';
+import { formatAmountForInput, sanitizeAmountInput } from '@/utils/functions';
 
 interface CreateOperationFormProps {
   payment: PaymentData;
@@ -36,6 +39,9 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
   const [direction, setDirection] = useState<'SEND' | 'RECEIVE'>('SEND');
   const [fromAmount, setFromAmount] = useState('');
   const [toAmount, setToAmount] = useState('');
+  const [activeRate, setActiveRate] = useState<ExchangeRateResponse | null>(null);
+  const [loadingRate, setLoadingRate] = useState(false);
+  const [rateError, setRateError] = useState(false);
   const [fundGroupUuid, setFundGroupUuid] = useState('');
   const [exchangeUserUuid, setExchangeUserUuid] = useState('');
   const [creating, setCreating] = useState(false);
@@ -63,6 +69,32 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
   const fromCur = pair?.from_currency?.symbol ?? '';
   const toCur = pair?.to_currency?.symbol ?? '';
 
+  useEffect(() => {
+    if (!pairUuid) {
+      setActiveRate(null);
+      setRateError(false);
+      return;
+    }
+
+    let active = true;
+    setLoadingRate(true);
+    setRateError(false);
+    setActiveRate(null);
+    ratesService.getRateByPair(pairUuid).then((res) => {
+      if (!active) return;
+      setLoadingRate(false);
+      if (res.success && res.data) {
+        setActiveRate(res.data);
+      } else {
+        setActiveRate(null);
+        setRateError(true);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [pairUuid]);
+
   // Prefill: el monto del pago va al lado cuya moneda coincide con la del pago.
   useEffect(() => {
     if (!pair || payment.amount == null) return;
@@ -70,6 +102,41 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
     if (cur && cur === fromCur.toUpperCase()) setFromAmount(String(payment.amount));
     else if (cur && cur === toCur.toUpperCase()) setToAmount(String(payment.amount));
   }, [pair, payment.amount, payment.currency, fromCur, toCur]);
+
+  // Misma orientación de tasa que usa la calculadora principal. El monto detectado
+  // en el comprobante queda fijo y se calcula el lado opuesto; ambos campos siguen
+  // siendo editables para que el operador pueda corregir el resultado.
+  useEffect(() => {
+    if (!pair || !activeRate || activeRate.currency_pair_uuid !== pairUuid || payment.amount == null) return;
+    const amount = Number(payment.amount);
+    if (!Number.isFinite(amount) || amount <= 0 || activeRate.rate <= 0) return;
+
+    const cur = (payment.currency || '').toUpperCase();
+    if (cur === fromCur.toUpperCase()) {
+      const calculated = activeRate.inverse_percentage ? amount / activeRate.rate : amount * activeRate.rate;
+      setFromAmount(formatAmountForInput(amount));
+      setToAmount(formatAmountForInput(calculated));
+    } else if (cur === toCur.toUpperCase()) {
+      const calculated = activeRate.inverse_percentage ? amount * activeRate.rate : amount / activeRate.rate;
+      setFromAmount(formatAmountForInput(calculated));
+      setToAmount(formatAmountForInput(amount));
+    }
+  }, [activeRate, pair, pairUuid, payment.amount, payment.currency, fromCur, toCur]);
+
+  const effectiveRate = activeRate
+    ? activeRate.inverse_percentage ? 1 / activeRate.rate : activeRate.rate
+    : null;
+
+  const creationStatus = table === 'incoming'
+    ? { label: 'Pendiente', detail: 'Se completará al vincular el pago saliente.' }
+    : fromCur.toUpperCase() === 'USD'
+      ? { label: 'Pendiente', detail: 'Quedará pendiente hasta confirmar la entrega del efectivo.' }
+      : { label: 'Completada', detail: 'Este pago saliente confirma que el dinero fue entregado.' };
+
+  const updateAmount = (value: string, setter: (next: string) => void) => {
+    const sanitized = sanitizeAmountInput(value);
+    if (sanitized !== null) setter(sanitized);
+  };
 
   const withFund = direction === 'SEND';
   // ZELLE/PAYPAL son métodos de pago en USD: para elegir fondo se liquidan como USD.
@@ -144,7 +211,7 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
               id="op-from"
               inputMode="decimal"
               value={fromAmount}
-              onChange={(e) => setFromAmount(e.target.value)}
+              onChange={(e) => updateAmount(e.target.value, setFromAmount)}
               placeholder="0.00"
               className="h-10"
             />
@@ -155,12 +222,46 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
               id="op-to"
               inputMode="decimal"
               value={toAmount}
-              onChange={(e) => setToAmount(e.target.value)}
+              onChange={(e) => updateAmount(e.target.value, setToAmount)}
               placeholder="0.00"
               className="h-10"
             />
           </div>
         </div>
+
+        {pair ? (
+          <div className="flex gap-2.5 rounded-lg border border-border bg-muted/35 px-3 py-2.5 text-xs">
+            {rateError ? (
+              <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            ) : (
+              <Calculator className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            )}
+            <div className="space-y-0.5">
+              <p className="font-medium text-foreground">
+                {loadingRate
+                  ? 'Calculando con la tasa actual…'
+                  : rateError
+                    ? 'No hay una tasa activa para este par'
+                    : 'Monto calculado con la tasa actual'}
+              </p>
+              <p className="text-muted-foreground">
+                {effectiveRate && Number.isFinite(effectiveRate)
+                  ? `1 ${fromCur} = ${effectiveRate.toLocaleString('es-VE', { maximumFractionDigits: 6 })} ${toCur}. Puedes modificar los montos antes de crear.`
+                  : 'Puedes indicar ambos montos manualmente.'}
+              </p>
+            </div>
+          </div>
+        ) : null}
+
+        {pair ? (
+          <div className="flex gap-2.5 rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2.5 text-xs">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-700 dark:text-sky-400" />
+            <p className="text-muted-foreground">
+              Estado al crear: <span className="font-semibold text-foreground">{creationStatus.label}</span>.{' '}
+              {creationStatus.detail}
+            </p>
+          </div>
+        ) : null}
 
         {withFund ? (
           <>
