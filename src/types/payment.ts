@@ -67,6 +67,22 @@ export interface PaymentLoanSummary {
   outstanding_amount: number;
 }
 
+export interface LoanValuation {
+  payment_id: number;
+  detected_amount: number;
+  detected_currency: string | null;
+  fiat_amount: number | null;
+  fiat_currency: string;
+  usdt_amount: number | null;
+  usdt_rate: number | null;
+  usdt_rate_at: string | null;
+  bcv_amount: number | null;
+  bcv_rate: number | null;
+  bcv_rate_at: string | null;
+  valuation_at: string;
+  warnings: string[];
+}
+
 export type DepositMethod = 'ZELLE' | 'BINANCE' | 'KRAKEN' | 'TRANSFER' | 'OTHER';
 
 export const DEPOSIT_METHODS: DepositMethod[] = ['ZELLE', 'BINANCE', 'KRAKEN', 'TRANSFER', 'OTHER'];

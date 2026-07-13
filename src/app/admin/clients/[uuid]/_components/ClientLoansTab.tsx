@@ -148,6 +148,10 @@ export function ClientLoansTab({ loans, loading, onRepayment }: ClientLoansTabPr
                     </p>
                   </div>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Equivalencias al {formatCaracasDateTime(loan.valuation_at)}
+                  {loan.manual_values ? ' · valores ajustados manualmente' : ''}
+                </p>
 
                 {active && loan.current_fiat_due != null ? (
                   <p className="text-sm text-foreground">

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Ban, ChevronRight, HandCoins, Link2, Tag, Users, Wallet } from 'lucide-react';
+import { ArrowLeft, Ban, ChevronRight, HandCoins, Link2, RotateCcw, Tag, TriangleAlert, Users, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -26,8 +26,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { paymentService } from '@/services/paymentService';
 import { fundService } from '@/services/fundService';
 import { cn } from '@/lib/utils';
-import type { PaymentData } from '@/types/payment';
-import type { LoanPreferredValue } from '@/types/payment';
+import { formatCaracasDateTime, formatNumber } from '@/utils/functions';
+import type { LoanPreferredValue, LoanValuation, PaymentData } from '@/types/payment';
 import type { FundGroup } from '@/types/fund';
 import { LinkOperationPanel } from './LinkOperationPanel';
 
@@ -45,10 +45,15 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
   const [submitting, setSubmitting] = useState(false);
   const [groups, setGroups] = useState<FundGroup[]>([]);
   const [groupUuid, setGroupUuid] = useState('');
-  const [loanAmount, setLoanAmount] = useState('');
   const [fiatCurrency, setFiatCurrency] = useState('VES');
+  const [fiatAmount, setFiatAmount] = useState('');
+  const [usdtAmount, setUsdtAmount] = useState('');
+  const [bcvAmount, setBcvAmount] = useState('');
   const [preferredValue, setPreferredValue] = useState<LoanPreferredValue>('FIAT');
   const [loanNotes, setLoanNotes] = useState('');
+  const [valuation, setValuation] = useState<LoanValuation | null>(null);
+  const [valuationLoading, setValuationLoading] = useState(false);
+  const [valuationError, setValuationError] = useState<string | null>(null);
 
   useEffect(() => {
     setStep('choose');
@@ -58,9 +63,14 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
     const paymentCurrency = (payment?.currency || '').toUpperCase();
     const normalizedCurrency = ['ZELLE', 'PAYPAL'].includes(paymentCurrency) ? 'USD' : paymentCurrency;
     setFiatCurrency(normalizedCurrency && normalizedCurrency !== 'USDT' ? normalizedCurrency : 'VES');
-    setLoanAmount(payment?.amount != null ? String(payment.amount) : '');
+    setFiatAmount(payment?.amount != null && paymentCurrency !== 'USDT' ? String(payment.amount) : '');
+    setUsdtAmount(payment?.amount != null && paymentCurrency === 'USDT' ? String(payment.amount) : '');
+    setBcvAmount('');
     setPreferredValue(paymentCurrency === 'USDT' ? 'USDT' : 'FIAT');
     setLoanNotes('');
+    setValuation(null);
+    setValuationLoading(false);
+    setValuationError(null);
   }, [payment]);
 
   useEffect(() => {
@@ -103,6 +113,32 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
     const match = groups.find((g) => g.whatsapp_group_jid && g.whatsapp_group_jid === payment.client_phone);
     setGroupUuid(match?.uuid ?? '');
     setStep('group');
+  };
+
+  const applyValuation = (data: LoanValuation) => {
+    setValuation(data);
+    setFiatCurrency(data.fiat_currency);
+    setFiatAmount(data.fiat_amount != null ? String(data.fiat_amount) : '');
+    setUsdtAmount(data.usdt_amount != null ? String(data.usdt_amount) : '');
+    setBcvAmount(data.bcv_amount != null ? String(data.bcv_amount) : '');
+  };
+
+  const loadLoanValuation = async (currency = fiatCurrency) => {
+    if (isLoan) return;
+    setValuationLoading(true);
+    setValuationError(null);
+    const result = await paymentService.getLoanValuation(payment.id, currency.trim().toUpperCase());
+    setValuationLoading(false);
+    if (result.success && result.data) {
+      applyValuation(result.data);
+      return;
+    }
+    setValuationError(result.error || 'No se pudieron consultar las tasas históricas');
+  };
+
+  const openLoan = () => {
+    setStep('loan');
+    if (!isLoan && !valuation) loadLoanValuation();
   };
 
   const saveGroup = async () => {
@@ -151,22 +187,28 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
   };
 
   const saveLoan = async () => {
-    const preferredAmount = Number.parseFloat(loanAmount.replace(',', '.'));
-    if (!Number.isFinite(preferredAmount) || preferredAmount <= 0) {
-      return toast.error('El valor del préstamo debe ser mayor a 0');
-    }
+    const fiat = Number.parseFloat(fiatAmount.replace(',', '.'));
+    const usdt = Number.parseFloat(usdtAmount.replace(',', '.'));
+    const bcv = bcvAmount.trim() ? Number.parseFloat(bcvAmount.replace(',', '.')) : null;
+    if (!Number.isFinite(fiat) || fiat <= 0) return toast.error('Indica un valor fiat válido');
+    if (!Number.isFinite(usdt) || usdt <= 0) return toast.error('Indica un valor USDT válido');
     if (!fiatCurrency.trim() || fiatCurrency.trim().toUpperCase() === 'USDT') {
       return toast.error('Indica la moneda fiat del préstamo');
     }
     if (preferredValue === 'BCV' && fiatCurrency.trim().toUpperCase() !== 'VES') {
       return toast.error('BCV solo está disponible para préstamos expresados en VES');
     }
+    if (fiatCurrency.trim().toUpperCase() === 'VES' && (bcv == null || !Number.isFinite(bcv) || bcv <= 0)) {
+      return toast.error('Indica un valor BCV válido');
+    }
 
     setSubmitting(true);
     const res = await paymentService.createLoan(payment.id, {
       preferredValue,
-      preferredAmount,
       fiatCurrency: fiatCurrency.trim().toUpperCase(),
+      fiatAmount: fiat,
+      usdtAmount: usdt,
+      bcvAmount: bcv,
       notes: loanNotes.trim() || null,
     });
     setSubmitting(false);
@@ -215,7 +257,12 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-lg">
+      <DialogContent
+        className={cn(
+          'flex max-h-[85vh] flex-col',
+          step === 'loan' ? 'sm:max-w-2xl' : 'sm:max-w-lg',
+        )}
+      >
         {step === 'choose' ? (
           <>
             <DialogHeader>
@@ -247,7 +294,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
                 title="Préstamo al cliente"
                 description={isLoan ? 'Este pago ya originó un préstamo.' : 'Registra el pago como dinero que el cliente debe devolver.'}
                 active={current === 'loan'}
-                onClick={() => setStep('loan')}
+                onClick={openLoan}
               />
               <ChoiceButton
                 icon={Ban}
@@ -353,20 +400,39 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
                 </div>
               </div>
             ) : (
-              <div className="space-y-4 overflow-y-auto pr-1">
+              <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
+                <div className="rounded-lg bg-muted/60 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm text-muted-foreground">Valor detectado en el comprobante</span>
+                    <span className="text-sm font-semibold text-foreground">
+                      {formatNumber(valuation?.detected_amount ?? payment.amount ?? 0)}{' '}
+                      {valuation?.detected_currency || payment.currency || '—'}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {valuation
+                      ? `Conversiones según las tasas registradas al ${formatCaracasDateTime(valuation.valuation_at)}.`
+                      : 'Las conversiones se calculan usando la fecha y hora de este pago.'}
+                  </p>
+                </div>
+
+                {valuationLoading ? (
+                  <p className="text-sm text-muted-foreground">Consultando tasas históricas…</p>
+                ) : null}
+                {valuationError ? (
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
+                    {valuationError}. Puedes completar los tres valores manualmente.
+                  </div>
+                ) : null}
+                {valuation?.warnings.map((warning) => (
+                  <p key={warning} className="text-xs text-amber-700 dark:text-amber-400">{warning}</p>
+                ))}
+
                 <div className="space-y-1.5">
                   <Label htmlFor="loan-preferred-value">Referencia para llevar la deuda</Label>
                   <Select
                     value={preferredValue}
-                    onValueChange={(value) => {
-                      const next = (value as LoanPreferredValue) ?? 'FIAT';
-                      setPreferredValue(next);
-                      const paymentCurrency = (payment.currency || '').toUpperCase();
-                      const matchesPayment =
-                        (next === 'USDT' && paymentCurrency === 'USDT') ||
-                        (next === 'FIAT' && paymentCurrency !== 'USDT');
-                      setLoanAmount(matchesPayment && payment.amount != null ? String(payment.amount) : '');
-                    }}
+                    onValueChange={(value) => setPreferredValue((value as LoanPreferredValue) ?? 'FIAT')}
                   >
                     <SelectTrigger id="loan-preferred-value" className="h-10 w-full">
                       <SelectValue />
@@ -378,49 +444,102 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    El monto se ingresa en esta referencia; las otras equivalencias se calcularán al guardar.
+                    Esta referencia determina la unidad en la que se llevará el saldo pendiente.
                   </p>
                 </div>
 
-                <div className="grid grid-cols-[1fr_110px] gap-3">
+                {preferredValue !== 'FIAT' ? (
+                  <div
+                    role="alert"
+                    className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-amber-900 dark:text-amber-200"
+                  >
+                    <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                    <p className="text-sm">
+                      La deuda quedará indexada a {preferredValue === 'BCV' ? 'USD a tasa BCV' : 'USDT'}.
+                      El valor en {fiatCurrency || 'fiat'} a cobrar cambiará según la tasa del día de cada abono.
+                    </p>
+                  </div>
+                ) : null}
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="loan-preferred-amount">
-                      {preferredValue === 'USDT'
-                        ? 'Monto en USDT'
-                        : preferredValue === 'BCV'
-                          ? 'Monto en USD (BCV)'
-                          : `Monto en ${fiatCurrency || 'fiat'}`}
-                    </Label>
+                    <Label htmlFor="loan-fiat-amount">Valor fiat ({fiatCurrency || '—'})</Label>
                     <Input
-                      id="loan-preferred-amount"
+                      id="loan-fiat-amount"
                       inputMode="decimal"
-                      value={loanAmount}
-                      onChange={(event) => setLoanAmount(event.target.value)}
+                      value={fiatAmount}
+                      onChange={(event) => setFiatAmount(event.target.value)}
                       placeholder="0.00"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="loan-fiat-currency">Moneda</Label>
+                    <Label htmlFor="loan-usdt-amount">Equivalente USDT</Label>
+                    <Input
+                      id="loan-usdt-amount"
+                      inputMode="decimal"
+                      value={usdtAmount}
+                      onChange={(event) => setUsdtAmount(event.target.value)}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="loan-bcv-amount">Equivalente USD (BCV)</Label>
+                    <Input
+                      id="loan-bcv-amount"
+                      inputMode="decimal"
+                      value={bcvAmount}
+                      onChange={(event) => setBcvAmount(event.target.value)}
+                      placeholder={fiatCurrency === 'VES' ? '0.00' : 'No aplica'}
+                      disabled={fiatCurrency !== 'VES'}
+                    />
+                  </div>
+                </div>
+
+                {valuation?.usdt_rate != null || valuation?.bcv_rate != null ? (
+                  <div className="space-y-1 text-xs text-muted-foreground">
+                    {valuation.usdt_rate != null ? (
+                      <p>
+                        1 USDT = {formatNumber(valuation.usdt_rate)} {valuation.fiat_currency}
+                        {valuation.usdt_rate_at ? ` · tasa registrada ${formatCaracasDateTime(valuation.usdt_rate_at)}` : ''}
+                      </p>
+                    ) : null}
+                    {valuation.bcv_rate != null ? (
+                      <p>
+                        1 USD (BCV) = {formatNumber(valuation.bcv_rate)} VES
+                        {valuation.bcv_rate_at ? ` · tasa registrada ${formatCaracasDateTime(valuation.bcv_rate_at)}` : ''}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <div className="flex-1 space-y-1.5">
+                    <Label htmlFor="loan-fiat-currency">Moneda fiat de pago</Label>
                     <Input
                       id="loan-fiat-currency"
                       value={fiatCurrency}
                       onChange={(event) => {
                         const value = event.target.value.toUpperCase();
                         setFiatCurrency(value);
-                        if (preferredValue === 'BCV' && value !== 'VES') {
-                          setPreferredValue('FIAT');
-                          const paymentCurrency = (payment.currency || '').toUpperCase();
-                          setLoanAmount(paymentCurrency !== 'USDT' && payment.amount != null ? String(payment.amount) : '');
-                        }
+                        if (preferredValue === 'BCV' && value !== 'VES') setPreferredValue('FIAT');
+                        if (value !== 'VES') setBcvAmount('');
                       }}
                       placeholder="VES"
                       maxLength={10}
                     />
                   </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => loadLoanValuation(fiatCurrency)}
+                    disabled={valuationLoading}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Restaurar conversión
+                  </Button>
                 </div>
-
                 <p className="text-xs text-muted-foreground">
-                  La moneda fiat indica dónde se pagará. Si la referencia es USDT o BCV, su valor fiat se actualizará con la tasa del día de cada abono.
+                  Los tres valores son editables. Si corriges alguno, se guardará el monto manual y la tasa implícita correspondiente.
                 </p>
 
                 <div className="space-y-1.5">

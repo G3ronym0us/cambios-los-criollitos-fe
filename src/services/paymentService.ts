@@ -1,7 +1,7 @@
 import { ApiResponse } from '@/types/auth';
 import { httpClient } from '@/utils/httpInterceptor';
 import type { LoanData } from '@/types/client';
-import type { LoanPreferredValue, PaymentData, PaymentPage, PaymentQuery, PaymentTable } from '@/types/payment';
+import type { LoanPreferredValue, LoanValuation, PaymentData, PaymentPage, PaymentQuery, PaymentTable } from '@/types/payment';
 
 export class PaymentService {
   // Página de pagos entrantes/salientes (paginada + búsqueda/clasificación server-side).
@@ -62,17 +62,31 @@ export class PaymentService {
     paymentId: number,
     body: {
       preferredValue: LoanPreferredValue;
-      preferredAmount: number;
       fiatCurrency: string;
+      fiatAmount: number;
+      usdtAmount: number;
+      bcvAmount?: number | null;
       notes?: string | null;
     },
   ): Promise<ApiResponse<LoanData>> {
     const result = await httpClient.post<LoanData>(`/payments/outgoing/${paymentId}/loan`, {
       preferred_value: body.preferredValue,
-      preferred_amount: body.preferredAmount,
       fiat_currency: body.fiatCurrency,
+      fiat_amount: body.fiatAmount,
+      usdt_amount: body.usdtAmount,
+      bcv_amount: body.bcvAmount ?? null,
       notes: body.notes ?? null,
     });
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  async getLoanValuation(paymentId: number, fiatCurrency?: string): Promise<ApiResponse<LoanValuation>> {
+    const params = new URLSearchParams();
+    if (fiatCurrency) params.set('fiat_currency', fiatCurrency);
+    const query = params.toString();
+    const result = await httpClient.get<LoanValuation>(
+      `/payments/outgoing/${paymentId}/loan-valuation${query ? `?${query}` : ''}`,
+    );
     return { success: result.success, data: result.data, error: result.error };
   }
 

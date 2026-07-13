@@ -74,6 +74,8 @@ export interface LoanData {
   usdt_rate: number;
   bcv_amount: number | null;
   bcv_rate: number | null;
+  valuation_at: string;
+  manual_values: boolean;
   preferred_value: LoanPreferredValue;
   preferred_currency: string;
   principal_amount: number;
