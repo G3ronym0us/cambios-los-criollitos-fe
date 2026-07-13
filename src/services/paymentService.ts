@@ -62,6 +62,7 @@ export class PaymentService {
     paymentId: number,
     body: {
       preferredValue: LoanPreferredValue;
+      paymentCurrency: string;
       fiatCurrency: string;
       fiatAmount: number;
       usdtAmount: number;
@@ -71,6 +72,7 @@ export class PaymentService {
   ): Promise<ApiResponse<LoanData>> {
     const result = await httpClient.post<LoanData>(`/payments/outgoing/${paymentId}/loan`, {
       preferred_value: body.preferredValue,
+      payment_currency: body.paymentCurrency,
       fiat_currency: body.fiatCurrency,
       fiat_amount: body.fiatAmount,
       usdt_amount: body.usdtAmount,
@@ -80,9 +82,14 @@ export class PaymentService {
     return { success: result.success, data: result.data, error: result.error };
   }
 
-  async getLoanValuation(paymentId: number, fiatCurrency?: string): Promise<ApiResponse<LoanValuation>> {
+  async getLoanValuation(
+    paymentId: number,
+    fiatCurrency?: string,
+    paymentCurrency?: string,
+  ): Promise<ApiResponse<LoanValuation>> {
     const params = new URLSearchParams();
     if (fiatCurrency) params.set('fiat_currency', fiatCurrency);
+    if (paymentCurrency) params.set('payment_currency', paymentCurrency);
     const query = params.toString();
     const result = await httpClient.get<LoanValuation>(
       `/payments/outgoing/${paymentId}/loan-valuation${query ? `?${query}` : ''}`,

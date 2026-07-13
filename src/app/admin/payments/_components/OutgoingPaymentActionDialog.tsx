@@ -46,8 +46,9 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
   const [desc, setDesc] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [groups, setGroups] = useState<FundGroup[]>([]);
-  const [fiatCurrencies, setFiatCurrencies] = useState<CurrencyData[]>([]);
+  const [availableCurrencies, setAvailableCurrencies] = useState<CurrencyData[]>([]);
   const [groupUuid, setGroupUuid] = useState('');
+  const [paymentCurrency, setPaymentCurrency] = useState('VES');
   const [fiatCurrency, setFiatCurrency] = useState('VES');
   const [fiatAmount, setFiatAmount] = useState('');
   const [usdtAmount, setUsdtAmount] = useState('');
@@ -65,6 +66,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
     setGroupUuid('');
     const paymentCurrency = (payment?.currency || '').toUpperCase();
     const normalizedCurrency = ['ZELLE', 'PAYPAL'].includes(paymentCurrency) ? 'USD' : paymentCurrency;
+    setPaymentCurrency(paymentCurrency || 'VES');
     setFiatCurrency(normalizedCurrency && normalizedCurrency !== 'USDT' ? normalizedCurrency : 'VES');
     setFiatAmount(payment?.amount != null && paymentCurrency !== 'USDT' ? formatAmountForInput(payment.amount) : '');
     setUsdtAmount(payment?.amount != null && paymentCurrency === 'USDT' ? formatAmountForInput(payment.amount) : '');
@@ -85,10 +87,10 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
       const currencies = new Map<string, CurrencyData>();
       for (const pair of res.data.pairs) {
         for (const currency of [pair.from_currency, pair.to_currency]) {
-          if (currency.currency_type === CurrencyType.FIAT) currencies.set(currency.symbol, currency);
+          currencies.set(currency.symbol, currency);
         }
       }
-      setFiatCurrencies(Array.from(currencies.values()).sort((a, b) => a.symbol.localeCompare(b.symbol)));
+      setAvailableCurrencies(Array.from(currencies.values()).sort((a, b) => a.symbol.localeCompare(b.symbol)));
     });
   }, []);
 
@@ -130,17 +132,25 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
 
   const applyValuation = (data: LoanValuation) => {
     setValuation(data);
+    if (data.detected_currency) setPaymentCurrency(data.detected_currency);
     setFiatCurrency(data.fiat_currency);
     setFiatAmount(formatAmountForInput(data.fiat_amount));
     setUsdtAmount(formatAmountForInput(data.usdt_amount));
     setBcvAmount(formatAmountForInput(data.bcv_amount));
   };
 
-  const loadLoanValuation = async (currency = fiatCurrency) => {
+  const loadLoanValuation = async (
+    currency = fiatCurrency,
+    sourceCurrency = paymentCurrency,
+  ) => {
     if (isLoan) return;
     setValuationLoading(true);
     setValuationError(null);
-    const result = await paymentService.getLoanValuation(payment.id, currency.trim().toUpperCase());
+    const result = await paymentService.getLoanValuation(
+      payment.id,
+      currency.trim().toUpperCase(),
+      sourceCurrency.trim().toUpperCase(),
+    );
     setValuationLoading(false);
     if (result.success && result.data) {
       applyValuation(result.data);
@@ -162,9 +172,15 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
     if (sanitized != null) setter(sanitized);
   };
 
+  const fiatCurrencies = availableCurrencies.filter(
+    (currency) => currency.currency_type === CurrencyType.FIAT,
+  );
   const fiatCurrencySymbols = Array.from(
     new Set([fiatCurrency, ...fiatCurrencies.map((currency) => currency.symbol)]),
   ).filter((symbol) => symbol && symbol !== 'USDT');
+  const paymentCurrencySymbols = Array.from(
+    new Set([paymentCurrency, 'VES', 'USDT', ...availableCurrencies.map((currency) => currency.symbol)]),
+  ).filter(Boolean);
 
   const saveGroup = async () => {
     if (!groupUuid) {
@@ -215,6 +231,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
     const fiat = Number.parseFloat(fiatAmount.replace(',', '.'));
     const usdt = Number.parseFloat(usdtAmount.replace(',', '.'));
     const bcv = bcvAmount.trim() ? Number.parseFloat(bcvAmount.replace(',', '.')) : null;
+    if (!paymentCurrency) return toast.error('Confirma la moneda del monto detectado');
     if (!Number.isFinite(fiat) || fiat <= 0) return toast.error('Indica un valor fiat válido');
     if (!Number.isFinite(usdt) || usdt <= 0) return toast.error('Indica un valor USDT válido');
     if (!fiatCurrency.trim() || fiatCurrency.trim().toUpperCase() === 'USDT') {
@@ -230,6 +247,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
     setSubmitting(true);
     const res = await paymentService.createLoan(payment.id, {
       preferredValue,
+      paymentCurrency,
       fiatCurrency: fiatCurrency.trim().toUpperCase(),
       fiatAmount: fiat,
       usdtAmount: usdt,
@@ -426,19 +444,57 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
               </div>
             ) : (
               <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
-                <div className="rounded-lg bg-muted/60 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="grid gap-3 rounded-lg bg-muted/60 p-3 sm:grid-cols-[1fr_220px] sm:items-end">
+                  <div>
                     <span className="text-sm text-muted-foreground">Valor detectado en el comprobante</span>
-                    <span className="text-sm font-semibold text-foreground">
-                      {formatNumber(valuation?.detected_amount ?? payment.amount ?? 0)}{' '}
-                      {valuation?.detected_currency || payment.currency || '—'}
-                    </span>
+                    <p className="mt-1 text-lg font-semibold text-foreground">
+                      {formatNumber(valuation?.detected_amount ?? payment.amount ?? 0)}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {valuation
+                        ? `Conversiones según las tasas registradas al ${formatCaracasDateTime(valuation.valuation_at)}.`
+                        : 'Las conversiones se calculan usando la fecha y hora de este pago.'}
+                    </p>
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {valuation
-                      ? `Conversiones según las tasas registradas al ${formatCaracasDateTime(valuation.valuation_at)}.`
-                      : 'Las conversiones se calculan usando la fecha y hora de este pago.'}
-                  </p>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="loan-payment-currency">Moneda del monto detectado</Label>
+                    <Select
+                      value={paymentCurrency}
+                      onValueChange={(value) => {
+                        if (!value) return;
+                        setPaymentCurrency(value);
+                        setValuation(null);
+                        const selected = availableCurrencies.find((currency) => currency.symbol === value);
+                        const isFiat = selected?.currency_type === CurrencyType.FIAT || value === 'VES';
+                        const nextFiat = isFiat ? value : fiatCurrency;
+                        if (isFiat) {
+                          setFiatCurrency(value);
+                          if (preferredValue === 'BCV' && value !== 'VES') setPreferredValue('FIAT');
+                          if (value !== 'VES') setBcvAmount('');
+                        }
+                        void loadLoanValuation(nextFiat, value);
+                      }}
+                    >
+                      <SelectTrigger id="loan-payment-currency" className="h-10 w-full">
+                        <SelectValue placeholder="Confirma la moneda" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {paymentCurrencySymbols.map((symbol) => {
+                          const currency = availableCurrencies.find((item) => item.symbol === symbol);
+                          return (
+                            <SelectItem key={symbol} value={symbol}>
+                              {symbol}{currency?.name ? ` · ${currency.name}` : ''}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                    {!payment.currency ? (
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        El OCR no guardó la moneda. Confírmala antes de registrar el préstamo.
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
 
                 {valuationLoading ? (
@@ -574,7 +630,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => loadLoanValuation(fiatCurrency)}
+                    onClick={() => loadLoanValuation(fiatCurrency, paymentCurrency)}
                     disabled={valuationLoading}
                   >
                     <RotateCcw className="h-4 w-4" />
