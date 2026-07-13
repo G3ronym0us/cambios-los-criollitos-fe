@@ -171,6 +171,16 @@ export function usePayments() {
 
   const clearFocus = useCallback(() => setFocusId(null), []);
 
+  const showPayment = useCallback((table: PaymentTable, id: number) => {
+    setSearch('');
+    setDebouncedSearch('');
+    setOutClass('ALL');
+    pendingFocus.current = { table, id };
+    setFocusId(id);
+    selectTab(table);
+    loadTotals();
+  }, [loadTotals, selectTab]);
+
   // ── Refresco en sitio (tras vincular/marcar/etc.) ─────────────────────────
   // Recarga lo YA cargado (mismo offset acumulado) sin pasar por `loading`,
   // así la lista no colapsa a la primera página ni se pierde el scroll.
@@ -234,6 +244,7 @@ export function usePayments() {
       refreshInPlace,
       loadMore,
       clearFocus,
+      showPayment,
     },
   };
 }

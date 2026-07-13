@@ -18,6 +18,18 @@ function PaymentsAdminContent() {
   const [actioning, setActioning] = useState<PaymentData | null>(null);
   const [viewingRawText, setViewingRawText] = useState<PaymentData | null>(null);
 
+  const showConvertedIncoming = (payment: PaymentData) => {
+    setActioning(null);
+    actions.showPayment('incoming', payment.id);
+    setActioningIncoming(payment);
+  };
+
+  const showConvertedOutgoing = (payment: PaymentData) => {
+    setActioningIncoming(null);
+    actions.showPayment('outgoing', payment.id);
+    setActioning(payment);
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -96,12 +108,14 @@ function PaymentsAdminContent() {
         payment={actioningIncoming}
         onClose={() => setActioningIncoming(null)}
         onDone={actions.refreshInPlace}
+        onConverted={showConvertedOutgoing}
       />
 
       <OutgoingPaymentActionDialog
         payment={actioning}
         onClose={() => setActioning(null)}
         onDone={actions.refreshInPlace}
+        onConverted={showConvertedIncoming}
       />
 
       <PaymentRawTextDialog

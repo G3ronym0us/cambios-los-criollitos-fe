@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ChevronRight, Landmark, Link2, PiggyBank, Wallet } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, ChevronRight, Landmark, Link2, PiggyBank, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -32,6 +32,7 @@ interface IncomingPaymentActionDialogProps {
   payment: PaymentData | null;
   onClose: () => void;
   onDone: () => void;
+  onConverted: (payment: PaymentData) => void;
 }
 
 type Step = 'choose' | 'operation' | 'deposit' | 'balance';
@@ -43,7 +44,7 @@ function digitsOnly(phone: string | null | undefined) {
   return (phone || '').replace(/@(c|g)\.us$/, '').replace(/\D/g, '');
 }
 
-export function IncomingPaymentActionDialog({ payment, onClose, onDone }: IncomingPaymentActionDialogProps) {
+export function IncomingPaymentActionDialog({ payment, onClose, onDone, onConverted }: IncomingPaymentActionDialogProps) {
   const [step, setStep] = useState<Step>('choose');
   const [groups, setGroups] = useState<FundGroup[]>([]);
   const [groupUuid, setGroupUuid] = useState('');
@@ -139,6 +140,19 @@ export function IncomingPaymentActionDialog({ payment, onClose, onDone }: Incomi
     }
   };
 
+  const convertToOutgoing = async () => {
+    setSubmitting(true);
+    const res = await paymentService.convertToOutgoing(payment.id);
+    setSubmitting(false);
+    if (res.success && res.data) {
+      toast.success('Pago convertido en saliente');
+      onConverted(res.data);
+      onClose();
+    } else {
+      toast.error(res.error || 'No se pudo convertir el pago en saliente');
+    }
+  };
+
   const balanceEligible = BALANCE_CURRENCIES.has((payment.currency || '').toUpperCase());
   const members = group?.members ?? [];
 
@@ -208,6 +222,23 @@ export function IncomingPaymentActionDialog({ payment, onClose, onDone }: Incomi
                   <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                 </button>
               ) : null}
+              <button
+                type="button"
+                onClick={convertToOutgoing}
+                disabled={submitting}
+                className="flex w-full items-center gap-3 rounded-lg border border-border px-3 py-3 text-left transition-colors hover:bg-muted/50 disabled:opacity-60"
+              >
+                <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                  <ArrowRightLeft className="h-4.5 w-4.5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium text-foreground">Convertir en pago saliente</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    Devuélvelo a Salientes si fue clasificado como entrante por error.
+                  </span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              </button>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={onClose}>Cancelar</Button>

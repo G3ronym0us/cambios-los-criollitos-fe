@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Ban, ChevronRight, HandCoins, Link2, RotateCcw, Tag, TriangleAlert, Users, Wallet } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, Ban, ChevronRight, HandCoins, Link2, RotateCcw, Tag, TriangleAlert, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -24,30 +24,27 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { paymentService } from '@/services/paymentService';
-import { fundService } from '@/services/fundService';
 import { adminService } from '@/services/adminService';
 import { cn } from '@/lib/utils';
 import { formatAmountForInput, formatCaracasDateTime, formatNumber, sanitizeAmountInput } from '@/utils/functions';
 import { CurrencyType, type CurrencyData } from '@/types/admin';
 import type { LoanPreferredValue, LoanValuation, PaymentData } from '@/types/payment';
-import type { FundGroup } from '@/types/fund';
 import { LinkOperationPanel } from './LinkOperationPanel';
 
 interface OutgoingPaymentActionDialogProps {
   payment: PaymentData | null;
   onClose: () => void;
   onDone: () => void;
+  onConverted: (payment: PaymentData) => void;
 }
 
-type Step = 'choose' | 'personal' | 'irrelevant' | 'operation' | 'group' | 'loan';
+type Step = 'choose' | 'personal' | 'irrelevant' | 'operation' | 'loan';
 
-export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: OutgoingPaymentActionDialogProps) {
+export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConverted }: OutgoingPaymentActionDialogProps) {
   const [step, setStep] = useState<Step>('choose');
   const [desc, setDesc] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [groups, setGroups] = useState<FundGroup[]>([]);
   const [availableCurrencies, setAvailableCurrencies] = useState<CurrencyData[]>([]);
-  const [groupUuid, setGroupUuid] = useState('');
   const [paymentCurrency, setPaymentCurrency] = useState('VES');
   const [fiatCurrency, setFiatCurrency] = useState('VES');
   const [fiatAmount, setFiatAmount] = useState('');
@@ -63,7 +60,6 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
     setStep('choose');
     setDesc('');
     setSubmitting(false);
-    setGroupUuid('');
     const paymentCurrency = (payment?.currency || '').toUpperCase();
     const normalizedCurrency = ['ZELLE', 'PAYPAL'].includes(paymentCurrency) ? 'USD' : paymentCurrency;
     setPaymentCurrency(paymentCurrency || 'VES');
@@ -79,9 +75,6 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
   }, [payment]);
 
   useEffect(() => {
-    fundService.getGroups().then((res) => {
-      if (res.success && res.data) setGroups(res.data.filter((g) => g.is_active));
-    });
     adminService.getCurrencyPairs(0, 100, true).then((res) => {
       if (!res.success || !res.data) return;
       const currencies = new Map<string, CurrencyData>();
@@ -121,13 +114,6 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
       onDone(); // refresca la lista en segundo plano; el diálogo sigue abierto
     }
     setStep('operation');
-  };
-
-  // Abre el paso de grupo, preseleccionando el fondo cuyo JID coincide con el destino del pago.
-  const openGroup = () => {
-    const match = groups.find((g) => g.whatsapp_group_jid && g.whatsapp_group_jid === payment.client_phone);
-    setGroupUuid(match?.uuid ?? '');
-    setStep('group');
   };
 
   const applyValuation = (data: LoanValuation) => {
@@ -182,19 +168,16 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
     new Set([paymentCurrency, 'VES', 'USDT', ...availableCurrencies.map((currency) => currency.symbol)]),
   ).filter(Boolean);
 
-  const saveGroup = async () => {
-    if (!groupUuid) {
-      toast.error('Selecciona el grupo');
-      return;
-    }
+  const convertToIncoming = async () => {
     setSubmitting(true);
-    const res = await paymentService.toGroupIncoming(payment.id, { groupUuid });
+    const res = await paymentService.convertToIncoming(payment.id);
     setSubmitting(false);
-    if (res.success) {
-      toast.success('Contabilizado como entrante del grupo. Ahora puedes anexarle el pago en Bs.');
-      finish();
+    if (res.success && res.data) {
+      toast.success('Pago convertido en entrante');
+      onConverted(res.data);
+      onClose();
     } else {
-      toast.error(res.error || 'No se pudo contabilizar en el grupo');
+      toast.error(res.error || 'No se pudo convertir el pago en entrante');
     }
   };
 
@@ -350,11 +333,11 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
                 }}
               />
               <ChoiceButton
-                icon={Users}
-                title="Contabilizar como entrante del grupo"
-                description="Zelle reenviado al grupo: pásalo al lado entrante para luego anexar el Bs."
+                icon={ArrowRightLeft}
+                title="Convertir en pago entrante"
+                description="Muévelo a Entrantes y continúa allí con la operación correspondiente."
                 active={false}
-                onClick={openGroup}
+                onClick={convertToIncoming}
               />
             </div>
             <DialogFooter>
@@ -378,41 +361,6 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone }: Outgoi
               onCancel={() => setStep('choose')}
               cancelLabel="Volver"
             />
-          </>
-        ) : step === 'group' ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>Contabilizar como entrante del grupo</DialogTitle>
-              <DialogDescription>
-                El Zelle pasa al lado <strong>entrante</strong> marcado “Contabilizado · grupo” y deja de
-                ocupar el lado saliente. Después podrás crear la operación desde él y anexarle el Bs.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-2">
-              <Label htmlFor="payment-group">Grupo (fondo)</Label>
-              <Select value={groupUuid} onValueChange={(v) => setGroupUuid(v ?? '')}>
-                <SelectTrigger id="payment-group" className="h-10 w-full">
-                  <SelectValue placeholder="Selecciona el grupo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {groups.map((g) => (
-                    <SelectItem key={g.uuid} value={g.uuid}>
-                      {g.name}{g.currency ? ` · ${g.currency}` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <DialogFooter className="gap-2 sm:justify-between">
-              <Button variant="ghost" onClick={() => setStep('choose')} disabled={submitting}>
-                <ArrowLeft className="h-4 w-4" />
-                Volver
-              </Button>
-              <Button onClick={saveGroup} disabled={submitting || !groupUuid}>
-                <Users className="h-4 w-4" />
-                {submitting ? 'Guardando…' : 'Contabilizar'}
-              </Button>
-            </DialogFooter>
           </>
         ) : step === 'loan' ? (
           <>
