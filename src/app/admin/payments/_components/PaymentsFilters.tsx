@@ -18,6 +18,7 @@ const OUT_CLASS_LABELS: Record<OutgoingClass, string> = {
   ALL: 'Todos',
   UNLINKED: 'Sin vincular',
   OPERATIONAL: 'Operativos',
+  LOAN: 'Préstamos',
   PERSONAL: 'Gastos personales',
   IRRELEVANT: 'Irrelevantes',
 };
@@ -74,6 +75,7 @@ export function PaymentsFilters({
                 <SelectItem value="ALL">Todos</SelectItem>
                 <SelectItem value="UNLINKED">Sin vincular</SelectItem>
                 <SelectItem value="OPERATIONAL">Operativos</SelectItem>
+                <SelectItem value="LOAN">Préstamos</SelectItem>
                 <SelectItem value="PERSONAL">Gastos personales</SelectItem>
                 <SelectItem value="IRRELEVANT">Irrelevantes</SelectItem>
               </SelectContent>

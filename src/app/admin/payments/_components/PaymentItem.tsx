@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Banknote, Eye, FileText, Forward, Link2, Link2Off, PiggyBank, Tag, Users, Wallet } from 'lucide-react';
+import { Banknote, Eye, FileText, Forward, HandCoins, Link2, Link2Off, PiggyBank, Tag, Users, Wallet } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -30,6 +30,7 @@ export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText }: Pay
   const personal = !!p.is_personal_expense;
   const irrelevant = !!p.is_irrelevant;
   const deposit = p.deposit ?? null;
+  const loan = p.loan ?? null;
   const opMeta = getStatusMeta(p.operation_status);
 
   return (
@@ -80,11 +81,20 @@ export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText }: Pay
         {deposit?.group_name ? (
           <p className="truncate text-xs text-muted-foreground">Fondo: {deposit.group_name}</p>
         ) : null}
+        {loan ? (
+          <p className="truncate text-xs text-muted-foreground">
+            Saldo del préstamo: {formatNumber(loan.outstanding_amount)} {loan.preferred_currency === 'USD_BCV' ? 'USD (BCV)' : loan.preferred_currency}
+          </p>
+        ) : null}
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
             {p.operation_uuid ? (
               <StatusBadge tone={opMeta.tone} icon={opMeta.icon}>{opMeta.label}</StatusBadge>
+            ) : loan ? (
+              <StatusBadge tone={loan.status === 'PAID' ? 'success' : 'warning'} icon={HandCoins}>
+                {loan.status === 'PAID' ? 'Préstamo pagado' : 'Préstamo'}
+              </StatusBadge>
             ) : deposit ? (
               <StatusBadge tone="success" icon={PiggyBank}>
                 Depósito{deposit.method ? ` · ${deposit.method}` : ''}

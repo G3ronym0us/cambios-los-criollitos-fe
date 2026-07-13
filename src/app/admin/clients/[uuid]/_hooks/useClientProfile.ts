@@ -6,7 +6,7 @@ import { adminService } from '@/services/adminService';
 import { clientService } from '@/services/clientService';
 import { operationService } from '@/services/operationService';
 import { CurrencyPairData } from '@/types/admin';
-import { BalanceAdjust, BalanceSummary, ClientData, ClientUpdate } from '@/types/client';
+import { BalanceAdjust, BalanceSummary, ClientData, ClientUpdate, LoanData } from '@/types/client';
 import { OperationData } from '@/types/operation';
 
 export function useClientProfile(uuid: string) {
@@ -19,6 +19,19 @@ export function useClientProfile(uuid: string) {
   const [pairs, setPairs] = useState<CurrencyPairData[]>([]);
   const [balance, setBalance] = useState<BalanceSummary | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(true);
+  const [loans, setLoans] = useState<LoanData[]>([]);
+  const [loansLoading, setLoansLoading] = useState(true);
+
+  const loadLoans = useCallback(async () => {
+    setLoansLoading(true);
+    const result = await clientService.getClientLoans(uuid);
+    setLoans(result.success && result.data ? result.data.loans : []);
+    setLoansLoading(false);
+  }, [uuid]);
+
+  useEffect(() => {
+    loadLoans();
+  }, [loadLoans]);
 
   // Saldo a favor + movimientos del ledger.
   const loadBalance = useCallback(async () => {
@@ -98,8 +111,25 @@ export function useClientProfile(uuid: string) {
     [uuid, loadBalance]
   );
 
+  const addLoanRepayment = useCallback(
+    async (loanUuid: string, amount: number, notes?: string | null): Promise<boolean> => {
+      const result = await clientService.addLoanRepayment(uuid, loanUuid, amount, notes);
+      if (result.success) {
+        toast.success('Abono registrado con las tasas del día');
+        loadLoans();
+        return true;
+      }
+      toast.error(result.error || 'No se pudo registrar el abono');
+      return false;
+    },
+    [uuid, loadLoans],
+  );
+
   return {
-    state: { client, loading, notFound, saving, operations, operationsLoading, pairs, balance, balanceLoading },
-    actions: { updateFields, reload: load, adjustBalance },
+    state: {
+      client, loading, notFound, saving, operations, operationsLoading, pairs,
+      balance, balanceLoading, loans, loansLoading,
+    },
+    actions: { updateFields, reload: load, adjustBalance, addLoanRepayment },
   };
 }

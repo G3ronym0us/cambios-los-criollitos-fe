@@ -7,6 +7,8 @@ import {
   ClientData,
   ClientFilters,
   ClientListResponse,
+  ClientLoansSummary,
+  LoanData,
   ClientUpdate,
 } from '@/types/client';
 
@@ -50,6 +52,24 @@ export class ClientService {
     const result = await httpClient.post<BalanceEntry & { balance_after: number }>(
       `/clients/${uuid}/balance/adjust`,
       data,
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  async getClientLoans(uuid: string): Promise<ApiResponse<ClientLoansSummary>> {
+    const result = await httpClient.get<ClientLoansSummary>(`/clients/${uuid}/loans`);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  async addLoanRepayment(
+    clientUuid: string,
+    loanUuid: string,
+    preferredAmount: number,
+    notes?: string | null,
+  ): Promise<ApiResponse<LoanData>> {
+    const result = await httpClient.post<LoanData>(
+      `/clients/${clientUuid}/loans/${loanUuid}/repayments`,
+      { preferred_amount: preferredAmount, notes: notes ?? null },
     );
     return { success: result.success, data: result.data, error: result.error };
   }

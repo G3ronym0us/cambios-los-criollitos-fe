@@ -52,6 +52,19 @@ export interface PaymentData {
   source_payment_id?: number | null;
   // solo incoming: depósito a fondo registrado desde este pago (inyectado por list_payments_page).
   deposit?: PaymentDeposit | null;
+  // solo outgoing: préstamo al cliente originado en este pago.
+  loan?: PaymentLoanSummary | null;
+}
+
+export type LoanPreferredValue = 'FIAT' | 'USDT' | 'BCV';
+
+export interface PaymentLoanSummary {
+  uuid: string;
+  status: 'OPEN' | 'PARTIAL' | 'PAID' | 'CANCELLED';
+  preferred_value: LoanPreferredValue;
+  preferred_currency: string;
+  principal_amount: number;
+  outstanding_amount: number;
 }
 
 export type DepositMethod = 'ZELLE' | 'BINANCE' | 'KRAKEN' | 'TRANSFER' | 'OTHER';

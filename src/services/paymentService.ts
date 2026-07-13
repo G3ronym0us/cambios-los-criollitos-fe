@@ -1,6 +1,7 @@
 import { ApiResponse } from '@/types/auth';
 import { httpClient } from '@/utils/httpInterceptor';
-import { PaymentData, PaymentPage, PaymentQuery, PaymentTable } from '@/types/payment';
+import type { LoanData } from '@/types/client';
+import type { LoanPreferredValue, PaymentData, PaymentPage, PaymentQuery, PaymentTable } from '@/types/payment';
 
 export class PaymentService {
   // Página de pagos entrantes/salientes (paginada + búsqueda/clasificación server-side).
@@ -54,6 +55,24 @@ export class PaymentService {
       `/payments/outgoing/${paymentId}/irrelevant`,
       { is_irrelevant: isIrrelevant, irrelevant_description: description },
     );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  async createLoan(
+    paymentId: number,
+    body: {
+      preferredValue: LoanPreferredValue;
+      preferredAmount: number;
+      fiatCurrency: string;
+      notes?: string | null;
+    },
+  ): Promise<ApiResponse<LoanData>> {
+    const result = await httpClient.post<LoanData>(`/payments/outgoing/${paymentId}/loan`, {
+      preferred_value: body.preferredValue,
+      preferred_amount: body.preferredAmount,
+      fiat_currency: body.fiatCurrency,
+      notes: body.notes ?? null,
+    });
     return { success: result.success, data: result.data, error: result.error };
   }
 

@@ -6,9 +6,9 @@ import { toast } from 'sonner';
 import { paymentService } from '@/services/paymentService';
 import { PaymentData, PaymentTable } from '@/types/payment';
 
-export type OutgoingClass = 'ALL' | 'UNLINKED' | 'OPERATIONAL' | 'PERSONAL' | 'IRRELEVANT';
+export type OutgoingClass = 'ALL' | 'UNLINKED' | 'OPERATIONAL' | 'LOAN' | 'PERSONAL' | 'IRRELEVANT';
 
-const OUT_CLASSES: OutgoingClass[] = ['ALL', 'UNLINKED', 'OPERATIONAL', 'PERSONAL', 'IRRELEVANT'];
+const OUT_CLASSES: OutgoingClass[] = ['ALL', 'UNLINKED', 'OPERATIONAL', 'LOAN', 'PERSONAL', 'IRRELEVANT'];
 
 const TAB_STORAGE_KEY = 'payments-active-tab';
 // Card a la que volver tras "Ver operación" (sessionStorage, lo escribe PaymentItem).

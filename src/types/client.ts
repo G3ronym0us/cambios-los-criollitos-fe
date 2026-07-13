@@ -47,6 +47,52 @@ export interface BalanceAdjust {
   notes?: string | null;
 }
 
+export type LoanPreferredValue = 'FIAT' | 'USDT' | 'BCV';
+export type LoanStatus = 'OPEN' | 'PARTIAL' | 'PAID' | 'CANCELLED';
+
+export interface LoanRepayment {
+  uuid: string;
+  preferred_amount: number;
+  fiat_amount: number;
+  fiat_currency: string;
+  usdt_amount: number;
+  usdt_rate: number;
+  bcv_amount: number | null;
+  bcv_rate: number | null;
+  notes: string | null;
+  created_by_username: string | null;
+  created_at: string;
+}
+
+export interface LoanData {
+  uuid: string;
+  client_uuid: string;
+  outgoing_payment_id: number;
+  fiat_amount: number;
+  fiat_currency: string;
+  usdt_amount: number;
+  usdt_rate: number;
+  bcv_amount: number | null;
+  bcv_rate: number | null;
+  preferred_value: LoanPreferredValue;
+  preferred_currency: string;
+  principal_amount: number;
+  outstanding_amount: number;
+  current_fiat_due: number | null;
+  current_preferred_rate: number | null;
+  status: LoanStatus;
+  notes: string | null;
+  created_by_username: string | null;
+  created_at: string;
+  updated_at: string | null;
+  repayments: LoanRepayment[];
+}
+
+export interface ClientLoansSummary {
+  client_uuid: string;
+  loans: LoanData[];
+}
+
 export interface ClientListResponse {
   items: ClientData[];
   total: number;

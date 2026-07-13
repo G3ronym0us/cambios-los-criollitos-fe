@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, Ban, Coins, Eye, Receipt, Users, UserX, Wallet } from 'lucide-react';
+import { ArrowLeft, Ban, Coins, Eye, HandCoins, Receipt, Users, UserX, Wallet } from 'lucide-react';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { OperationItem } from '../../operations/_components/OperationItem';
 import { ClientBalanceTab } from './_components/ClientBalanceTab';
 import { ClientSettingsTab } from './_components/ClientSettingsTab';
+import { ClientLoansTab } from './_components/ClientLoansTab';
 import { useClientProfile } from './_hooks/useClientProfile';
 
 function isGroup(phone: string) {
@@ -47,7 +48,10 @@ function Field({ label, value }: { label: string; value: string }) {
 export default function ClientProfilePage() {
   const { uuid } = useParams<{ uuid: string }>();
   const { state, actions } = useClientProfile(uuid);
-  const { client, loading, notFound, saving, operations, operationsLoading, pairs, balance, balanceLoading } = state;
+  const {
+    client, loading, notFound, saving, operations, operationsLoading, pairs,
+    balance, balanceLoading, loans, loansLoading,
+  } = state;
 
   if (loading) {
     return <LoadingState label="Cargando cliente..." />;
@@ -97,16 +101,22 @@ export default function ClientProfilePage() {
             ${client.balance.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} a favor
           </StatusBadge>
         ) : null}
+        {loans.some((loan) => loan.status === 'OPEN' || loan.status === 'PARTIAL') ? (
+          <StatusBadge tone="warning" icon={HandCoins}>Préstamo pendiente</StatusBadge>
+        ) : null}
       </div>
 
       <Tabs defaultValue="settings">
-        <TabsList className="w-full sm:w-auto">
+        <TabsList className="h-auto w-full flex-wrap sm:w-auto">
           <TabsTrigger value="settings">Configuración</TabsTrigger>
           <TabsTrigger value="transactions">
             Transacciones{!operationsLoading ? ` (${operations.length})` : ''}
           </TabsTrigger>
           <TabsTrigger value="balance">
             Saldo{!balanceLoading && balance ? ` ($${balance.balance.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : ''}
+          </TabsTrigger>
+          <TabsTrigger value="loans">
+            Préstamos{!loansLoading ? ` (${loans.length})` : ''}
           </TabsTrigger>
         </TabsList>
 
@@ -147,6 +157,10 @@ export default function ClientProfilePage() {
 
         <TabsContent value="balance">
           <ClientBalanceTab balance={balance} loading={balanceLoading} onAdjust={actions.adjustBalance} />
+        </TabsContent>
+
+        <TabsContent value="loans">
+          <ClientLoansTab loans={loans} loading={loansLoading} onRepayment={actions.addLoanRepayment} />
         </TabsContent>
       </Tabs>
     </div>
