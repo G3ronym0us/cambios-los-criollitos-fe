@@ -133,9 +133,36 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
       ? { label: 'Pendiente', detail: 'Quedará pendiente hasta confirmar la entrega del efectivo.' }
       : { label: 'Completada', detail: 'Este pago saliente confirma que el dinero fue entregado.' };
 
-  const updateAmount = (value: string, setter: (next: string) => void) => {
+  const sanitizeAndSetAmount = (value: string, setter: (next: string) => void) => {
     const sanitized = sanitizeAmountInput(value);
     if (sanitized !== null) setter(sanitized);
+    return sanitized;
+  };
+
+  const updateFromAmount = (value: string) => {
+    const sanitized = sanitizeAndSetAmount(value, setFromAmount);
+    if (sanitized === null || !effectiveRate || !Number.isFinite(effectiveRate) || effectiveRate <= 0) return;
+
+    if (sanitized === '') {
+      setToAmount('');
+      return;
+    }
+
+    const amount = Number(sanitized);
+    if (Number.isFinite(amount)) setToAmount(formatAmountForInput(amount * effectiveRate));
+  };
+
+  const updateToAmount = (value: string) => {
+    const sanitized = sanitizeAndSetAmount(value, setToAmount);
+    if (sanitized === null || !effectiveRate || !Number.isFinite(effectiveRate) || effectiveRate <= 0) return;
+
+    if (sanitized === '') {
+      setFromAmount('');
+      return;
+    }
+
+    const amount = Number(sanitized);
+    if (Number.isFinite(amount)) setFromAmount(formatAmountForInput(amount / effectiveRate));
   };
 
   const withFund = direction === 'SEND';
@@ -211,7 +238,7 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
               id="op-from"
               inputMode="decimal"
               value={fromAmount}
-              onChange={(e) => updateAmount(e.target.value, setFromAmount)}
+              onChange={(e) => updateFromAmount(e.target.value)}
               placeholder="0.00"
               className="h-10"
             />
@@ -222,7 +249,7 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
               id="op-to"
               inputMode="decimal"
               value={toAmount}
-              onChange={(e) => updateAmount(e.target.value, setToAmount)}
+              onChange={(e) => updateToAmount(e.target.value)}
               placeholder="0.00"
               className="h-10"
             />
@@ -246,7 +273,7 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
               </p>
               <p className="text-muted-foreground">
                 {effectiveRate && Number.isFinite(effectiveRate)
-                  ? `1 ${fromCur} = ${effectiveRate.toLocaleString('es-VE', { maximumFractionDigits: 6 })} ${toCur}. Puedes modificar los montos antes de crear.`
+                  ? `1 ${fromCur} = ${effectiveRate.toLocaleString('es-VE', { maximumFractionDigits: 6 })} ${toCur}. Al modificar un monto, el otro se recalcula automáticamente.`
                   : 'Puedes indicar ambos montos manualmente.'}
               </p>
             </div>
