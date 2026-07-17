@@ -62,6 +62,10 @@ export interface CurrencyPairData {
   usdt_pair_uuid?: string | null;
   usdt_pair_symbol?: string | null;
   usdt_pair_inverse?: boolean;
+  rounding_mode?: 'RATE' | 'AMOUNT' | null;
+  rounding_step?: number | null;
+  rounding_direction?: 'UP' | 'DOWN' | null;
+  rounding_amount_side?: 'FROM' | 'TO' | null;
   created_at: string;
   updated_at?: string;
 }
@@ -83,6 +87,10 @@ export interface CreateCurrencyPairData {
   usdt_manual_rate?: number | null;
   usdt_pair_uuid?: string | null;
   usdt_pair_inverse?: boolean;
+  rounding_mode?: 'RATE' | 'AMOUNT' | null;
+  rounding_step?: number | null;
+  rounding_direction?: 'UP' | 'DOWN' | null;
+  rounding_amount_side?: 'FROM' | 'TO' | null;
 }
 
 export interface UpdateCurrencyPairData {
@@ -100,6 +108,10 @@ export interface UpdateCurrencyPairData {
   usdt_manual_rate?: number | null;
   usdt_pair_uuid?: string | null;
   usdt_pair_inverse?: boolean;
+  rounding_mode?: 'RATE' | 'AMOUNT' | null;
+  rounding_step?: number | null;
+  rounding_direction?: 'UP' | 'DOWN' | null;
+  rounding_amount_side?: 'FROM' | 'TO' | null;
 }
 
 export interface CurrencyPairStatusData {

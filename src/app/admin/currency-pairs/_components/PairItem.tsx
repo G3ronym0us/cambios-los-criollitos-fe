@@ -77,6 +77,13 @@ export function PairItem({
                 {pair.usdt_reference_side ? (
                   <StatusBadge tone="primary">USDT</StatusBadge>
                 ) : null}
+                {pair.rounding_mode ? (
+                  <StatusBadge tone="info">
+                    Redondeo {pair.rounding_mode === 'RATE' ? 'tasa' : 'monto'} ·{' '}
+                    {pair.rounding_direction === 'DOWN' ? '↓' : '↑'}
+                    {pair.rounding_step != null ? ` ${pair.rounding_step}` : ''}
+                  </StatusBadge>
+                ) : null}
               </div>
               <p className="mt-1 truncate text-sm text-muted-foreground">
                 <span className="font-medium text-foreground/80">{pair.from_currency.name}</span>

@@ -46,6 +46,10 @@ const defaultValues: CurrencyPairFormData = {
   usdt_manual_rate: null,
   usdt_pair_uuid: null,
   usdt_pair_inverse: false,
+  rounding_mode: null,
+  rounding_step: null,
+  rounding_direction: null,
+  rounding_amount_side: null,
 };
 
 interface CurrencyPairFormProps {
@@ -80,6 +84,10 @@ function buildEditDefaults(pair: CurrencyPairData): CurrencyPairFormData {
     usdt_manual_rate: pair.usdt_manual_rate ?? null,
     usdt_pair_uuid: pair.usdt_pair_uuid ?? null,
     usdt_pair_inverse: pair.usdt_pair_inverse ?? false,
+    rounding_mode: pair.rounding_mode ?? null,
+    rounding_step: pair.rounding_step ?? null,
+    rounding_direction: pair.rounding_direction ?? null,
+    rounding_amount_side: pair.rounding_amount_side ?? null,
   };
 }
 
@@ -111,6 +119,17 @@ export function CurrencyPairForm({
   const watchToCurrency = watch('to_currency_uuid');
   const watchUsdtReferenceSide = watch('usdt_reference_side');
   const watchUsdtPairUuid = watch('usdt_pair_uuid');
+  const watchRoundingMode = watch('rounding_mode');
+
+  // Símbolos de las monedas del par (para el selector "moneda a redondear" en modo AMOUNT).
+  const fromSymbol =
+    mode === 'edit' && editingPair
+      ? editingPair.from_currency.symbol
+      : currencies.find((c) => c.uuid === watchFromCurrency)?.symbol ?? null;
+  const toSymbol =
+    mode === 'edit' && editingPair
+      ? editingPair.to_currency.symbol
+      : currencies.find((c) => c.uuid === watchToCurrency)?.symbol ?? null;
 
   const initialUsdtMethod: 'manual' | 'dynamic' =
     mode === 'edit' && editingPair?.usdt_pair_uuid ? 'dynamic' : 'manual';
@@ -502,6 +521,153 @@ export function CurrencyPairForm({
                   <span className="text-sm">Usar tasa inversa (1/rate)</span>
                 </label>
               </>
+            )}
+          </>
+        ) : null}
+      </div>
+
+      <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+        <div>
+          <p className="text-sm font-medium">Redondeo de cotización</p>
+          <p className="text-xs text-muted-foreground">
+            Ajusta los montos cotizados de este par. Opcional.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="rounding-mode" className="text-xs font-medium text-muted-foreground">
+            Modo
+          </Label>
+          <Controller
+            name="rounding_mode"
+            control={control}
+            render={({ field }) => (
+              <Select
+                value={field.value ?? NONE}
+                onValueChange={(v) => {
+                  if (v === NONE) {
+                    field.onChange(null);
+                    setValue('rounding_step', null);
+                    setValue('rounding_direction', null);
+                    setValue('rounding_amount_side', null);
+                    return;
+                  }
+                  field.onChange(v as 'RATE' | 'AMOUNT');
+                  if (!watch('rounding_direction')) setValue('rounding_direction', 'UP');
+                  if (v === 'RATE') setValue('rounding_amount_side', null);
+                }}
+              >
+                <SelectTrigger id="rounding-mode" className="h-10 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>Sin redondeo</SelectItem>
+                  <SelectItem value="RATE">Tasa — redondea la tasa por unidad</SelectItem>
+                  <SelectItem value="AMOUNT">Monto — redondea el monto calculado</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          />
+        </div>
+
+        {watchRoundingMode ? (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="rounding-step" className="text-xs font-medium text-muted-foreground">
+                  Múltiplo
+                </Label>
+                <Controller
+                  name="rounding_step"
+                  control={control}
+                  rules={{
+                    validate: (v) =>
+                      !watchRoundingMode || (v != null && v > 0) || 'Ingresa un múltiplo mayor a 0',
+                  }}
+                  render={({ field }) => (
+                    <Input
+                      id="rounding-step"
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={field.value ?? ''}
+                      onChange={(e) =>
+                        field.onChange(e.target.value ? parseFloat(e.target.value) : null)
+                      }
+                      placeholder={watchRoundingMode === 'RATE' ? '5' : '100'}
+                    />
+                  )}
+                />
+                {errors.rounding_step ? (
+                  <p className="text-xs text-destructive">{errors.rounding_step.message}</p>
+                ) : null}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="rounding-direction" className="text-xs font-medium text-muted-foreground">
+                  Dirección
+                </Label>
+                <Controller
+                  name="rounding_direction"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ?? 'UP'}
+                      onValueChange={(v) => field.onChange(v as 'UP' | 'DOWN')}
+                    >
+                      <SelectTrigger id="rounding-direction" className="h-10 w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="UP">Hacia arriba</SelectItem>
+                        <SelectItem value="DOWN">Hacia abajo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+            </div>
+
+            {watchRoundingMode === 'AMOUNT' ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="rounding-amount-side" className="text-xs font-medium text-muted-foreground">
+                  Moneda a redondear
+                </Label>
+                <Controller
+                  name="rounding_amount_side"
+                  control={control}
+                  rules={{
+                    validate: (v) =>
+                      watchRoundingMode !== 'AMOUNT' || !!v || 'Selecciona la moneda a redondear',
+                  }}
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ?? ''}
+                      onValueChange={(v) => field.onChange(v as 'FROM' | 'TO')}
+                    >
+                      <SelectTrigger id="rounding-amount-side" className="h-10 w-full">
+                        <SelectValue placeholder="Seleccionar moneda..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="FROM">{fromSymbol ?? 'Origen'} (origen)</SelectItem>
+                        <SelectItem value="TO">{toSymbol ?? 'Destino'} (destino)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {errors.rounding_amount_side ? (
+                  <p className="text-xs text-destructive">{errors.rounding_amount_side.message}</p>
+                ) : null}
+                <p className="text-xs text-muted-foreground">
+                  Solo se redondea cuando esa moneda es la que el sistema calcula; si el cliente la
+                  fija como monto exacto, queda intacta.
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Se redondea la tasa por unidad y luego se calculan los montos con la tasa ya
+                redondeada.
+              </p>
             )}
           </>
         ) : null}
