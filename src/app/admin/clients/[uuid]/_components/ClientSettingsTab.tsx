@@ -290,7 +290,12 @@ export function ClientSettingsTab({ client, pairs, saving, onSave }: ClientSetti
               onValueChange={(v) => setPaymentCurrency(v ?? NO_CURRENCY)}
             >
               <SelectTrigger id="client-payment-currency" className="h-11 w-full">
-                <SelectValue placeholder="Sin moneda" />
+                {/* Sin children el primitivo pinta el valor crudo y se ve el centinela. */}
+                <SelectValue placeholder="Sin moneda">
+                  {(value: string | null) =>
+                    !value || value === NO_CURRENCY ? 'Sin moneda' : value
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={NO_CURRENCY}>Sin moneda</SelectItem>
