@@ -19,6 +19,7 @@ interface PaymentsListProps {
   onResetFilters: () => void;
   onLink?: (payment: PaymentData) => void;
   onViewRawText?: (payment: PaymentData) => void;
+  onSaveClientData?: (payment: PaymentData) => void;
   // Card a la que volver (retorno desde "Ver operación"): scroll + highlight.
   focusId?: number | null;
   onFocusHandled?: () => void;
@@ -35,6 +36,7 @@ export function PaymentsList({
   onResetFilters,
   onLink,
   onViewRawText,
+  onSaveClientData,
   focusId,
   onFocusHandled,
 }: PaymentsListProps) {
@@ -103,6 +105,7 @@ export function PaymentsList({
             outgoing={outgoing}
             onLink={onLink}
             onViewRawText={onViewRawText}
+            onSaveClientData={onSaveClientData}
           />
         ))}
       </div>

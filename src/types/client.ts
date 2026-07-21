@@ -10,6 +10,9 @@ export interface ClientData {
   is_tracked: boolean;
   is_blocked: boolean;
   is_usdt_authorized: boolean;
+  // Cuenta de pago predeterminada del cliente (bloque de datos + moneda fiat).
+  default_payment_info: string | null;
+  default_payment_currency: string | null;
   // Saldo a favor en USD (ledger de abonos); 0 si no tiene.
   balance: number;
   last_seen_at: string | null;
@@ -108,6 +111,8 @@ export interface ClientUpdate {
   is_blocked?: boolean;
   is_usdt_authorized?: boolean;
   preferred_pair_uuid?: string | null;
+  default_payment_info?: string | null;
+  default_payment_currency?: string | null;
 }
 
 export interface ClientFilters {

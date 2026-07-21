@@ -1,13 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { Banknote, Eye, FileText, Forward, HandCoins, Link2, Link2Off, PiggyBank, Tag, Users, Wallet } from 'lucide-react';
+import { Banknote, Eye, FileText, Forward, HandCoins, IdCard, Link2, Link2Off, PiggyBank, Tag, Users, Wallet } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { getStatusMeta } from '@/utils/operationStatus';
 import { formatCaracasDateTime, formatNumber } from '@/utils/functions';
+import { canBeDefaultAccount } from '@/utils/paymentBlock';
 import { PAYMENT_FOCUS_KEY } from '../_hooks/usePayments';
 import type { PaymentData } from '@/types/payment';
 
@@ -16,6 +17,7 @@ interface PaymentItemProps {
   outgoing: boolean;
   onLink?: (payment: PaymentData) => void;
   onViewRawText?: (payment: PaymentData) => void;
+  onSaveClientData?: (payment: PaymentData) => void;
 }
 
 function formatDate(value: string | null) {
@@ -23,7 +25,7 @@ function formatDate(value: string | null) {
   return formatCaracasDateTime(value);
 }
 
-export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText }: PaymentItemProps) {
+export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText, onSaveClientData }: PaymentItemProps) {
   const client = p.client_name || p.client_phone?.replace(/@(c|g)\.us$/, '') || 'Sin identificar';
   const created = formatDate(p.created_at);
   const bank = p.bank_to || p.bank_from || p.provider;
@@ -145,6 +147,18 @@ export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText }: Pay
                 <Eye className="h-3.5 w-3.5" />
                 Ver operación
               </Link>
+            ) : null}
+            {onSaveClientData && p.client_uuid && canBeDefaultAccount(p) ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={() => onSaveClientData(p)}
+                title="Guardar estos datos como los datos predeterminados del cliente"
+              >
+                <IdCard className="h-3.5 w-3.5" />
+                Datos del cliente
+              </Button>
             ) : null}
             {onLink ? (
               <Button variant="outline" size="sm" className="h-8" onClick={() => onLink(p)}>

@@ -10,6 +10,7 @@ import { PaymentsList } from './_components/PaymentsList';
 import { IncomingPaymentActionDialog } from './_components/IncomingPaymentActionDialog';
 import { OutgoingPaymentActionDialog } from './_components/OutgoingPaymentActionDialog';
 import { PaymentRawTextDialog } from './_components/PaymentRawTextDialog';
+import { SaveClientDefaultDialog } from './_components/SaveClientDefaultDialog';
 import { usePayments } from './_hooks/usePayments';
 
 function PaymentsAdminContent() {
@@ -17,6 +18,7 @@ function PaymentsAdminContent() {
   const [actioningIncoming, setActioningIncoming] = useState<PaymentData | null>(null);
   const [actioning, setActioning] = useState<PaymentData | null>(null);
   const [viewingRawText, setViewingRawText] = useState<PaymentData | null>(null);
+  const [savingClientData, setSavingClientData] = useState<PaymentData | null>(null);
 
   const showConvertedIncoming = (payment: PaymentData) => {
     setActioning(null);
@@ -67,6 +69,7 @@ function PaymentsAdminContent() {
             onResetFilters={actions.resetFilters}
             onLink={setActioningIncoming}
             onViewRawText={setViewingRawText}
+            onSaveClientData={setSavingClientData}
             focusId={state.tab === 'incoming' ? state.focusId : null}
             onFocusHandled={actions.clearFocus}
           />
@@ -96,6 +99,7 @@ function PaymentsAdminContent() {
             onResetFilters={actions.resetFilters}
             onLink={setActioning}
             onViewRawText={setViewingRawText}
+            onSaveClientData={setSavingClientData}
             focusId={state.tab === 'outgoing' ? state.focusId : null}
             onFocusHandled={actions.clearFocus}
           />
@@ -121,6 +125,11 @@ function PaymentsAdminContent() {
       <PaymentRawTextDialog
         payment={viewingRawText}
         onClose={() => setViewingRawText(null)}
+      />
+
+      <SaveClientDefaultDialog
+        payment={savingClientData}
+        onClose={() => setSavingClientData(null)}
       />
 
     </div>

@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -24,9 +26,12 @@ import {
 } from '@/components/ui/drawer';
 import type { CurrencyPairData } from '@/types/admin';
 import type { ClientData, ClientUpdate } from '@/types/client';
+import { DEFAULT_PAYMENT_CURRENCIES, sameBlock } from '@/utils/paymentBlock';
 
 // Centinela para "sin par preferido" (el Select no admite value="").
 const NO_PAIR = '__none__';
+// Centinela para "sin moneda" en el Select de datos de pago.
+const NO_CURRENCY = '__none__';
 
 interface PendingChange {
   title: string;
@@ -50,11 +55,20 @@ export function ClientSettingsTab({ client, pairs, saving, onSave }: ClientSetti
   const [pair, setPair] = useState(client.preferred_pair_uuid ?? NO_PAIR);
   const [pending, setPending] = useState<PendingChange | null>(null);
 
+  // Datos de pago predeterminados → edición agrupada con su propio "Guardar".
+  const [paymentInfo, setPaymentInfo] = useState(client.default_payment_info ?? '');
+  const [paymentCurrency, setPaymentCurrency] = useState(client.default_payment_currency ?? NO_CURRENCY);
+
   // Re-sincroniza el formulario de datos cuando el cliente cambia (tras guardar).
   useEffect(() => {
     setName(client.display_name ?? '');
     setPair(client.preferred_pair_uuid ?? NO_PAIR);
   }, [client.display_name, client.preferred_pair_uuid]);
+
+  useEffect(() => {
+    setPaymentInfo(client.default_payment_info ?? '');
+    setPaymentCurrency(client.default_payment_currency ?? NO_CURRENCY);
+  }, [client.default_payment_info, client.default_payment_currency]);
 
   const savedPair = client.preferred_pair_uuid ?? NO_PAIR;
   const nameDirty = name.trim() !== (client.display_name ?? '');
@@ -69,6 +83,17 @@ export function ClientSettingsTab({ client, pairs, saving, onSave }: ClientSetti
   const resetData = () => {
     setName(client.display_name ?? '');
     setPair(savedPair);
+  };
+
+  const savedPaymentInfo = client.default_payment_info ?? '';
+  const savedPaymentCurrency = client.default_payment_currency ?? NO_CURRENCY;
+  const paymentInfoDirty = !sameBlock(paymentInfo, savedPaymentInfo);
+  const paymentCurrencyDirty = paymentCurrency !== savedPaymentCurrency;
+  const paymentDirty = paymentInfoDirty || paymentCurrencyDirty;
+
+  const resetPayment = () => {
+    setPaymentInfo(savedPaymentInfo);
+    setPaymentCurrency(savedPaymentCurrency);
   };
 
   const confirmPending = async () => {
@@ -96,6 +121,35 @@ export function ClientSettingsTab({ client, pairs, saving, onSave }: ClientSetti
       description: changes.join(' · '),
       confirmLabel: 'Guardar',
       successMessage: 'Datos actualizados',
+      payload,
+    });
+  };
+
+  // Guardar datos de pago predeterminados (bloque + moneda), mostrando el diff.
+  const askSavePayment = () => {
+    const info = paymentInfo.trim();
+    const currency = paymentCurrency === NO_CURRENCY ? null : paymentCurrency;
+    // Datos sin moneda son inertes: el bot solo los inyecta si la moneda guardada
+    // es la que el cliente recibe. Guardar así daría una falsa sensación de configurado.
+    if (info && !currency) {
+      toast.error('Elige la moneda de la cuenta');
+      return;
+    }
+    const payload: ClientUpdate = {
+      default_payment_info: info || null,
+      default_payment_currency: currency,
+    };
+    const from = savedPaymentInfo
+      ? `${savedPaymentInfo}${savedPaymentCurrency !== NO_CURRENCY ? ` (${savedPaymentCurrency})` : ''}`
+      : '(sin datos)';
+    const to = info
+      ? `${info}${currency ? ` (${currency})` : ''}`
+      : '(sin datos)';
+    setPending({
+      title: 'Guardar datos de pago',
+      description: `${from}  →  ${to}`,
+      confirmLabel: 'Guardar',
+      successMessage: 'Datos de pago actualizados',
       payload,
     });
   };
@@ -202,6 +256,63 @@ export function ClientSettingsTab({ client, pairs, saving, onSave }: ClientSetti
               </Button>
               <Button onClick={askSaveData} disabled={saving}>
                 Guardar cambios
+              </Button>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {/* Datos de pago predeterminados: bloque + moneda, guardado agrupado */}
+      <Card>
+        <CardContent className="space-y-5 p-4 sm:p-6">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="client-payment-info">Datos de pago predeterminados</Label>
+            <Textarea
+              id="client-payment-info"
+              placeholder={'0134\nV12345678\n04121234567'}
+              value={paymentInfo}
+              disabled={saving}
+              onChange={(e) => setPaymentInfo(e.target.value)}
+              rows={4}
+              className="font-mono text-sm"
+            />
+            <p className="text-xs text-muted-foreground">
+              El bot usa estos datos cuando el cliente cotiza (ej. &quot;pásame 20&quot;) sin
+              enviar los suyos. Banco/cédula/teléfono, cuenta, o llave Pix.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="client-payment-currency">Moneda de la cuenta</Label>
+            <Select
+              value={paymentCurrency}
+              disabled={saving}
+              onValueChange={(v) => setPaymentCurrency(v ?? NO_CURRENCY)}
+            >
+              <SelectTrigger id="client-payment-currency" className="h-11 w-full">
+                <SelectValue placeholder="Sin moneda" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_CURRENCY}>Sin moneda</SelectItem>
+                {DEFAULT_PAYMENT_CURRENCIES.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Moneda que el cliente recibe. Los datos solo se inyectan al cotizar en esta moneda.
+            </p>
+          </div>
+
+          {paymentDirty ? (
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={resetPayment} disabled={saving}>
+                Descartar
+              </Button>
+              <Button onClick={askSavePayment} disabled={saving}>
+                Guardar datos de pago
               </Button>
             </div>
           ) : null}
