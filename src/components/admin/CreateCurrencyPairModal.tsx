@@ -47,13 +47,13 @@ export default function CreateCurrencyPairModal({
         <DialogHeader className="pr-8">
           <DialogTitle>Nuevo par de monedas</DialogTitle>
           <DialogDescription>
-            Configura un nuevo par para conversión y rastreo de tasas.
+            Lo esencial para crear el par. Al guardarlo se abre su pantalla para ajustar USDT,
+            redondeo y comisiones.
           </DialogDescription>
         </DialogHeader>
         <div className="-mx-4 flex-1 overflow-y-auto px-4">
           {isOpen ? (
             <CurrencyPairForm
-              mode="create"
               currencies={currencies}
               basePairs={basePairs}
               error={error}

@@ -87,6 +87,15 @@ export class AdminService {
     };
   }
 
+  async getCurrencyPair(uuid: string): Promise<ApiResponse<CurrencyPairData>> {
+    const result = await httpClient.get<CurrencyPairData>(`/currency-pairs/${uuid}`);
+    return {
+      success: result.success,
+      data: result.data,
+      error: result.error
+    };
+  }
+
   async createCurrencyPair(pairData: CreateCurrencyPairData): Promise<ApiResponse<CurrencyPairData>> {
     const result = await httpClient.post<CurrencyPairData>('/currency-pairs/', pairData);
     return {

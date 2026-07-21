@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { AdminService } from '@/services/adminService';
 import { ratesService } from '@/services/ratesService';
@@ -44,6 +45,7 @@ const emptyBinanceConfig: BinanceConfigDraft = {
 
 export function useCurrencyPairs() {
   const confirm = useConfirm();
+  const router = useRouter();
 
   const [pairs, setPairs] = useState<CurrencyPairData[]>([]);
   const [currencies, setCurrencies] = useState<CurrencyData[]>([]);
@@ -58,7 +60,6 @@ export function useCurrencyPairs() {
   const [error, setError] = useState<string>('');
 
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [editingPair, setEditingPair] = useState<CurrencyPairData | null>(null);
 
   const [binanceTargetPair, setBinanceTargetPair] = useState<CurrencyPairData | null>(null);
   const [binanceConfig, setBinanceConfig] = useState<BinanceConfigDraft>(emptyBinanceConfig);
@@ -205,32 +206,24 @@ export function useCurrencyPairs() {
   const handleCreate = useCallback(
     async (formData: CreateCurrencyPairData) => {
       const result = await adminService.createCurrencyPair(formData);
-      if (result.success) {
-        setShowCreateModal(false);
-        setError('');
-        toast.success('Par creado correctamente');
-        refresh();
-      } else {
+      if (!result.success) {
         toast.error(result.error || 'Error al crear el par');
+        return;
       }
-    },
-    [refresh]
-  );
 
-  const handleUpdate = useCallback(
-    async (updateData: UpdateCurrencyPairData) => {
-      if (!editingPair) return;
-      const result = await adminService.updateCurrencyPair(editingPair.uuid, updateData);
-      if (result.success) {
-        setEditingPair(null);
-        setError('');
-        toast.success('Par actualizado correctamente');
-        refresh();
-      } else {
-        toast.error(result.error || 'Error al actualizar el par');
+      setShowCreateModal(false);
+      setError('');
+      toast.success('Par creado correctamente');
+
+      // El modal solo pide lo esencial: seguimos en la pantalla del par para
+      // terminar de configurarlo (USDT, redondeo, comisiones).
+      if (result.data) {
+        router.push(`/admin/currency-pairs/${result.data.uuid}`);
+        return;
       }
+      refresh();
     },
-    [editingPair, refresh]
+    [refresh, router]
   );
 
   const handleDelete = useCallback(
@@ -460,7 +453,6 @@ export function useCurrencyPairs() {
       hasActiveFilters,
       error,
       showCreateModal,
-      editingPair,
       binanceTargetPair,
       binanceConfig,
       historyPair,
@@ -474,10 +466,8 @@ export function useCurrencyPairs() {
       setError,
       openCreate: () => setShowCreateModal(true),
       closeCreate: () => setShowCreateModal(false),
-      openEdit: setEditingPair,
-      closeEdit: () => setEditingPair(null),
+      openEdit: (pair: CurrencyPairData) => router.push(`/admin/currency-pairs/${pair.uuid}`),
       handleCreate,
-      handleUpdate,
       handleDelete,
       handleToggleActive,
       handleToggleMonitored,

@@ -1,60 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Edit, Plus } from 'lucide-react';
-import {
-  CreateCurrencyPairData,
-  CurrencyData,
-  CurrencyPairData,
-  PairType,
-} from '@/types/admin';
-import TradeMethodSelector from '@/components/TradeMethodSelector';
+import { Plus } from 'lucide-react';
+import { CurrencyData, CurrencyPairData } from '@/types/admin';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Textarea } from '@/components/ui/textarea';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { DialogFooter } from '@/components/ui/dialog';
+import { defaultValues, type CurrencyPairFormData } from './sections/formShared';
+import { GeneralSection } from './sections/GeneralSection';
+import { RateSourceSection } from './sections/RateSourceSection';
 
-export type CurrencyPairFormData = CreateCurrencyPairData;
-
-const NONE = '__none__';
-
-const defaultValues: CurrencyPairFormData = {
-  from_currency_uuid: '',
-  to_currency_uuid: '',
-  base_pair_uuid: undefined,
-  derived_percentage: null,
-  use_inverse_percentage: false,
-  description: '',
-  is_active: true,
-  is_monitored: true,
-  binance_tracked: false,
-  banks_to_track: [],
-  amount_to_track: null,
-  pair_type: PairType.BASE,
-  usdt_reference_side: null,
-  usdt_manual_rate: null,
-  usdt_pair_uuid: null,
-  usdt_pair_inverse: false,
-  rounding_mode: null,
-  rounding_step: null,
-  rounding_direction: null,
-  rounding_amount_side: null,
-};
+export type { CurrencyPairFormData };
 
 interface CurrencyPairFormProps {
-  mode: 'create' | 'edit';
-  editingPair?: CurrencyPairData | null;
   currencies: CurrencyData[];
   basePairs: CurrencyPairData[];
   error: string;
@@ -65,35 +24,12 @@ interface CurrencyPairFormProps {
   onCancel: () => void;
 }
 
-function buildEditDefaults(pair: CurrencyPairData): CurrencyPairFormData {
-  const normalizedPairType = (pair.pair_type as string).toUpperCase() as PairType;
-  return {
-    from_currency_uuid: pair.from_currency_uuid,
-    to_currency_uuid: pair.to_currency_uuid,
-    base_pair_uuid: pair.base_pair_uuid,
-    derived_percentage: pair.derived_percentage,
-    use_inverse_percentage: pair.use_inverse_percentage,
-    description: pair.description,
-    is_active: pair.is_active,
-    is_monitored: pair.is_monitored,
-    binance_tracked: pair.binance_tracked,
-    banks_to_track: pair.banks_to_track || [],
-    amount_to_track: pair.amount_to_track,
-    pair_type: normalizedPairType,
-    usdt_reference_side: pair.usdt_reference_side ?? null,
-    usdt_manual_rate: pair.usdt_manual_rate ?? null,
-    usdt_pair_uuid: pair.usdt_pair_uuid ?? null,
-    usdt_pair_inverse: pair.usdt_pair_inverse ?? false,
-    rounding_mode: pair.rounding_mode ?? null,
-    rounding_step: pair.rounding_step ?? null,
-    rounding_direction: pair.rounding_direction ?? null,
-    rounding_amount_side: pair.rounding_amount_side ?? null,
-  };
-}
-
+/**
+ * Formulario de CREACIÓN de un par. Deliberadamente corto: monedas, tipo,
+ * estados y Binance. La configuración fina (USDT, redondeo) se hace después en
+ * `/admin/currency-pairs/[uuid]`, adonde se navega al crear.
+ */
 export function CurrencyPairForm({
-  mode,
-  editingPair,
   currencies,
   basePairs,
   error,
@@ -103,52 +39,26 @@ export function CurrencyPairForm({
   onSubmit,
   onCancel,
 }: CurrencyPairFormProps) {
-  const initial = mode === 'edit' && editingPair ? buildEditDefaults(editingPair) : defaultValues;
   const {
     control,
     handleSubmit,
     watch,
     setValue,
     formState: { errors, isSubmitting },
-  } = useForm<CurrencyPairFormData>({ defaultValues: initial });
+  } = useForm<CurrencyPairFormData>({ defaultValues });
 
-  const watchPairType = watch('pair_type');
-  const watchBasePairId = watch('base_pair_uuid');
   const watchBinanceTracked = watch('binance_tracked');
   const watchFromCurrency = watch('from_currency_uuid');
   const watchToCurrency = watch('to_currency_uuid');
-  const watchUsdtReferenceSide = watch('usdt_reference_side');
-  const watchUsdtPairUuid = watch('usdt_pair_uuid');
-  const watchRoundingMode = watch('rounding_mode');
-
-  // Símbolos de las monedas del par (para el selector "moneda a redondear" en modo AMOUNT).
-  const fromSymbol =
-    mode === 'edit' && editingPair
-      ? editingPair.from_currency.symbol
-      : currencies.find((c) => c.uuid === watchFromCurrency)?.symbol ?? null;
-  const toSymbol =
-    mode === 'edit' && editingPair
-      ? editingPair.to_currency.symbol
-      : currencies.find((c) => c.uuid === watchToCurrency)?.symbol ?? null;
-
-  const initialUsdtMethod: 'manual' | 'dynamic' =
-    mode === 'edit' && editingPair?.usdt_pair_uuid ? 'dynamic' : 'manual';
-  const [usdtMethod, setUsdtMethod] = useState<'manual' | 'dynamic'>(initialUsdtMethod);
 
   useEffect(() => {
     setError('');
   }, [setError]);
 
-  const fiatForBinance =
-    mode === 'edit' && editingPair
-      ? getFiatCurrencyFromPair(editingPair.from_currency_uuid, editingPair.to_currency_uuid)
-      : getFiatCurrencyFromPair(watchFromCurrency, watchToCurrency);
-
-  const showBinanceFields =
-    mode === 'edit' ? !!editingPair?.binance_tracked : !!watchBinanceTracked;
+  const fiatForBinance = getFiatCurrencyFromPair(watchFromCurrency, watchToCurrency);
 
   const submit = async (data: CurrencyPairFormData) => {
-    if (mode === 'create' && data.from_currency_uuid === data.to_currency_uuid) {
+    if (data.from_currency_uuid === data.to_currency_uuid) {
       setError('Las monedas de origen y destino deben ser diferentes');
       return;
     }
@@ -157,619 +67,54 @@ export function CurrencyPairForm({
     await onSubmit(data);
   };
 
+  const sectionProps = { control, watch, setValue, errors };
+
   return (
     <form onSubmit={handleSubmit(submit)} className="space-y-4">
-      {mode === 'edit' && editingPair ? (
-        <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Par</p>
-          <p className="font-medium text-foreground">{editingPair.display_name}</p>
-        </div>
-      ) : null}
+      <GeneralSection {...sectionProps} currencies={currencies} basePairs={basePairs} />
 
-      {mode === 'create' ? (
-        <>
-          <div className="space-y-1.5">
-            <Label htmlFor="from-currency">
-              Moneda de origen <span className="text-destructive">*</span>
-            </Label>
-            <Controller
-              name="from_currency_uuid"
-              control={control}
-              rules={{ validate: (value) => !!value || 'Debe seleccionar una moneda válida' }}
-              render={({ field }) => (
-                <Select value={field.value || ''} onValueChange={field.onChange}>
-                  <SelectTrigger id="from-currency" className="h-10 w-full">
-                    <SelectValue placeholder="Seleccionar moneda..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {currencies.map((currency) => (
-                      <SelectItem key={currency.uuid} value={currency.uuid}>
-                        {currency.name} ({currency.symbol}) — {currency.currency_type}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-            {errors.from_currency_uuid ? (
-              <p className="text-xs text-destructive">{errors.from_currency_uuid.message}</p>
-            ) : null}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="to-currency">
-              Moneda de destino <span className="text-destructive">*</span>
-            </Label>
-            <Controller
-              name="to_currency_uuid"
-              control={control}
-              rules={{ validate: (value) => !!value || 'Debe seleccionar una moneda válida' }}
-              render={({ field }) => (
-                <Select value={field.value || ''} onValueChange={field.onChange}>
-                  <SelectTrigger id="to-currency" className="h-10 w-full">
-                    <SelectValue placeholder="Seleccionar moneda..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {currencies.map((currency) => (
-                      <SelectItem key={currency.uuid} value={currency.uuid}>
-                        {currency.name} ({currency.symbol}) — {currency.currency_type}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-            {errors.to_currency_uuid ? (
-              <p className="text-xs text-destructive">{errors.to_currency_uuid.message}</p>
-            ) : null}
-          </div>
-        </>
-      ) : null}
-
-      <div className="space-y-1.5">
-        <Label htmlFor="pair-type">Tipo de par</Label>
-        <Controller
-          name="pair_type"
-          control={control}
-          rules={{ required: 'Debe seleccionar un tipo de par' }}
-          render={({ field }) => (
-            <Select value={field.value || ''} onValueChange={field.onChange}>
-              <SelectTrigger id="pair-type" className="h-10 w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={PairType.BASE}>Base — directamente de Binance (FIAT-CRYPTO)</SelectItem>
-                <SelectItem value={PairType.DERIVED}>Derivado — derivado de un base con porcentaje</SelectItem>
-                <SelectItem value={PairType.CROSS}>Cruzado — entre dos FIATs vía USDT</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-        />
-        <p className="text-xs text-muted-foreground">
-          Seleccione el tipo de par según su método de cálculo.
-        </p>
-      </div>
-
-      {watchPairType === PairType.DERIVED ? (
-        <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-3 text-sm text-sky-700 dark:text-sky-300">
-          <p>
-            <strong>Información:</strong> solo se muestran pares BASE activos con tasas disponibles.
-            Los pares en el selector cumplen todas estas condiciones:
-          </p>
-          <ul className="ml-4 mt-2 list-disc text-xs">
-            <li>
-              Tipo: <code className="rounded bg-sky-500/20 px-1 py-0.5">pair_type = BASE</code>
-            </li>
-            <li>
-              Estado: <code className="rounded bg-sky-500/20 px-1 py-0.5">is_active = true</code>
-            </li>
-            <li>
-              Tasas: <code className="rounded bg-sky-500/20 px-1 py-0.5">binance_tracked = true</code> o tasas manuales activas
-            </li>
-          </ul>
-        </div>
-      ) : null}
-
-      {watchPairType === PairType.DERIVED ? (
-        <div className="space-y-1.5">
-          <Label htmlFor="base-pair">
-            Par base <span className="text-destructive">*</span>
-          </Label>
+      <div className="space-y-2">
+        <label className="flex min-h-11 items-center gap-3">
           <Controller
-            name="base_pair_uuid"
-            control={control}
-            rules={{
-              required: watchPairType === PairType.DERIVED ? 'Debe seleccionar un par base' : false,
-            }}
-            render={({ field }) => (
-              <Select
-                value={field.value || ''}
-                onValueChange={(v) => field.onChange(v || null)}
-                disabled={basePairs.length === 0}
-              >
-                <SelectTrigger id="base-pair" className="h-10 w-full">
-                  <SelectValue
-                    placeholder={
-                      basePairs.length === 0
-                        ? 'No hay pares base disponibles'
-                        : 'Seleccione un par base...'
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {basePairs.map((pair) => (
-                    <SelectItem key={pair.uuid} value={pair.uuid}>
-                      {pair.display_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          />
-          {errors.base_pair_uuid ? (
-            <p className="text-xs text-destructive">{errors.base_pair_uuid.message}</p>
-          ) : null}
-          {basePairs.length === 0 ? (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
-              No hay pares base disponibles. Cree primero un par BASE activo con rastreo de Binance o tasas manuales.
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Todos los pares mostrados ya están validados por el sistema.
-            </p>
-          )}
-        </div>
-      ) : null}
-
-      {(watchPairType === PairType.DERIVED && watchBasePairId) || watchPairType === PairType.CROSS ? (
-        <>
-          <div className="space-y-1.5">
-            <Label htmlFor="derived-percentage">
-              {watchPairType === PairType.DERIVED
-                ? 'Porcentaje derivado (%)'
-                : 'Porcentaje ajuste (%) — opcional'}
-            </Label>
-            <Controller
-              name="derived_percentage"
-              control={control}
-              rules={{
-                min: { value: 0, message: 'El porcentaje debe ser mayor o igual a 0' },
-                max: { value: 100, message: 'El porcentaje debe ser menor o igual a 100' },
-              }}
-              render={({ field }) => (
-                <Input
-                  id="derived-percentage"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  value={field.value ?? ''}
-                  onChange={(e) =>
-                    field.onChange(e.target.value ? parseFloat(e.target.value) : null)
-                  }
-                  placeholder="5.50"
-                />
-              )}
-            />
-            {errors.derived_percentage ? (
-              <p className="text-xs text-destructive">{errors.derived_percentage.message}</p>
-            ) : null}
-            <p className="text-xs text-muted-foreground">
-              {watchPairType === PairType.DERIVED
-                ? 'Porcentaje a aplicar sobre la tasa del par base (0-100%).'
-                : 'Porcentaje a aplicar sobre la tasa cruzada calculada (0-100%).'}
-            </p>
-          </div>
-
-          <label className="flex min-h-11 items-center gap-3">
-            <Controller
-              name="use_inverse_percentage"
-              control={control}
-              render={({ field }) => (
-                <Switch
-                  checked={field.value ?? false}
-                  onCheckedChange={field.onChange}
-                />
-              )}
-            />
-            <span className="flex flex-col">
-              <span className="text-sm font-medium">Usar porcentaje inverso</span>
-              <span className="text-xs text-muted-foreground">
-                Aplicar porcentaje en dirección contraria.
-              </span>
-            </span>
-          </label>
-        </>
-      ) : null}
-
-      <div className="space-y-1.5">
-        <Label htmlFor="description">
-          Descripción <span className="text-destructive">*</span>
-        </Label>
-        <Controller
-          name="description"
-          control={control}
-          rules={{ required: 'La descripción es requerida' }}
-          render={({ field }) => (
-            <Textarea id="description" rows={3} {...field} value={field.value ?? ''} />
-          )}
-        />
-        {errors.description ? (
-          <p className="text-xs text-destructive">{errors.description.message}</p>
-        ) : null}
-      </div>
-
-      <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
-        <p className="text-sm font-medium">Configuración USDT</p>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="usdt-reference-side" className="text-xs font-medium text-muted-foreground">
-            Lado de referencia
-          </Label>
-          <Controller
-            name="usdt_reference_side"
+            name="is_active"
             control={control}
             render={({ field }) => (
-              <Select
-                value={field.value ?? NONE}
-                onValueChange={(v) =>
-                  field.onChange(v === NONE ? null : (v as 'FROM' | 'TO'))
-                }
-              >
-                <SelectTrigger id="usdt-reference-side" className="h-10 w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>Sin configurar</SelectItem>
-                  <SelectItem value="FROM">FROM — monto origen</SelectItem>
-                  <SelectItem value="TO">TO — monto destino</SelectItem>
-                </SelectContent>
-              </Select>
+              <Switch checked={field.value ?? true} onCheckedChange={field.onChange} />
             )}
           />
-        </div>
-
-        {watchUsdtReferenceSide ? (
-          <>
-            <RadioGroup
-              value={usdtMethod}
-              onValueChange={(v: string) => {
-                const next = v as 'manual' | 'dynamic';
-                setUsdtMethod(next);
-                if (next === 'manual') setValue('usdt_pair_uuid', null);
-                else setValue('usdt_manual_rate', null);
-              }}
-              className="flex gap-4"
-            >
-              <label className="flex items-center gap-2 text-sm">
-                <RadioGroupItem value="manual" />
-                Tasa fija
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <RadioGroupItem value="dynamic" />
-                Par dinámico
-              </label>
-            </RadioGroup>
-
-            {usdtMethod === 'manual' ? (
-              <div className="space-y-1.5">
-                <Label htmlFor="usdt-manual-rate" className="text-xs font-medium text-muted-foreground">
-                  Tasa USDT fija
-                </Label>
-                <Controller
-                  name="usdt_manual_rate"
-                  control={control}
-                  render={({ field }) => (
-                    <Input
-                      id="usdt-manual-rate"
-                      type="number"
-                      step="0.000001"
-                      min="0"
-                      value={field.value ?? ''}
-                      onChange={(e) =>
-                        field.onChange(e.target.value ? parseFloat(e.target.value) : null)
-                      }
-                      placeholder="Ej: 1.0 para Zelle (1:1 con USDT)"
-                    />
-                  )}
-                />
-              </div>
-            ) : (
-              <>
-                <div className="space-y-1.5">
-                  <Label htmlFor="usdt-pair" className="text-xs font-medium text-muted-foreground">
-                    Par de referencia
-                  </Label>
-                  <Controller
-                    name="usdt_pair_uuid"
-                    control={control}
-                    render={({ field }) => (
-                      <Select
-                        value={field.value ?? NONE}
-                        onValueChange={(v) => field.onChange(v === NONE ? null : v)}
-                      >
-                        <SelectTrigger id="usdt-pair" className="h-10 w-full">
-                          <SelectValue placeholder="Seleccionar par..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={NONE}>Sin configurar</SelectItem>
-                          {basePairs.map((p) => (
-                            <SelectItem key={p.uuid} value={p.uuid}>
-                              {p.pair_symbol}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                  {watchUsdtPairUuid ? (
-                    <p className="text-xs text-muted-foreground">Tasa del par seleccionado.</p>
-                  ) : null}
-                </div>
-
-                <label className="flex min-h-11 items-center gap-3">
-                  <Controller
-                    name="usdt_pair_inverse"
-                    control={control}
-                    render={({ field }) => (
-                      <Switch
-                        checked={field.value ?? false}
-                        onCheckedChange={field.onChange}
-                      />
-                    )}
-                  />
-                  <span className="text-sm">Usar tasa inversa (1/rate)</span>
-                </label>
-              </>
-            )}
-          </>
-        ) : null}
-      </div>
-
-      <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
-        <div>
-          <p className="text-sm font-medium">Redondeo de cotización</p>
-          <p className="text-xs text-muted-foreground">
-            Ajusta los montos cotizados de este par. Opcional.
-          </p>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="rounding-mode" className="text-xs font-medium text-muted-foreground">
-            Modo
-          </Label>
+          <span className="text-sm font-medium">Par activo</span>
+        </label>
+        <label className="flex min-h-11 items-center gap-3">
           <Controller
-            name="rounding_mode"
+            name="is_monitored"
             control={control}
             render={({ field }) => (
-              <Select
-                value={field.value ?? NONE}
-                onValueChange={(v) => {
-                  if (v === NONE) {
-                    field.onChange(null);
-                    setValue('rounding_step', null);
-                    setValue('rounding_direction', null);
-                    setValue('rounding_amount_side', null);
-                    return;
-                  }
-                  field.onChange(v as 'RATE' | 'AMOUNT');
-                  if (!watch('rounding_direction')) setValue('rounding_direction', 'UP');
-                  if (v === 'RATE') setValue('rounding_amount_side', null);
-                }}
-              >
-                <SelectTrigger id="rounding-mode" className="h-10 w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>Sin redondeo</SelectItem>
-                  <SelectItem value="RATE">Tasa — redondea la tasa por unidad</SelectItem>
-                  <SelectItem value="AMOUNT">Monto — redondea el monto calculado</SelectItem>
-                </SelectContent>
-              </Select>
+              <Switch checked={field.value ?? true} onCheckedChange={field.onChange} />
             )}
           />
-        </div>
-
-        {watchRoundingMode ? (
-          <>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="rounding-step" className="text-xs font-medium text-muted-foreground">
-                  Múltiplo
-                </Label>
-                <Controller
-                  name="rounding_step"
-                  control={control}
-                  rules={{
-                    validate: (v) =>
-                      !watchRoundingMode || (v != null && v > 0) || 'Ingresa un múltiplo mayor a 0',
-                  }}
-                  render={({ field }) => (
-                    <Input
-                      id="rounding-step"
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={field.value ?? ''}
-                      onChange={(e) =>
-                        field.onChange(e.target.value ? parseFloat(e.target.value) : null)
-                      }
-                      placeholder={watchRoundingMode === 'RATE' ? '5' : '100'}
-                    />
-                  )}
-                />
-                {errors.rounding_step ? (
-                  <p className="text-xs text-destructive">{errors.rounding_step.message}</p>
-                ) : null}
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="rounding-direction" className="text-xs font-medium text-muted-foreground">
-                  Dirección
-                </Label>
-                <Controller
-                  name="rounding_direction"
-                  control={control}
-                  render={({ field }) => (
-                    <Select
-                      value={field.value ?? 'UP'}
-                      onValueChange={(v) => field.onChange(v as 'UP' | 'DOWN')}
-                    >
-                      <SelectTrigger id="rounding-direction" className="h-10 w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="UP">Hacia arriba</SelectItem>
-                        <SelectItem value="DOWN">Hacia abajo</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-              </div>
-            </div>
-
-            {watchRoundingMode === 'AMOUNT' ? (
-              <div className="space-y-1.5">
-                <Label htmlFor="rounding-amount-side" className="text-xs font-medium text-muted-foreground">
-                  Moneda a redondear
-                </Label>
-                <Controller
-                  name="rounding_amount_side"
-                  control={control}
-                  rules={{
-                    validate: (v) =>
-                      watchRoundingMode !== 'AMOUNT' || !!v || 'Selecciona la moneda a redondear',
-                  }}
-                  render={({ field }) => (
-                    <Select
-                      value={field.value ?? ''}
-                      onValueChange={(v) => field.onChange(v as 'FROM' | 'TO')}
-                    >
-                      <SelectTrigger id="rounding-amount-side" className="h-10 w-full">
-                        <SelectValue placeholder="Seleccionar moneda..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="FROM">{fromSymbol ?? 'Origen'} (origen)</SelectItem>
-                        <SelectItem value="TO">{toSymbol ?? 'Destino'} (destino)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-                {errors.rounding_amount_side ? (
-                  <p className="text-xs text-destructive">{errors.rounding_amount_side.message}</p>
-                ) : null}
-                <p className="text-xs text-muted-foreground">
-                  Solo se redondea cuando esa moneda es la que el sistema calcula; si el cliente la
-                  fija como monto exacto, queda intacta.
-                </p>
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Se redondea la tasa por unidad y luego se calculan los montos con la tasa ya
-                redondeada.
-              </p>
+          <span className="text-sm font-medium">Monitorear para scraping</span>
+        </label>
+        <label className="flex min-h-11 items-center gap-3">
+          <Controller
+            name="binance_tracked"
+            control={control}
+            render={({ field }) => (
+              <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
             )}
-          </>
-        ) : null}
+          />
+          <span className="text-sm font-medium">Rastreado en Binance P2P</span>
+        </label>
       </div>
 
-      {mode === 'create' ? (
-        <div className="space-y-2">
-          <label className="flex min-h-11 items-center gap-3">
-            <Controller
-              name="is_active"
-              control={control}
-              render={({ field }) => (
-                <Switch checked={field.value ?? true} onCheckedChange={field.onChange} />
-              )}
-            />
-            <span className="text-sm font-medium">Par activo</span>
-          </label>
-          <label className="flex min-h-11 items-center gap-3">
-            <Controller
-              name="is_monitored"
-              control={control}
-              render={({ field }) => (
-                <Switch checked={field.value ?? true} onCheckedChange={field.onChange} />
-              )}
-            />
-            <span className="text-sm font-medium">Monitorear para scraping</span>
-          </label>
-          <label className="flex min-h-11 items-center gap-3">
-            <Controller
-              name="binance_tracked"
-              control={control}
-              render={({ field }) => (
-                <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
-              )}
-            />
-            <span className="text-sm font-medium">Rastreado en Binance P2P</span>
-          </label>
-        </div>
-      ) : (
-        <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-3 text-xs text-sky-700 dark:text-sky-300">
-          <strong>Nota:</strong> usa los toggles en la lista principal para cambiar los estados de Activo, Monitor y Binance.
-        </div>
-      )}
-
-      {showBinanceFields ? (
-        <>
-          <div className="space-y-1.5">
-            <Label>
-              Métodos de pago de Binance <span className="text-destructive">*</span>
-            </Label>
-            {fiatForBinance ? (
-              <Controller
-                name="banks_to_track"
-                control={control}
-                render={({ field }) => (
-                  <TradeMethodSelector
-                    selectedMethods={field.value || []}
-                    onChange={field.onChange}
-                    fiatCurrency={fiatForBinance}
-                    className="w-full"
-                  />
-                )}
-              />
-            ) : (
-              <div className="rounded-lg border border-border bg-muted p-3 text-sm text-muted-foreground">
-                {mode === 'edit'
-                  ? 'Este par no tiene moneda FIAT válida para Binance'
-                  : 'Seleccione las monedas de origen y destino primero'}
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="amount-to-track">
-              Monto a trackear <span className="text-destructive">*</span>
-            </Label>
-            <Controller
-              name="amount_to_track"
-              control={control}
-              rules={{
-                min: { value: 0.01, message: 'El monto debe ser mayor a 0' },
-              }}
-              render={({ field }) => (
-                <Input
-                  id="amount-to-track"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={field.value ?? ''}
-                  onChange={(e) =>
-                    field.onChange(e.target.value ? parseFloat(e.target.value) : null)
-                  }
-                  placeholder="0.00"
-                />
-              )}
-            />
-            {errors.amount_to_track ? (
-              <p className="text-xs text-destructive">{errors.amount_to_track.message}</p>
-            ) : null}
-          </div>
-        </>
-      ) : null}
+      <RateSourceSection
+        {...sectionProps}
+        basePairs={basePairs}
+        fiatForBinance={fiatForBinance}
+        showBinanceFields={!!watchBinanceTracked}
+        showUsdtConfig={false}
+        initialUsdtMethod="manual"
+        noFiatMessage="Seleccione las monedas de origen y destino primero"
+      />
 
       {error ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -782,14 +127,8 @@ export function CurrencyPairForm({
           Cancelar
         </Button>
         <Button type="submit" disabled={isSubmitting}>
-          {mode === 'create' ? <Plus className="h-4 w-4" /> : <Edit className="h-4 w-4" />}
-          {isSubmitting
-            ? mode === 'create'
-              ? 'Creando...'
-              : 'Actualizando...'
-            : mode === 'create'
-              ? 'Crear'
-              : 'Actualizar'}
+          <Plus className="h-4 w-4" />
+          {isSubmitting ? 'Creando...' : 'Crear'}
         </Button>
       </DialogFooter>
     </form>

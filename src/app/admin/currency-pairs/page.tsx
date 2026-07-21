@@ -4,7 +4,6 @@ import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/shared/PageHeader';
 import CreateCurrencyPairModal from '@/components/admin/CreateCurrencyPairModal';
-import EditCurrencyPairModal from '@/components/admin/EditCurrencyPairModal';
 import ManualRateDialog from '@/components/ManualRateDialog';
 import RateHistoryModal from './RateHistoryModal';
 import { PairsStats } from './_components/PairsStats';
@@ -59,18 +58,6 @@ export default function CurrencyPairsAdminPage() {
         onClose={actions.closeCreate}
         onSubmit={actions.handleCreate}
         currencies={state.currencies}
-        basePairs={state.basePairs}
-        error={state.error}
-        setError={actions.setError}
-        validateBinanceForm={actions.validateBinanceForm}
-        getFiatCurrencyFromPair={actions.getFiatCurrencyFromPair}
-      />
-
-      <EditCurrencyPairModal
-        isOpen={!!state.editingPair}
-        onClose={actions.closeEdit}
-        onSubmit={actions.handleUpdate}
-        editingPair={state.editingPair}
         basePairs={state.basePairs}
         error={state.error}
         setError={actions.setError}
