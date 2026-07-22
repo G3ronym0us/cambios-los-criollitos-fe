@@ -5,6 +5,7 @@ import { ArrowLeft, Calculator, ChevronDown, ChevronRight, CircleAlert, Info, Pl
 import { toast } from 'sonner';
 import { DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { LoadingState } from '@/components/shared/LoadingState';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -46,8 +47,10 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
   const [exchangeUserUuid, setExchangeUserUuid] = useState('');
   const [creating, setCreating] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
+    setLoadingData(true);
     Promise.all([
       adminService.getCurrencyPairs(0, 200, true),
       fundService.getGroups(),
@@ -72,7 +75,7 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
       if (preferred && pairsRes.success && pairsRes.data?.pairs.some((p) => p.uuid === preferred)) {
         setPairUuid((current) => current || preferred);
       }
-    });
+    }).finally(() => setLoadingData(false));
   }, [payment.client_uuid, payment.fund_group_uuid]);
 
   const pair = useMemo(() => pairs.find((p) => p.uuid === pairUuid), [pairs, pairUuid]);
@@ -227,6 +230,26 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
       toast.error(res.error || 'No se pudo crear la operación');
     }
   };
+
+  if (loadingData) {
+    return (
+      <>
+        <div className="flex-1 px-1 py-6">
+          <LoadingState label="Cargando datos de la operación…" />
+        </div>
+        <DialogFooter className="gap-2 sm:justify-between">
+          <Button variant="ghost" onClick={onBack}>
+            <ArrowLeft className="h-4 w-4" />
+            Volver
+          </Button>
+          <Button disabled>
+            <Plus className="h-4 w-4" />
+            Crear operación
+          </Button>
+        </DialogFooter>
+      </>
+    );
+  }
 
   return (
     <>
