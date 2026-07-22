@@ -78,7 +78,11 @@ export function EditGroupDialog({
                 }}
               >
                 <SelectTrigger id="edit-group-client" className="h-10 w-full">
-                  <SelectValue placeholder="Elegir de los grupos detectados..." />
+                  <SelectValue placeholder="Elegir de los grupos detectados...">
+                    {selectedGroupClient
+                      ? selectedGroupClient.display_name || selectedGroupClient.phone
+                      : null}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {groupClients.map((c) => (
