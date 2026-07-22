@@ -22,11 +22,13 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import type { CurrencyData } from '@/types/admin';
 import type { CreateFundGroup } from '@/types/fund';
+import type { ClientData } from '@/types/client';
 
 interface CreateGroupDialogProps {
   open: boolean;
   value: CreateFundGroup;
   currencies: CurrencyData[];
+  groupClients: ClientData[];
   error: string;
   submitting: boolean;
   onChange: (value: CreateFundGroup) => void;
@@ -38,6 +40,7 @@ export function CreateGroupDialog({
   open,
   value,
   currencies,
+  groupClients,
   error,
   submitting,
   onChange,
@@ -48,6 +51,11 @@ export function CreateGroupDialog({
     e.preventDefault();
     onSubmit();
   };
+
+  // El Select refleja el grupo-cliente cuyo JID coincide con el valor actual.
+  const currentJid = (value.whatsapp_group_jid ?? '').trim();
+  const selectedGroupClient =
+    currentJid !== '' ? groupClients.find((c) => c.phone === currentJid) : undefined;
 
   return (
     <Dialog
@@ -113,6 +121,28 @@ export function CreateGroupDialog({
 
           <div className="space-y-1.5">
             <Label htmlFor="group-jid">JID del grupo de WhatsApp</Label>
+
+            {groupClients.length > 0 ? (
+              <Select
+                value={selectedGroupClient?.uuid ?? ''}
+                onValueChange={(uuid) => {
+                  const client = groupClients.find((c) => c.uuid === uuid);
+                  if (client) onChange({ ...value, whatsapp_group_jid: client.phone });
+                }}
+              >
+                <SelectTrigger id="group-client" className="h-10 w-full">
+                  <SelectValue placeholder="Elegir de los grupos detectados..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {groupClients.map((c) => (
+                    <SelectItem key={c.uuid} value={c.uuid}>
+                      {c.display_name ? `${c.display_name} — ${c.phone}` : c.phone}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
+
             <Input
               id="group-jid"
               type="text"
@@ -122,7 +152,9 @@ export function CreateGroupDialog({
               className="h-10"
             />
             <p className="text-xs text-muted-foreground">
-              Opcional. Permite ligar este fondo al grupo de WhatsApp donde reenvías los comprobantes.
+              Opcional. Elígelo de los grupos detectados por el bot o pégalo (debe terminar en
+              <span className="font-mono"> @g.us</span>) para ligar este fondo al grupo donde
+              reenvías los comprobantes.
             </p>
           </div>
 

@@ -101,6 +101,7 @@ export default function FundsAdminPage() {
         open={state.showCreateGroup}
         value={state.createGroupForm}
         currencies={state.availableCurrencies}
+        groupClients={state.availableGroupClients}
         error={state.formError}
         submitting={state.formLoading}
         onChange={actions.setCreateGroupForm}
