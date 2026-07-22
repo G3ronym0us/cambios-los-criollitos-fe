@@ -102,8 +102,10 @@ export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText, onSav
                 Depósito{deposit.method ? ` · ${deposit.method}` : ''}
               </StatusBadge>
             ) : !outgoing && p.fund_group_name ? (
-              <StatusBadge tone="info" icon={Users}>
-                Contabilizado · {p.fund_group_name}
+              // Sin operación el comprobante todavía no está contabilizado en ningún lado:
+              // tiene fondo asignado, pero ni op ni movimiento. Decirlo tal cual.
+              <StatusBadge tone="warning" icon={Users}>
+                {p.fund_group_name} · sin operación
               </StatusBadge>
             ) : outgoing && personal ? (
               <StatusBadge tone="warning" icon={Tag}>Personal</StatusBadge>

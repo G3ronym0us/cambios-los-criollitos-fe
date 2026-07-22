@@ -77,3 +77,14 @@ export const formatCaracasDate = (value: string | null | undefined): string => {
     timeZone: 'America/Caracas',
   });
 };
+
+/**
+ * ¿El "cliente" de una operación es en realidad un marcador de que aún no sabemos quién
+ * es? Cubre el JID de un grupo contable (comprobante reenviado, ops antiguas) y los
+ * clientes anónimos que crea el backend cuando el operador atendió al cliente por fuera
+ * del bot. Espejo de `WhatsAppQuoteService.is_unassigned_client_phone`.
+ */
+export const isUnassignedClientPhone = (phone: string | null | undefined): boolean => {
+  if (!phone) return false;
+  return phone.endsWith('@g.us') || phone.startsWith('anon:');
+};

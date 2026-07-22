@@ -53,7 +53,7 @@ export class OperationService {
 
   async updateDetails(
     uuid: string,
-    data: { currency_pair_uuid?: string; applied_percentage?: number },
+    data: { currency_pair_uuid?: string; applied_percentage?: number; client_phone?: string },
   ): Promise<ApiResponse<OperationData>> {
     const result = await httpClient.patch<OperationData>(`/operations/${uuid}`, data);
     return { success: result.success, data: result.data, error: result.error };

@@ -9,6 +9,7 @@ import { adminService } from '@/services/adminService';
 import { clientService } from '@/services/clientService';
 import { useConfirm } from '@/hooks/useConfirm';
 import { Role } from '@/utils/enums';
+import { isUnassignedClientPhone } from '@/utils/functions';
 import { CurrencyData } from '@/types/admin';
 import { CommissionUserResponse } from '@/types/user';
 import { ClientData } from '@/types/client';
@@ -373,7 +374,7 @@ export function useFunds() {
   const selectedGroup = groups.find((g) => g.uuid === selectedGroupUuid);
   const selectedGroupMembers = selectedGroup?.members ?? [];
   // Personas (para el número del socio) vs grupos @g.us (para el JID del grupo).
-  const availableClients = clients.filter((c) => !c.phone.endsWith('@g.us'));
+  const availableClients = clients.filter((c) => !isUnassignedClientPhone(c.phone));
   const availableGroupClients = clients.filter((c) => c.phone.endsWith('@g.us'));
 
   return {

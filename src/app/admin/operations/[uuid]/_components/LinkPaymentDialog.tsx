@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { paymentService } from '@/services/paymentService';
-import { formatNumber } from '@/utils/functions';
+import { formatNumber, isUnassignedClientPhone } from '@/utils/functions';
 import type { OperationData } from '@/types/operation';
 import type { PaymentData, PaymentTable } from '@/types/payment';
 
@@ -47,6 +47,7 @@ function formatDate(value: string | null) {
 }
 
 export function LinkPaymentDialog({ operation, open, onClose, onLinked }: LinkPaymentDialogProps) {
+  const operationHasGroupClient = isUnassignedClientPhone(operation.client_phone);
   const [table, setTable] = useState<PaymentTable>('outgoing');
   const [search, setSearch] = useState('');
   const [payments, setPayments] = useState<PaymentData[]>([]);
@@ -60,10 +61,10 @@ export function LinkPaymentDialog({ operation, open, onClose, onLinked }: LinkPa
     if (!open) return;
     setTable('outgoing');
     setSearch('');
-    setScope('client');
+    setScope(operationHasGroupClient ? 'global' : 'client');
     setSelected(null);
     setSubmitting(false);
-  }, [open]);
+  }, [open, operationHasGroupClient]);
 
   // Búsqueda server-side (con debounce) sobre los pagos de la tabla activa.
   useEffect(() => {
@@ -116,7 +117,11 @@ export function LinkPaymentDialog({ operation, open, onClose, onLinked }: LinkPa
     const res = await paymentService.linkOperation(table, selected, operation.uuid);
     setSubmitting(false);
     if (res.success) {
-      toast.success(`Pago ${table === 'outgoing' ? 'saliente' : 'entrante'} vinculado a la operación`);
+      toast.success(
+        operationHasGroupClient && table === 'outgoing'
+          ? 'Pago vinculado y cliente de la operación detectado'
+          : `Pago ${table === 'outgoing' ? 'saliente' : 'entrante'} vinculado a la operación`,
+      );
       onLinked();
       onClose();
     } else {
@@ -130,7 +135,9 @@ export function LinkPaymentDialog({ operation, open, onClose, onLinked }: LinkPa
         <DialogHeader>
           <DialogTitle>Vincular pago a la operación</DialogTitle>
           <DialogDescription>
-            Elige un comprobante sin operación para asociarlo a esta cotización.
+            {operationHasGroupClient
+              ? 'La operación proviene de un grupo. Al vincular el pago saliente se asignará su cliente real.'
+              : 'Elige un comprobante sin operación para asociarlo a esta cotización.'}
           </DialogDescription>
         </DialogHeader>
 

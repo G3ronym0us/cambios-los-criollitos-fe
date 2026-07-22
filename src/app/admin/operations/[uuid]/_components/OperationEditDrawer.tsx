@@ -18,8 +18,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { isUnassignedClientPhone } from '@/utils/functions';
 import { getStatusMeta } from '@/utils/operationStatus';
 import type { CurrencyPairData } from '@/types/admin';
+import type { ClientData } from '@/types/client';
 import type { OperationData, OperationStatus } from '@/types/operation';
 
 const STATUS_OPTIONS: OperationStatus[] = ['QUOTED', 'PENDING', 'COMPLETED', 'CANCELLED'];
@@ -28,12 +30,15 @@ interface OperationEditDrawerProps {
   open: boolean;
   operation: OperationData;
   pairs: CurrencyPairData[];
+  clients: ClientData[];
   pairsLoading: boolean;
+  clientsLoading: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (
     currencyPairUuid: string,
     appliedPercentage: number | null,
     status: OperationStatus,
+    clientPhone: string | null,
   ) => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -55,13 +60,18 @@ export function OperationEditDrawer({
   open,
   operation,
   pairs,
+  clients,
   pairsLoading,
+  clientsLoading,
   onOpenChange,
   onSave,
 }: OperationEditDrawerProps) {
   const [pairUuid, setPairUuid] = useState(operation.currency_pair_uuid ?? '');
   const [margin, setMargin] = useState(operation.applied_percentage?.toString() ?? '');
   const [status, setStatus] = useState<OperationStatus>(operation.status);
+  const [clientUuid, setClientUuid] = useState(
+    isUnassignedClientPhone(operation.client_phone) ? '' : operation.client_uuid ?? '',
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,12 +80,24 @@ export function OperationEditDrawer({
     setPairUuid(operation.currency_pair_uuid ?? '');
     setMargin(operation.applied_percentage?.toString() ?? '');
     setStatus(operation.status);
+    setClientUuid(isUnassignedClientPhone(operation.client_phone) ? '' : operation.client_uuid ?? '');
     setError(null);
-  }, [open, operation.applied_percentage, operation.currency_pair_uuid, operation.status]);
+  }, [
+    open,
+    operation.applied_percentage,
+    operation.client_phone,
+    operation.client_uuid,
+    operation.currency_pair_uuid,
+    operation.status,
+  ]);
 
   const selectedPair = useMemo(
     () => pairs.find((pair) => pair.uuid === pairUuid),
     [pairUuid, pairs],
+  );
+  const selectedClient = useMemo(
+    () => clients.find((client) => client.uuid === clientUuid),
+    [clientUuid, clients],
   );
   const statusOptions = operation.status === 'COMPLETED' ? ['COMPLETED' as const] : STATUS_OPTIONS;
   const parsedMargin = margin.trim() === '' ? null : Number(margin.replace(',', '.'));
@@ -85,6 +107,7 @@ export function OperationEditDrawer({
   const marginChanged = parsedMargin !== operation.applied_percentage;
   const hasChanges =
     pairUuid !== operation.currency_pair_uuid ||
+    (selectedClient != null && selectedClient.uuid !== operation.client_uuid) ||
     (operation.status !== 'COMPLETED' && marginChanged) ||
     status !== operation.status;
 
@@ -96,7 +119,7 @@ export function OperationEditDrawer({
     }
     setSaving(true);
     setError(null);
-    const result = await onSave(pairUuid, parsedMargin, status);
+    const result = await onSave(pairUuid, parsedMargin, status, selectedClient?.phone ?? null);
     setSaving(false);
 
     if (result.success) {
@@ -112,11 +135,44 @@ export function OperationEditDrawer({
         <DrawerHeader>
           <DrawerTitle>Editar operación</DrawerTitle>
           <DrawerDescription>
-            Corrige el par, el margen aplicado o el estado desde un solo lugar.
+            Corrige el cliente, el par, el margen aplicado o el estado desde un solo lugar.
           </DrawerDescription>
         </DrawerHeader>
 
         <div className="space-y-5 overflow-y-auto py-1">
+          <div className="space-y-1.5">
+            <label htmlFor="edit-operation-client" className="text-sm font-medium text-foreground">
+              Cliente
+            </label>
+            <Select
+              value={clientUuid}
+              onValueChange={(value) => setClientUuid(value ?? '')}
+              disabled={saving || clientsLoading}
+            >
+              <SelectTrigger id="edit-operation-client" className="h-11 w-full">
+                <SelectValue placeholder="Selecciona el cliente correcto">
+                  {selectedClient
+                    ? selectedClient.display_name || selectedClient.phone
+                    : isUnassignedClientPhone(operation.client_phone)
+                      ? 'Cliente sin identificar · selecciona uno'
+                      : operation.client_display_name || operation.client_phone}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="start">
+                {clients.map((client) => (
+                  <SelectItem key={client.uuid} value={client.uuid}>
+                    {client.display_name
+                      ? `${client.display_name} · ${client.phone}`
+                      : client.phone}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs leading-5 text-muted-foreground">
+              Al cambiarlo, los pagos vinculados también quedarán asignados a este cliente.
+            </p>
+          </div>
+
           <div className="space-y-1.5">
             <label htmlFor="edit-operation-pair" className="text-sm font-medium text-foreground">
               Par
@@ -223,7 +279,9 @@ export function OperationEditDrawer({
             variant={status === 'CANCELLED' ? 'destructive' : 'default'}
             className="min-h-11"
             onClick={handleSave}
-            disabled={saving || pairsLoading || !pairUuid || !marginIsValid || !hasChanges}
+            disabled={
+              saving || pairsLoading || clientsLoading || !pairUuid || !marginIsValid || !hasChanges
+            }
           >
             {saving ? 'Guardando...' : 'Guardar cambios'}
           </Button>

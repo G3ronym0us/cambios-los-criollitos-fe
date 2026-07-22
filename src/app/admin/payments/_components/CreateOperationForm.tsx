@@ -54,7 +54,17 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
       payment.client_uuid ? clientService.getClient(payment.client_uuid) : Promise.resolve(null),
     ]).then(([pairsRes, groupsRes, clientRes]) => {
       if (pairsRes.success && pairsRes.data) setPairs(pairsRes.data.pairs);
-      if (groupsRes.success && groupsRes.data) setGroups(groupsRes.data.filter((g) => g.is_active));
+      if (groupsRes.success && groupsRes.data) {
+        const active = groupsRes.data.filter((g) => g.is_active);
+        setGroups(active);
+
+        // Prefill: el fondo donde ya se contabilizó el comprobante (ej. reenviado al grupo
+        // y convertido a entrante). Sin esto la op nacía huérfana del fondo que el pago
+        // ya tenía y había que volver a elegirlo a mano.
+        if (payment.fund_group_uuid && active.some((g) => g.uuid === payment.fund_group_uuid)) {
+          setFundGroupUuid((current) => current || payment.fund_group_uuid!);
+        }
+      }
 
       // Prefill: par por defecto del cliente (editable). Solo si aún no se eligió
       // uno y el par preferido está entre los pares activos.
@@ -63,7 +73,7 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
         setPairUuid((current) => current || preferred);
       }
     });
-  }, [payment.client_uuid]);
+  }, [payment.client_uuid, payment.fund_group_uuid]);
 
   const pair = useMemo(() => pairs.find((p) => p.uuid === pairUuid), [pairs, pairUuid]);
   const fromCur = pair?.from_currency?.symbol ?? '';
@@ -171,9 +181,13 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
   const fundOptions = useMemo(
     () =>
       groups.filter(
-        (g) => g.currency && (settle(g.currency) === settle(fromCur) || settle(g.currency) === settle(toCur)),
+        (g) =>
+          // El fondo que el pago ya traía siempre es opción, aunque el par elegido todavía
+          // no case con su moneda: si no, el select se vería vacío con un valor puesto.
+          g.uuid === fundGroupUuid ||
+          (g.currency && (settle(g.currency) === settle(fromCur) || settle(g.currency) === settle(toCur))),
       ),
-    [groups, fromCur, toCur],
+    [groups, fromCur, toCur, fundGroupUuid],
   );
   const selectedGroup = useMemo(() => groups.find((g) => g.uuid === fundGroupUuid), [groups, fundGroupUuid]);
   const members = selectedGroup?.members ?? [];

@@ -2,9 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { adminService } from '@/services/adminService';
+import { clientService } from '@/services/clientService';
 import { fundService } from '@/services/fundService';
 import { operationService, type OperationPayments } from '@/services/operationService';
+import { isUnassignedClientPhone } from '@/utils/functions';
 import type { CurrencyPairData } from '@/types/admin';
+import type { ClientData } from '@/types/client';
 import type { FundGroup } from '@/types/fund';
 import type { OperationData, OperationStatus } from '@/types/operation';
 
@@ -12,9 +15,11 @@ export function useOperationDetail(uuid: string) {
   const [operation, setOperation] = useState<OperationData | null>(null);
   const [payments, setPayments] = useState<OperationPayments | null>(null);
   const [pairs, setPairs] = useState<CurrencyPairData[]>([]);
+  const [clients, setClients] = useState<ClientData[]>([]);
   const [funds, setFunds] = useState<FundGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [pairsLoading, setPairsLoading] = useState(true);
+  const [clientsLoading, setClientsLoading] = useState(true);
   const [fundsLoading, setFundsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [paymentsError, setPaymentsError] = useState<string | null>(null);
@@ -25,14 +30,16 @@ export function useOperationDetail(uuid: string) {
     setNotFound(false);
     setPaymentsError(null);
     setPairsLoading(true);
+    setClientsLoading(true);
     setFundsLoading(true);
 
     Promise.all([
       operationService.getOperation(uuid),
       operationService.getOperationPayments(uuid),
       adminService.getCurrencyPairs(0, 1000),
+      clientService.getClients({ limit: 500 }),
       fundService.getGroups(false),
-    ]).then(([operationResult, paymentsResult, pairsResult, fundsResult]) => {
+    ]).then(([operationResult, paymentsResult, pairsResult, clientsResult, fundsResult]) => {
       if (!active) return;
 
       if (operationResult.success && operationResult.data) {
@@ -55,6 +62,13 @@ export function useOperationDetail(uuid: string) {
         setPairs([]);
       }
 
+      if (clientsResult.success && clientsResult.data) {
+        // Ni los grupos ni los anónimos son asignables como cliente de una operación.
+        setClients(clientsResult.data.items.filter((client) => !isUnassignedClientPhone(client.phone)));
+      } else {
+        setClients([]);
+      }
+
       if (fundsResult.success && fundsResult.data) {
         setFunds(fundsResult.data);
       } else {
@@ -62,6 +76,7 @@ export function useOperationDetail(uuid: string) {
       }
 
       setPairsLoading(false);
+      setClientsLoading(false);
       setFundsLoading(false);
       setLoading(false);
     });
@@ -71,14 +86,21 @@ export function useOperationDetail(uuid: string) {
     };
   }, [uuid]);
 
-  // Refresca los pagos vinculados (tras vincular uno desde el detalle).
+  // Refresca la operación y sus pagos. Vincular un saliente puede corregir
+  // automáticamente el cliente si la operación todavía apuntaba a un grupo.
   const reloadPayments = useCallback(async () => {
-    const result = await operationService.getOperationPayments(uuid);
-    if (result.success && result.data) {
-      setPayments(result.data);
+    const [operationResult, paymentsResult] = await Promise.all([
+      operationService.getOperation(uuid),
+      operationService.getOperationPayments(uuid),
+    ]);
+    if (operationResult.success && operationResult.data) {
+      setOperation(operationResult.data);
+    }
+    if (paymentsResult.success && paymentsResult.data) {
+      setPayments(paymentsResult.data);
       setPaymentsError(null);
     } else {
-      setPaymentsError(result.error || 'No se pudieron cargar los pagos vinculados.');
+      setPaymentsError(paymentsResult.error || 'No se pudieron cargar los pagos vinculados.');
     }
   }, [uuid]);
 
@@ -102,6 +124,7 @@ export function useOperationDetail(uuid: string) {
     currencyPairUuid: string,
     appliedPercentage: number | null,
     status: OperationStatus,
+    clientPhone: string | null,
   ) => {
     let updatedOperation = operation;
 
@@ -111,6 +134,9 @@ export function useOperationDetail(uuid: string) {
         : {}),
       ...(appliedPercentage !== null && appliedPercentage !== operation?.applied_percentage
         ? { applied_percentage: appliedPercentage }
+        : {}),
+      ...(clientPhone && clientPhone !== operation?.client_phone
+        ? { client_phone: clientPhone }
         : {}),
     };
 
@@ -154,9 +180,11 @@ export function useOperationDetail(uuid: string) {
     operation,
     payments,
     pairs,
+    clients,
     funds,
     loading,
     pairsLoading,
+    clientsLoading,
     fundsLoading,
     notFound,
     paymentsError,

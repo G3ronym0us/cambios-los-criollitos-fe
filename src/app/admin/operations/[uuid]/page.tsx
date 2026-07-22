@@ -157,9 +157,11 @@ export default function OperationDetailPage() {
     operation,
     payments,
     pairs,
+    clients,
     funds,
     loading,
     pairsLoading,
+    clientsLoading,
     fundsLoading,
     notFound,
     paymentsError,
@@ -285,8 +287,9 @@ export default function OperationDetailPage() {
     currencyPairUuid: string,
     appliedPercentage: number | null,
     nextStatus: OperationStatus,
+    clientPhone: string | null,
   ) => {
-    const result = await updateDetails(currencyPairUuid, appliedPercentage, nextStatus);
+    const result = await updateDetails(currencyPairUuid, appliedPercentage, nextStatus, clientPhone);
     if (result.success) toast.success('Operación actualizada');
     return result;
   };
@@ -367,7 +370,9 @@ export default function OperationDetailPage() {
         open={editOpen}
         operation={operation}
         pairs={pairs}
+        clients={clients}
         pairsLoading={pairsLoading}
+        clientsLoading={clientsLoading}
         onOpenChange={setEditOpen}
         onSave={saveDetails}
       />
