@@ -3,12 +3,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { userService } from '@/services/userService';
+import { clientService } from '@/services/clientService';
 import {
   CommissionUserResponse,
   UserCreate,
   UserData,
   UserUpdate,
 } from '@/types/user';
+import type { ClientData } from '@/types/client';
+import { isUnassignedClientPhone } from '@/utils/functions';
 import { useConfirm } from '@/hooks/useConfirm';
 
 export type UsersRoleFilter = 'ALL' | 'USER' | 'MODERATOR' | 'ROOT';
@@ -30,6 +33,7 @@ export function useUsers() {
   const confirm = useConfirm();
 
   const [users, setUsers] = useState<CommissionUserResponse[]>([]);
+  const [contacts, setContacts] = useState<ClientData[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<UsersFilters>(emptyFilters);
 
@@ -49,9 +53,19 @@ export function useUsers() {
     setLoading(false);
   }, []);
 
+  // Contactos de WhatsApp conocidos (personas, no grupos ni anónimos) para elegir el
+  // número de un usuario desde una lista en vez de teclearlo.
+  const loadContacts = useCallback(async () => {
+    const result = await clientService.getClients({ limit: 500 });
+    if (result.success && result.data) {
+      setContacts((result.data.items || []).filter((c) => !isUnassignedClientPhone(c.phone)));
+    }
+  }, []);
+
   useEffect(() => {
     loadUsers();
-  }, [loadUsers]);
+    loadContacts();
+  }, [loadUsers, loadContacts]);
 
   const resetFilters = useCallback(() => setFilters(emptyFilters), []);
   const hasActiveFilters =
@@ -177,6 +191,8 @@ export function useUsers() {
   return {
     state: {
       users: filteredUsers,
+      allUsers: users,
+      contacts,
       loading,
       filters,
       hasActiveFilters,

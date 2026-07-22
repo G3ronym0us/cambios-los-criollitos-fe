@@ -49,6 +49,8 @@ export default function UsersAdminPage() {
       <UserCreateDialog
         open={state.showCreate}
         submitting={state.submitting}
+        contacts={state.contacts}
+        users={state.allUsers}
         onSubmit={actions.handleCreate}
         onCancel={actions.closeCreate}
       />
@@ -56,6 +58,8 @@ export default function UsersAdminPage() {
       <UserEditDialog
         user={state.editingUser}
         submitting={state.submitting}
+        contacts={state.contacts}
+        users={state.allUsers}
         onSubmit={actions.handleUpdate}
         onCancel={actions.closeEdit}
       />

@@ -125,7 +125,6 @@ export default function FundsAdminPage() {
         open={state.showAddMember}
         value={state.addMemberForm}
         availableUsers={state.availableUsers}
-        availableClients={state.availableClients}
         error={state.formError}
         submitting={state.formLoading}
         onChange={actions.setAddMemberForm}
@@ -137,7 +136,6 @@ export default function FundsAdminPage() {
         open={state.showEditMember}
         member={state.editMemberTarget}
         value={state.editMemberForm}
-        availableClients={state.availableClients}
         error={state.formError}
         submitting={state.formLoading}
         onChange={actions.setEditMemberForm}

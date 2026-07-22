@@ -29,6 +29,7 @@ export interface CommissionUserResponse {
   can_receive_commission: boolean;
   is_active: boolean;
   role?: string;
+  phone_number?: string | null;
   created_at: string;
 }
 
@@ -58,6 +59,7 @@ export interface UserCreate {
   password: string;
   role: string;
   is_active?: boolean;
+  phone_number?: string | null;
 }
 
 export interface UserUpdate {
@@ -65,7 +67,7 @@ export interface UserUpdate {
   email?: string;
   is_active?: boolean;
   role?: string;
-  phone_number?: string;
+  phone_number?: string | null;
   bio?: string;
   preferred_settlement_currency?: string | null;
   is_fund_manager?: boolean;

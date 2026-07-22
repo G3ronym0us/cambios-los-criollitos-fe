@@ -20,11 +20,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { UserCreate } from '@/types/user';
+import type { CommissionUserResponse, UserCreate } from '@/types/user';
+import type { ClientData } from '@/types/client';
+import { WhatsappNumberField } from './WhatsappNumberField';
 
 interface UserCreateDialogProps {
   open: boolean;
   submitting: boolean;
+  contacts: ClientData[];
+  users: CommissionUserResponse[];
   onSubmit: (data: UserCreate) => void;
   onCancel: () => void;
 }
@@ -34,6 +38,8 @@ const EMAIL_REGEX = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
 export function UserCreateDialog({
   open,
   submitting,
+  contacts,
+  users,
   onSubmit,
   onCancel,
 }: UserCreateDialogProps) {
@@ -134,6 +140,14 @@ export function UserCreateDialog({
               <p className="text-xs text-destructive">{errors.full_name.message}</p>
             ) : null}
           </div>
+
+          <WhatsappNumberField
+            value={watch('phone_number') ?? ''}
+            onChange={(digits) => setValue('phone_number', digits, { shouldDirty: true })}
+            contacts={contacts}
+            users={users}
+          />
+          <input type="hidden" {...register('phone_number')} />
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">

@@ -22,11 +22,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { UserData, UserUpdate } from '@/types/user';
+import type { CommissionUserResponse, UserData, UserUpdate } from '@/types/user';
+import type { ClientData } from '@/types/client';
+import { WhatsappNumberField } from './WhatsappNumberField';
 
 interface UserEditDialogProps {
   user: UserData | null;
   submitting: boolean;
+  contacts: ClientData[];
+  users: CommissionUserResponse[];
   onSubmit: (data: UserUpdate) => void;
   onCancel: () => void;
 }
@@ -60,6 +64,8 @@ function buildDefaults(user: UserData | null): EditFormValues {
 export function UserEditDialog({
   user,
   submitting,
+  contacts,
+  users,
   onSubmit,
   onCancel,
 }: UserEditDialogProps) {
@@ -97,8 +103,8 @@ export function UserEditDialog({
       cleanData.role = data.role;
     }
     if (data.is_active !== user.is_active) cleanData.is_active = data.is_active;
-    if (data.phone_number && data.phone_number !== user.phone_number) {
-      cleanData.phone_number = data.phone_number;
+    if ((data.phone_number || '') !== (user.phone_number || '')) {
+      cleanData.phone_number = data.phone_number || null;
     }
     if (data.bio && data.bio !== user.bio) cleanData.bio = data.bio;
     if (
@@ -158,16 +164,14 @@ export function UserEditDialog({
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-phone">Teléfono</Label>
-            <Input
-              id="edit-phone"
-              type="text"
-              className="h-10"
-              placeholder="+58 424 123 4567"
-              {...register('phone_number')}
-            />
-          </div>
+          <WhatsappNumberField
+            value={watch('phone_number') ?? ''}
+            onChange={(digits) => setValue('phone_number', digits, { shouldDirty: true })}
+            contacts={contacts}
+            users={users}
+            currentUserUuid={user.uuid}
+          />
+          <input type="hidden" {...register('phone_number')} />
 
           <div className="space-y-1.5">
             <Label htmlFor="edit-bio">Biografía</Label>
