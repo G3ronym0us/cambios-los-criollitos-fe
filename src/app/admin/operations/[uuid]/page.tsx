@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import {
+  AlertTriangle,
   ArrowDownLeft,
   ArrowLeft,
   ArrowRight,
@@ -19,6 +20,7 @@ import {
   ReceiptText,
   Send,
   Tag,
+  Trash2,
   Truck,
   Undo2,
   UserRound,
@@ -41,10 +43,12 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { cn } from '@/lib/utils';
 import { formatCaracasDateTime, formatNumber } from '@/utils/functions';
 import { getStatusMeta } from '@/utils/operationStatus';
+import { operationService } from '@/services/operationService';
 import { paymentService } from '@/services/paymentService';
 import { useConfirm } from '@/hooks/useConfirm';
 import type { PaymentData } from '@/types/payment';
-import type { OperationStatus } from '@/types/operation';
+import type { OperationStatus, OrphanAction, UnlinkPreview } from '@/types/operation';
+import { UnlinkOrphanDialog } from '@/app/admin/payments/_components/UnlinkOrphanDialog';
 import { LinkPaymentDialog } from './_components/LinkPaymentDialog';
 import { OperationEditDrawer } from './_components/OperationEditDrawer';
 import { PaymentDetailDrawer } from './_components/PaymentDetailDrawer';
@@ -184,7 +188,16 @@ export default function OperationDetailPage() {
     table: 'incoming' | 'outgoing';
     payment: PaymentData;
   } | null>(null);
+  // Desvincular el último comprobante: el cuadro decide si la op se borra o se conserva.
+  const [orphan, setOrphan] = useState<{
+    preview: UnlinkPreview;
+    table: 'incoming' | 'outgoing';
+    payment: PaymentData;
+  } | null>(null);
+  const [resolvingOrphan, setResolvingOrphan] = useState(false);
+  const [deletingOperation, setDeletingOperation] = useState(false);
   const confirm = useConfirm();
+  const router = useRouter();
 
   if (loading) {
     return <LoadingState label="Cargando operación..." fullHeight />;
@@ -248,9 +261,15 @@ export default function OperationDetailPage() {
   };
 
   // Desvincula un pago de esta operación (queda libre para vincularlo a otra desde
-  // Pagos o desde el detalle de la op correcta). No revierte estados ni transacciones.
+  // Pagos o desde el detalle de la op correcta). Si es el ÚNICO comprobante, antes de
+  // soltarlo hay que decidir qué pasa con la operación (cuadro aparte).
   // Devuelve true si se desvinculó (el drawer se cierra con eso).
   const unlinkPayment = async (table: 'incoming' | 'outgoing', payment: PaymentData) => {
+    const preview = await paymentService.unlinkPreview(table, payment.id);
+    if (preview.success && preview.data?.would_orphan) {
+      setOrphan({ preview: preview.data, table, payment });
+      return true;
+    }
     const ok = await confirm({
       title: 'Desvincular pago',
       description: `El pago de ${payment.amount != null ? formatNumber(payment.amount) : '—'} ${payment.currency ?? ''} quedará sin operación y podrás vincularlo a la correcta desde Pagos.`,
@@ -265,6 +284,50 @@ export default function OperationDetailPage() {
     }
     toast.error(res.error || 'No se pudo desvincular el pago');
     return false;
+  };
+
+  const resolveOrphan = async (action: OrphanAction, note: string | null) => {
+    if (!orphan) return;
+    setResolvingOrphan(true);
+    const res = await paymentService.linkOperation(orphan.table, orphan.payment.id, null, null, {
+      action,
+      note,
+    });
+    setResolvingOrphan(false);
+    if (!res.success) {
+      toast.error(res.error || 'No se pudo desvincular el pago');
+      return;
+    }
+    setOrphan(null);
+    if (action === 'DELETE_OPERATION') {
+      toast.success('Pago desvinculado y operación borrada con su transacción');
+      router.push('/admin/operations');
+      return;
+    }
+    toast.success('Pago desvinculado — la operación queda registrada sin pago asociado');
+    reloadPayments();
+  };
+
+  // Op que ya quedó sin comprobantes: se puede borrar con su rastro contable.
+  const deleteOperation = async () => {
+    const ok = await confirm({
+      title: 'Eliminar operación',
+      description:
+        'Se borrará la operación junto con su transacción contable y los movimientos que dejó ' +
+        'en el fondo. Los comprobantes no se tocan. No se puede deshacer.',
+      confirmText: 'Eliminar',
+      variant: 'destructive',
+    });
+    if (!ok) return;
+    setDeletingOperation(true);
+    const res = await operationService.deleteOperation(operation.uuid);
+    setDeletingOperation(false);
+    if (res.success) {
+      toast.success('Operación eliminada');
+      router.push('/admin/operations');
+    } else {
+      toast.error(res.error || 'No se pudo eliminar la operación');
+    }
   };
 
   const saveSettle = async () => {
@@ -359,6 +422,19 @@ export default function OperationDetailPage() {
                 {SCENARIO_LABELS[scenario]}
               </StatusBadge>
             ) : null}
+            {operation.no_payments_ack_at ? (
+              <StatusBadge
+                tone="warning"
+                icon={AlertTriangle}
+                className={operation.no_payments_ack_note ? 'cursor-help' : undefined}
+              >
+                <span title={operation.no_payments_ack_note ?? undefined}>
+                  Sin pago asociado · aceptado por {operation.no_payments_ack_by_username ?? '—'}
+                  {' · '}
+                  {formatDate(operation.no_payments_ack_at)}
+                </span>
+              </StatusBadge>
+            ) : null}
             <StatusBadge tone={status.tone} icon={status.icon}>
               {status.label}
             </StatusBadge>
@@ -389,6 +465,13 @@ export default function OperationDetailPage() {
         table={viewingPayment?.table ?? 'incoming'}
         onClose={() => setViewingPayment(null)}
         onUnlink={unlinkPayment}
+      />
+
+      <UnlinkOrphanDialog
+        preview={orphan?.preview ?? null}
+        submitting={resolvingOrphan}
+        onCancel={() => setOrphan(null)}
+        onDecide={resolveOrphan}
       />
 
       <Card>
@@ -583,6 +666,17 @@ export default function OperationDetailPage() {
                   <p className="mt-1 text-xs text-muted-foreground">
                     Los comprobantes asociados aparecerán en esta sección.
                   </p>
+                  {/* Una op sin ningún comprobante no debería quedarse en el sistema si no
+                      fue una decisión: aquí se borra con su transacción y sus movimientos. */}
+                  <Button
+                    variant="outline"
+                    className="mt-4 min-h-11 text-destructive hover:text-destructive"
+                    onClick={deleteOperation}
+                    disabled={deletingOperation}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {deletingOperation ? 'Eliminando…' : 'Eliminar operación'}
+                  </Button>
                 </div>
               ) : (
                 <>

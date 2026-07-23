@@ -28,6 +28,8 @@ import { adminService } from '@/services/adminService';
 import { cn } from '@/lib/utils';
 import { formatAmountForInput, formatCaracasDateTime, formatNumber, sanitizeAmountInput } from '@/utils/functions';
 import { CurrencyType, type CurrencyData } from '@/types/admin';
+import type { OrphanAction, UnlinkPreview } from '@/types/operation';
+import { UnlinkOrphanDialog } from './UnlinkOrphanDialog';
 import type { LoanPreferredValue, LoanValuation, PaymentData } from '@/types/payment';
 import { LinkOperationPanel } from './LinkOperationPanel';
 
@@ -44,6 +46,8 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
   const [step, setStep] = useState<Step>('choose');
   const [desc, setDesc] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // Marcar personal/irrelevante desvincula: si deja la op sin comprobantes, este cuadro decide.
+  const [orphan, setOrphan] = useState<UnlinkPreview | null>(null);
   const [availableCurrencies, setAvailableCurrencies] = useState<CurrencyData[]>([]);
   const [paymentCurrency, setPaymentCurrency] = useState('VES');
   const [fiatCurrency, setFiatCurrency] = useState('VES');
@@ -181,29 +185,61 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
     }
   };
 
-  const savePersonal = async () => {
+  // Marcar personal/irrelevante desvincula el pago: si era el único de su operación, hay
+  // que decidir antes qué pasa con ella (mismo cuadro que al desvincular a mano).
+  const needsOrphanDecision = async () => {
+    if (!payment.operation_uuid) return false;
+    const preview = await paymentService.unlinkPreview('outgoing', payment.id);
+    if (preview.success && preview.data?.would_orphan) {
+      setOrphan(preview.data);
+      return true;
+    }
+    return false;
+  };
+
+  const savePersonal = async (orphanDecision?: { action: OrphanAction; note: string | null }) => {
     const value = desc.trim();
     if (!value) {
       toast.error('La descripción del gasto personal es requerida');
       return;
     }
     setSubmitting(true);
-    const res = await paymentService.markPersonalExpense(payment.id, true, value);
+    if (!orphanDecision && (await needsOrphanDecision())) {
+      setSubmitting(false);
+      return;
+    }
+    const res = await paymentService.markPersonalExpense(
+      payment.id,
+      true,
+      value,
+      orphanDecision ?? undefined,
+    );
     setSubmitting(false);
     if (res.success) {
       toast.success('Pago marcado como gasto personal');
+      setOrphan(null);
       finish();
     } else {
       toast.error(res.error || 'No se pudo marcar el gasto personal');
     }
   };
 
-  const saveIrrelevant = async () => {
+  const saveIrrelevant = async (orphanDecision?: { action: OrphanAction; note: string | null }) => {
     setSubmitting(true);
-    const res = await paymentService.markIrrelevant(payment.id, true, desc.trim() || null);
+    if (!orphanDecision && (await needsOrphanDecision())) {
+      setSubmitting(false);
+      return;
+    }
+    const res = await paymentService.markIrrelevant(
+      payment.id,
+      true,
+      desc.trim() || null,
+      orphanDecision ?? undefined,
+    );
     setSubmitting(false);
     if (res.success) {
       toast.success('Pago marcado como irrelevante');
+      setOrphan(null);
       finish();
     } else {
       toast.error(res.error || 'No se pudo marcar como irrelevante');
@@ -657,7 +693,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                 Volver
               </Button>
               <Button
-                onClick={step === 'personal' ? savePersonal : saveIrrelevant}
+                onClick={() => (step === 'personal' ? savePersonal() : saveIrrelevant())}
                 disabled={submitting || (step === 'personal' && desc.trim() === '')}
               >
                 <Tag className="h-4 w-4" />
@@ -667,6 +703,17 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
           </>
         )}
       </DialogContent>
+
+      <UnlinkOrphanDialog
+        preview={orphan}
+        submitting={submitting}
+        onCancel={() => setOrphan(null)}
+        onDecide={(action, note) =>
+          step === 'personal'
+            ? savePersonal({ action, note })
+            : saveIrrelevant({ action, note })
+        }
+      />
     </Dialog>
   );
 }

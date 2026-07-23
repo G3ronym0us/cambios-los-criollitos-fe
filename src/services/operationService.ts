@@ -71,6 +71,13 @@ export class OperationService {
     return { success: result.success, data: result.data, error: result.error };
   }
 
+  // Borra una operación sin comprobantes junto con su transacción y los movimientos que
+  // dejó en el fondo. Requiere moderador; falla si aún tiene pagos o movió saldo a favor.
+  async deleteOperation(uuid: string): Promise<ApiResponse<unknown>> {
+    const result = await httpClient.delete<unknown>(`/operations/${uuid}`);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
   // Marca como recibidos los USD efectivo de una op con entrega pendiente.
   async markDelivered(uuid: string): Promise<ApiResponse<OperationData>> {
     const result = await httpClient.patch<OperationData>(`/operations/${uuid}/delivered`, {});

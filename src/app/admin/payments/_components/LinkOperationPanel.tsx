@@ -12,10 +12,11 @@ import { paymentService } from '@/services/paymentService';
 import { fundService } from '@/services/fundService';
 import { formatNumber } from '@/utils/functions';
 import { getStatusMeta } from '@/utils/operationStatus';
-import type { OperationData } from '@/types/operation';
+import type { OperationData, OrphanAction, UnlinkPreview } from '@/types/operation';
 import type { FundGroup } from '@/types/fund';
 import type { PaymentData, PaymentTable } from '@/types/payment';
 import { CreateOperationForm } from './CreateOperationForm';
+import { UnlinkOrphanDialog } from './UnlinkOrphanDialog';
 
 interface LinkOperationPanelProps {
   payment: PaymentData;
@@ -58,6 +59,8 @@ export function LinkOperationPanel({
   const [submitting, setSubmitting] = useState(false);
   const [mode, setMode] = useState<'pick' | 'create'>('pick');
   const [settleAmount, setSettleAmount] = useState('');
+  // Desvincular el último comprobante de una op abre el cuadro de decisión.
+  const [orphan, setOrphan] = useState<UnlinkPreview | null>(null);
 
   useEffect(() => {
     setSelected(payment.operation_uuid);
@@ -208,19 +211,44 @@ export function LinkOperationPanel({
     setSettleAmount('');
   }, [selected]);
 
-  const doLink = async (operationUuid: string | null) => {
+  const doLink = async (
+    operationUuid: string | null,
+    orphanDecision?: { action: OrphanAction; note: string | null },
+  ) => {
+    // Antes de soltar el vínculo: si este es el único comprobante de la op, el operador
+    // decide si la op se borra con su transacción o se queda registrada sin pago.
+    if (operationUuid === null && !orphanDecision) {
+      setSubmitting(true);
+      const preview = await paymentService.unlinkPreview(table, payment.id);
+      setSubmitting(false);
+      if (preview.success && preview.data?.would_orphan) {
+        setOrphan(preview.data);
+        return;
+      }
+    }
     setSubmitting(true);
     const settle = operationUuid && surplus !== null ? settleValue : null;
-    const res = await paymentService.linkOperation(table, payment.id, operationUuid, settle);
+    const res = await paymentService.linkOperation(
+      table,
+      payment.id,
+      operationUuid,
+      settle,
+      orphanDecision ? { action: orphanDecision.action, note: orphanDecision.note } : undefined,
+    );
     setSubmitting(false);
     if (res.success) {
       if (settle !== null && surplus !== null) {
         toast.success(
           `Operación completada por ${formatNumber(settle)} — ${formatNumber(surplus)} USD acreditados como saldo a favor`,
         );
+      } else if (orphanDecision?.action === 'DELETE_OPERATION') {
+        toast.success('Pago desvinculado y operación borrada con su transacción');
+      } else if (orphanDecision?.action === 'KEEP') {
+        toast.success('Pago desvinculado — la operación queda registrada sin pago asociado');
       } else {
         toast.success(operationUuid ? 'Pago vinculado a la operación' : 'Pago desvinculado');
       }
+      setOrphan(null);
       onSuccess();
     } else {
       toast.error(res.error || 'No se pudo actualizar el vínculo');
@@ -410,6 +438,13 @@ export function LinkOperationPanel({
           </Button>
         </div>
       </DialogFooter>
+
+      <UnlinkOrphanDialog
+        preview={orphan}
+        submitting={submitting}
+        onCancel={() => setOrphan(null)}
+        onDecide={(action, note) => doLink(null, { action, note })}
+      />
     </>
   );
 }

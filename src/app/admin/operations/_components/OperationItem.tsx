@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import {
+  AlertTriangle,
   ArrowRight,
   ChevronRight,
   Handshake,
@@ -104,6 +105,18 @@ export function OperationItem({ operation: op }: OperationItemProps) {
                 </span>
               ) : null}
             </div>
+          ) : null}
+
+          {op.no_payments_ack_at ? (
+            <p
+              className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400"
+              title={op.no_payments_ack_note ?? undefined}
+            >
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                Sin pago asociado · aceptado por {op.no_payments_ack_by_username ?? '—'}
+              </span>
+            </p>
           ) : null}
 
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">

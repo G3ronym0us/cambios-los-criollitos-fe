@@ -31,6 +31,10 @@ export interface OperationData {
   delivery_status: DeliveryStatus | null;
   delivered_at: string | null;
   notes: string | null;
+  // La op quedó sin ningún comprobante y un operador aceptó dejarla así.
+  no_payments_ack_by_username: string | null;
+  no_payments_ack_at: string | null;
+  no_payments_ack_note: string | null;
   transaction_uuid: string | null;
   legacy_sqlite_id: string | null;
   quoted_at: string;
@@ -43,6 +47,21 @@ export interface OperationData {
   has_incoming_payment?: boolean;
   has_outgoing_payment?: boolean;
 }
+
+// Qué dejaría atrás desvincular un pago: si su operación se queda sin comprobantes,
+// todo lo que se borraría al elegir borrarla.
+export interface UnlinkPreview {
+  would_orphan: boolean;
+  operation: OperationData | null;
+  transaction_uuid?: string | null;
+  fund_group_name?: string | null;
+  fund_movements?: { uuid: string; movement_type: string | null; amount: number; currency: string }[];
+  balance_entries?: number;
+  can_delete?: boolean;
+}
+
+// Decisión que acompaña al desvinculado cuando dejaría la op sin comprobantes.
+export type OrphanAction = 'KEEP' | 'DELETE_OPERATION';
 
 export interface OperationListResponse {
   operations: OperationData[];

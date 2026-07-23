@@ -2,6 +2,7 @@ import { ApiResponse } from '@/types/auth';
 import { httpClient } from '@/utils/httpInterceptor';
 import type { LoanData } from '@/types/client';
 import type { LoanPreferredValue, LoanValuation, PaymentData, PaymentPage, PaymentQuery, PaymentTable } from '@/types/payment';
+import type { OrphanAction, UnlinkPreview } from '@/types/operation';
 
 export class PaymentService {
   // Página de pagos entrantes/salientes (paginada + búsqueda/clasificación server-side).
@@ -16,18 +17,34 @@ export class PaymentService {
     return { success: result.success, data: result.data, error: result.error };
   }
 
+  // Qué dejaría atrás desvincular este pago (¿su operación se queda sin comprobantes?).
+  async unlinkPreview(table: PaymentTable, paymentId: number): Promise<ApiResponse<UnlinkPreview>> {
+    const result = await httpClient.get<UnlinkPreview>(
+      `/payments/${table}/${paymentId}/unlink-preview`,
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
   // Vincula (operationUuid) o desvincula (null) un pago a una operación.
   // settleAmount (solo salientes): monto USD realmente cambiado; la op se
   // redimensiona y el excedente se acredita como saldo a favor al completar.
+  // orphan (solo al desvincular el último pago): qué hacer con la operación que queda
+  // sin respaldo — sin esto el backend responde 409.
   async linkOperation(
     table: PaymentTable,
     paymentId: number,
     operationUuid: string | null,
     settleAmount?: number | null,
+    orphan?: { action: OrphanAction; note?: string | null },
   ): Promise<ApiResponse<PaymentData>> {
     const result = await httpClient.patch<PaymentData>(
       `/payments/${table}/${paymentId}/operation`,
-      { operation_uuid: operationUuid, settle_amount: settleAmount ?? null },
+      {
+        operation_uuid: operationUuid,
+        settle_amount: settleAmount ?? null,
+        orphan_action: orphan?.action ?? null,
+        orphan_note: orphan?.note ?? null,
+      },
     );
     return { success: result.success, data: result.data, error: result.error };
   }
@@ -37,10 +54,16 @@ export class PaymentService {
     paymentId: number,
     isPersonal: boolean,
     description: string | null,
+    orphan?: { action: OrphanAction; note?: string | null },
   ): Promise<ApiResponse<PaymentData>> {
     const result = await httpClient.patch<PaymentData>(
       `/payments/outgoing/${paymentId}/personal-expense`,
-      { is_personal_expense: isPersonal, personal_description: description },
+      {
+        is_personal_expense: isPersonal,
+        personal_description: description,
+        orphan_action: orphan?.action ?? null,
+        orphan_note: orphan?.note ?? null,
+      },
     );
     return { success: result.success, data: result.data, error: result.error };
   }
@@ -50,10 +73,16 @@ export class PaymentService {
     paymentId: number,
     isIrrelevant: boolean,
     description: string | null,
+    orphan?: { action: OrphanAction; note?: string | null },
   ): Promise<ApiResponse<PaymentData>> {
     const result = await httpClient.patch<PaymentData>(
       `/payments/outgoing/${paymentId}/irrelevant`,
-      { is_irrelevant: isIrrelevant, irrelevant_description: description },
+      {
+        is_irrelevant: isIrrelevant,
+        irrelevant_description: description,
+        orphan_action: orphan?.action ?? null,
+        orphan_note: orphan?.note ?? null,
+      },
     );
     return { success: result.success, data: result.data, error: result.error };
   }
