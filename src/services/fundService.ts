@@ -13,6 +13,7 @@ import {
   CreateFundMovement,
   PendingDeposit,
   ConfirmPendingDeposit,
+  CreatePendingDeposit,
 } from '@/types/fund';
 import { ApiResponse } from '@/types/auth';
 import { httpClient } from '@/utils/httpInterceptor';
@@ -93,10 +94,16 @@ export class FundService {
     return { success: result.success, data: result.data, error: result.error };
   }
 
-  // ===== Depósitos pendientes (detectados por el bot) =====
+  // ===== Depósitos pendientes (única puerta a un movimiento DEPOSIT) =====
 
   async listPendingDeposits(status = 'PENDING'): Promise<ApiResponse<PendingDeposit[]>> {
     const result = await httpClient.get<PendingDeposit[]>(`/funds/pending-deposits?status=${status}`);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  // Alta manual, para el depósito que el bot no detectó en el grupo.
+  async createPendingDeposit(data: CreatePendingDeposit): Promise<ApiResponse<PendingDeposit>> {
+    const result = await httpClient.post<PendingDeposit>('/funds/pending-deposits', data);
     return { success: result.success, data: result.data, error: result.error };
   }
 

@@ -147,6 +147,14 @@ export interface PendingDeposit {
   uuid: string;
   group_uuid: string | null;
   group_name: string | null;
+  // GROUP: comprobante que el gestor subió al grupo (lo detectó el bot).
+  // MANUAL: lo cargó un operador porque el bot no lo detectó.
+  origin: 'GROUP' | 'MANUAL' | null;
+  created_by_username: string | null;
+  // Pago entrante que este comprobante estaría duplicando (dinero ya contabilizado
+  // como pago del cliente). Confirmarlo exige override_duplicate.
+  source_incoming_payment_id: number | null;
+  source_incoming_payment_phone: string | null;
   detected_user_uuid: string | null;
   detected_username: string | null;
   amount: number | null;
@@ -165,6 +173,21 @@ export interface ConfirmPendingDeposit {
   amount?: number;
   currency?: string;
   user_uuid?: string;
+  reference?: string;
+  notes?: string;
+  override_duplicate?: boolean;
+}
+
+/**
+ * Alta manual de un depósito pendiente. Es la única forma de registrar un depósito que el
+ * bot no detectó: `POST /funds/movements` ya no acepta DEPOSIT.
+ */
+export interface CreatePendingDeposit {
+  group_uuid: string;
+  user_uuid: string;
+  amount: number;
+  currency: string;
+  provider?: string;
   reference?: string;
   notes?: string;
 }

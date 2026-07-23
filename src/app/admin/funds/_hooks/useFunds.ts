@@ -31,7 +31,8 @@ const MOVEMENTS_PER_PAGE = 50;
 
 const emptyMovementForm: Omit<CreateFundMovement, 'group_uuid'> = {
   user_uuid: '',
-  movement_type: MovementType.DEPOSIT,
+  // Los depósitos ya no se cargan como movimiento (van por «Depósitos pendientes»).
+  movement_type: MovementType.EXCHANGE,
   amount: 0,
   currency: 'USD',
   amount_usdt: 0,

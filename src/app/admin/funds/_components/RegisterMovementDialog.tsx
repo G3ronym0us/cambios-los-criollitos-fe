@@ -42,6 +42,14 @@ interface RegisterMovementDialogProps {
 
 const CURRENCY_OPTIONS = ['USD', 'USDT', 'COP', 'VES', 'BRL'];
 
+// DEPOSIT no está: un depósito solo nace de un pendiente confirmado (comprobante del grupo
+// o alta manual en «Depósitos pendientes»), para que siempre tenga gestor y respaldo.
+const MANUAL_MOVEMENT_TYPES = [
+  MovementType.EXCHANGE,
+  MovementType.PERSONAL,
+  MovementType.ADJUSTMENT,
+];
+
 export function RegisterMovementDialog({
   open,
   value,
@@ -77,7 +85,8 @@ export function RegisterMovementDialog({
         <DialogHeader>
           <DialogTitle>Registrar movimiento</DialogTitle>
           <DialogDescription>
-            Registra un depósito, cambio, salida personal o ajuste para el grupo.
+            Registra un cambio, salida personal o ajuste para el grupo. Los depósitos van por
+            «Depósitos pendientes».
           </DialogDescription>
         </DialogHeader>
 
@@ -117,7 +126,7 @@ export function RegisterMovementDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.values(MovementType).map((t) => (
+                {MANUAL_MOVEMENT_TYPES.map((t) => (
                   <SelectItem key={t} value={t}>
                     {MOVEMENT_LABELS[t]}
                   </SelectItem>

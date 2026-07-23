@@ -65,6 +65,7 @@ export default function FundsAdminPage() {
             <>
               <PendingDepositsList
                 groupUuid={state.selectedGroupUuid || null}
+                availableUsers={state.availableUsers}
                 onConfirmed={actions.reloadGroupData}
               />
 
