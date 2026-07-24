@@ -55,6 +55,11 @@ export interface FundMovement {
   movement_date: string;
   notes?: string | null;
   transaction_uuid?: string | null;
+  // Cliente de la operación ligada (solo EXCHANGE) y ganancia de su transacción.
+  client_name?: string | null;
+  profit_percentage?: number | null;
+  profit_amount?: number | null;
+  profit_amount_usdt?: number | null;
   created_at: string;
 }
 

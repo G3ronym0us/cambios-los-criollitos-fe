@@ -1,6 +1,6 @@
 'use client';
 
-import { Trash2 } from 'lucide-react';
+import { Trash2, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -12,6 +12,13 @@ function formatUSDT(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+function formatPercentage(value: number) {
+  return `${new Intl.NumberFormat('es-ES', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value)}%`;
 }
 
 function formatDate(value: string) {
@@ -42,6 +49,9 @@ export function MovementItem({
   const userName =
     movement.user?.full_name || movement.user?.username || getUserDisplayName(movement.user_uuid);
 
+  const hasProfit =
+    movement.profit_percentage != null || movement.profit_amount_usdt != null;
+
   return (
     <Card className="overflow-hidden">
       <CardContent className="space-y-3 p-4 sm:p-5">
@@ -53,6 +63,12 @@ export function MovementItem({
               </StatusBadge>
               <span className="truncate text-sm font-medium text-foreground">{userName}</span>
             </div>
+            {movement.client_name ? (
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <User className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{movement.client_name}</span>
+              </p>
+            ) : null}
             <p className="text-xs text-muted-foreground">{formatDate(movement.movement_date)}</p>
           </div>
           {isRoot ? (
@@ -85,6 +101,31 @@ export function MovementItem({
               {formatUSDT(movement.amount_usdt)} USDT
             </p>
           </div>
+
+          {hasProfit ? (
+            <>
+              <div className="rounded-lg border border-border bg-muted/40 px-3 py-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Porcentaje
+                </p>
+                <p className="mt-1 font-mono text-sm text-foreground">
+                  {movement.profit_percentage != null
+                    ? formatPercentage(movement.profit_percentage)
+                    : '—'}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/40 px-3 py-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Ganancia
+                </p>
+                <p className="mt-1 font-mono text-sm text-emerald-600 dark:text-emerald-400">
+                  {movement.profit_amount_usdt != null
+                    ? `${formatUSDT(movement.profit_amount_usdt)} USDT`
+                    : '—'}
+                </p>
+              </div>
+            </>
+          ) : null}
         </div>
 
         {movement.notes ? (
