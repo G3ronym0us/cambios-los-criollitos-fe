@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRightLeft, ChevronRight, Link2, Wallet } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, ChevronRight, Link2, Split, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -15,8 +15,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { paymentService } from '@/services/paymentService';
+import { formatNumber } from '@/utils/functions';
 import type { PaymentData } from '@/types/payment';
 import { LinkOperationPanel } from './LinkOperationPanel';
+import { PaymentAllocationsPanel } from './PaymentAllocationsPanel';
 
 interface IncomingPaymentActionDialogProps {
   payment: PaymentData | null;
@@ -25,7 +27,7 @@ interface IncomingPaymentActionDialogProps {
   onConverted: (payment: PaymentData) => void;
 }
 
-type Step = 'choose' | 'operation' | 'balance';
+type Step = 'choose' | 'operation' | 'allocations' | 'balance';
 
 // Métodos que liquidan en USD: los únicos que el backend acepta como crédito de saldo.
 const BALANCE_CURRENCIES = new Set(['USD', 'ZELLE', 'PAYPAL']);
@@ -47,6 +49,8 @@ export function IncomingPaymentActionDialog({ payment, onClose, onDone, onConver
   if (!payment) return null;
 
   const isLinked = !!payment.operation_uuid;
+  // Diferencia entre lo que llegó y lo repartido: es el aviso de "el pago dice 220 y la op 200".
+  const unassigned = payment.unassigned_amount ?? 0;
 
   const finish = () => {
     onDone();
@@ -88,7 +92,7 @@ export function IncomingPaymentActionDialog({ payment, onClose, onDone, onConver
   
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-lg">
+      <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-lg">
         {step === 'choose' ? (
           <>
             <DialogHeader>
@@ -116,6 +120,28 @@ export function IncomingPaymentActionDialog({ payment, onClose, onDone, onConver
                 </span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
               </button>
+              {isLinked || (payment.allocations_count ?? 0) > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setStep('allocations')}
+                  className={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition-colors ${
+                    unassigned > 0.01 ? 'border-amber-500/40 bg-amber-500/5' : 'border-border hover:bg-muted/50'
+                  }`}
+                >
+                  <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                    <Split className="h-4.5 w-4.5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium text-foreground">Repartir entre operaciones</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {unassigned > 0.01
+                        ? `Quedan ${formatNumber(unassigned)} ${payment.currency ?? ''} sin asignar a ninguna operación.`
+                        : 'Un mismo pago puede cubrir varios cambios (por ejemplo parte en BRL y parte en VES).'}
+                    </span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </button>
+              ) : null}
               {balanceEligible ? (
                 <button
                   type="button"
@@ -155,6 +181,25 @@ export function IncomingPaymentActionDialog({ payment, onClose, onDone, onConver
             <DialogFooter>
               <Button variant="outline" onClick={onClose}>Cancelar</Button>
             </DialogFooter>
+          </>
+        ) : step === 'allocations' ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Repartir el pago</DialogTitle>
+              <DialogDescription>
+                Qué parte de este comprobante respalda a cada operación. Lo que quede sin asignar
+                puede ir a otra operación o al saldo del cliente.
+              </DialogDescription>
+            </DialogHeader>
+            <PaymentAllocationsPanel
+              payment={payment}
+              onSaved={finish}
+              onCancel={() => setStep('choose')}
+              onCreditRest={(amount) => {
+                setBalanceAmount(String(amount));
+                setStep('balance');
+              }}
+            />
           </>
         ) : step === 'operation' ? (
           <>

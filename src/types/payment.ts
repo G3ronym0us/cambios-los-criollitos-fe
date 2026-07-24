@@ -50,8 +50,18 @@ export interface PaymentData {
   is_irrelevant?: number;
   irrelevant_description?: string | null;
   source_payment_id?: number | null;
+  // solo outgoing: cuánto del valor de su operación cubre, y a qué tasa quedó.
+  settled_amount?: number | null;
+  settled_rate?: number | null;
+  settled_reference_rate?: number | null;
   // solo incoming: depósito a fondo registrado desde este pago (inyectado por list_payments_page).
   deposit?: PaymentDeposit | null;
+  // solo incoming: reparto del pago entre operaciones (un Zelle puede cubrir varios cambios).
+  allocated_amount?: number;
+  allocations_count?: number;
+  unassigned_amount?: number;
+  // solo en el detalle de una op: cuánto de este pago le corresponde a ESA operación.
+  allocated_to_operation?: number | null;
   // solo outgoing: préstamo al cliente originado en este pago.
   loan?: PaymentLoanSummary | null;
 }
@@ -93,4 +103,51 @@ export interface PaymentDeposit {
   amount: number | null;
   currency: string | null;
   group_name: string | null;
+}
+
+// ---- Reparto de un pago entrante entre operaciones ----
+
+export interface PaymentAllocation {
+  uuid: string;
+  amount: number;
+  operation_uuid: string | null;
+  operation_status: OperationStatus | null;
+  pair_symbol: string | null;
+  from_amount: number | null;
+  from_currency: string | null;
+  to_amount: number | null;
+  to_currency: string | null;
+  rate_used: number | null;
+  created_by_username: string | null;
+  created_at: string | null;
+  // Comprobantes con los que se pagó esa operación.
+  paid_with: { id: number; amount: number | null; currency: string | null; reference: string | null }[];
+}
+
+export interface PaymentAllocationSummary {
+  payment_id: number;
+  amount: number;
+  currency: string | null;
+  client_phone: string | null;
+  assigned: number;
+  credited_to_balance: number;
+  unassigned: number;
+  allocations: PaymentAllocation[];
+}
+
+// Cuánto del valor de una operación cubriría un comprobante de salida.
+export interface OutgoingCoverage {
+  payment: { id: number; amount: number | null; currency: string | null };
+  operation_uuid: string;
+  value: number;
+  value_currency: string;
+  delivered: number;
+  pending: number;
+  reference_rate: number | null;
+  // Lo que da la tasa de referencia: 914,04 ÷ 4,5702 = 200.
+  suggested_settled_amount: number | null;
+  // Si se decide que cubre todo el pendiente: a qué tasa quedó y cuánto se aparta.
+  full_effective_rate: number | null;
+  full_rate_difference: number | null;
+  full_amount_difference: number | null;
 }

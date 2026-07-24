@@ -14,6 +14,18 @@ export interface OperationData {
   pair_symbol: string | null;
   from_currency: string | null;
   to_currency: string | null;
+  // Valor del trato: lo que entrega el cliente, con sus equivalentes.
+  amount: number | null;
+  currency: string | null;
+  // Cuánto cubren ya sus comprobantes de salida, y cuánto falta.
+  delivered_amount: number | null;
+  pending_amount: number | null;
+  amount_usdt: number | null;
+  usdt_rate: number | null;
+  bcv_amount: number | null;
+  bcv_rate: number | null;
+  valuation_at: string | null;
+  // Cotización prometida (par + montos + tasa).
   from_amount: number;
   to_amount: number;
   rate_used: number;

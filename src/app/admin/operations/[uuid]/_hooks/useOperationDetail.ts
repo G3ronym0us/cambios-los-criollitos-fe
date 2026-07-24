@@ -166,12 +166,12 @@ export function useOperationDetail(uuid: string) {
     return result;
   };
 
-  // Corrección retroactiva de una op COMPLETED (monto realmente cambiado);
-  // el backend acredita el excedente como saldo a favor y sincroniza la transacción.
-  const partialSettle = async (settleAmount: number) => {
-    const result = await operationService.partialSettle(uuid, settleAmount);
+  // Corrige cuánto vale el trato (sube y baja). El backend reescala la cotización, recorta el
+  // reparto de los entrantes si el valor baja y recalcula el estado con lo entregado.
+  const updateValue = async (amount: number) => {
+    const result = await operationService.updateValue(uuid, amount);
     if (result.success && result.data) {
-      setOperation(result.data.operation);
+      setOperation(result.data);
     }
     return result;
   };
@@ -192,7 +192,7 @@ export function useOperationDetail(uuid: string) {
     updatePair,
     updateFund,
     updateDetails,
-    partialSettle,
+    updateValue,
     markDelivered,
   };
 }

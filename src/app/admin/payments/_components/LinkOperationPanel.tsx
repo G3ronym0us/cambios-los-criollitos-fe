@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Link2Off, Plus, Search, Globe, Users, UserRound } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Link2Off, Plus, Search, Globe, Users, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import type { OperationData, OrphanAction, UnlinkPreview } from '@/types/operati
 import type { FundGroup } from '@/types/fund';
 import type { PaymentData, PaymentTable } from '@/types/payment';
 import { CreateOperationForm } from './CreateOperationForm';
+import { OutgoingCoveragePanel } from './OutgoingCoveragePanel';
 import { UnlinkOrphanDialog } from './UnlinkOrphanDialog';
 
 interface LinkOperationPanelProps {
@@ -24,6 +25,12 @@ interface LinkOperationPanelProps {
   onSuccess: () => void;
   onCancel: () => void;
   cancelLabel?: string;
+  /**
+   * Modo selector: en vez de vincular el pago, devuelve la operación elegida. Lo usa el
+   * reparto, que necesita el mismo buscador pero no toca el vínculo.
+   */
+  onPick?: (operation: OperationData) => void;
+  pickLabel?: string;
 }
 
 function stripPhone(phone: string | null) {
@@ -39,15 +46,14 @@ function samePhone(a: string | null, b: string | null) {
 type Scope = 'auto' | 'global';
 type StatusView = 'active' | 'completed';
 
-// Lados "from" que liquidan en USD y por lo tanto pueden acreditar excedente al saldo a favor.
-const USD_SIDES = new Set(['USD', 'ZELLE', 'PAYPAL']);
-
 export function LinkOperationPanel({
   payment,
   table,
   onSuccess,
   onCancel,
   cancelLabel = 'Cancelar',
+  onPick,
+  pickLabel = 'Elegir',
 }: LinkOperationPanelProps) {
   const [operations, setOperations] = useState<OperationData[]>([]);
   const [groups, setGroups] = useState<FundGroup[]>([]);
@@ -57,8 +63,9 @@ export function LinkOperationPanel({
   const [statusView, setStatusView] = useState<StatusView>('active');
   const [selected, setSelected] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [mode, setMode] = useState<'pick' | 'create'>('pick');
-  const [settleAmount, setSettleAmount] = useState('');
+  const [mode, setMode] = useState<'pick' | 'create' | 'coverage'>('pick');
+  // Cuánto del valor de la operación cubre este saliente (null = lo que da la tasa).
+  const [settledAmount, setSettledAmount] = useState<number | null>(null);
   // Desvincular el último comprobante de una op abre el cuadro de decisión.
   const [orphan, setOrphan] = useState<UnlinkPreview | null>(null);
 
@@ -105,10 +112,15 @@ export function LinkOperationPanel({
   // Operaciones según el alcance: por defecto las del cliente (o las del grupo si el pago es
   // a un grupo); con "Ver todas" se muestran todas. La operación ya vinculada siempre se incluye.
   const scoped = useMemo(() => {
-    // Ocultar operaciones que ya tienen un pago del mismo lado (entrante/saliente) vinculado,
-    // salvo la que ya está vinculada a ESTE pago (para poder verla / desvincular).
-    const takenKey = table === 'incoming' ? 'has_incoming_payment' : 'has_outgoing_payment';
-    const notTaken = (op: OperationData) => !op[takenKey] || op.uuid === payment.operation_uuid;
+    // Del lado saliente una operación admite varios comprobantes (cada uno cubre una parte
+    // del valor): se ocultan solo las que ya están cubiertas del todo. Del lado entrante sigue
+    // valiendo uno por operación — para financiarla con otro pago está el reparto.
+    const notTaken = (op: OperationData) => {
+      if (op.uuid === payment.operation_uuid) return true;
+      if (table === 'incoming') return !op.has_incoming_payment;
+      if (op.pending_amount != null) return op.pending_amount > 0.01;
+      return !op.has_outgoing_payment;
+    };
 
     if (scope === 'global') return operations.filter(notTaken);
 
@@ -185,31 +197,10 @@ export function LinkOperationPanel({
     return `Cotizaciones de ${who}`;
   })();
 
-  // Liquidación parcial: solo al vincular un SALIENTE a una op activa cuyo lado origen
-  // liquida en USD. El operador indica cuánto cambió realmente el cliente; el resto de
-  // la op se acredita como saldo a favor al completar.
   const selectedOp = useMemo(
     () => operations.find((op) => op.uuid === selected) ?? null,
     [operations, selected],
   );
-  const canPartial =
-    table === 'outgoing' &&
-    !!selectedOp &&
-    USD_SIDES.has((selectedOp.from_currency || '').toUpperCase()) &&
-    (selectedOp.status === 'QUOTED' || selectedOp.status === 'PENDING');
-
-  const settleValue = parseFloat(settleAmount.replace(',', '.'));
-  const settleValid =
-    !Number.isNaN(settleValue) && settleValue > 0 && selectedOp != null && settleValue < selectedOp.from_amount - 0.01;
-  const surplus =
-    canPartial && settleValid && selectedOp
-      ? Math.round((selectedOp.from_amount - settleValue) * 100) / 100
-      : null;
-  const settleBlocking = canPartial && settleAmount.trim() !== '' && !settleValid;
-
-  useEffect(() => {
-    setSettleAmount('');
-  }, [selected]);
 
   const doLink = async (
     operationUuid: string | null,
@@ -227,21 +218,16 @@ export function LinkOperationPanel({
       }
     }
     setSubmitting(true);
-    const settle = operationUuid && surplus !== null ? settleValue : null;
     const res = await paymentService.linkOperation(
       table,
       payment.id,
       operationUuid,
-      settle,
       orphanDecision ? { action: orphanDecision.action, note: orphanDecision.note } : undefined,
+      operationUuid && table === 'outgoing' ? settledAmount : null,
     );
     setSubmitting(false);
     if (res.success) {
-      if (settle !== null && surplus !== null) {
-        toast.success(
-          `Operación completada por ${formatNumber(settle)} — ${formatNumber(surplus)} USD acreditados como saldo a favor`,
-        );
-      } else if (orphanDecision?.action === 'DELETE_OPERATION') {
+      if (orphanDecision?.action === 'DELETE_OPERATION') {
         toast.success('Pago desvinculado y operación borrada con su transacción');
       } else if (orphanDecision?.action === 'KEEP') {
         toast.success('Pago desvinculado — la operación queda registrada sin pago asociado');
@@ -263,6 +249,40 @@ export function LinkOperationPanel({
         onSuccess={onSuccess}
         onBack={() => setMode('pick')}
       />
+    );
+  }
+
+  if (mode === 'coverage' && selectedOp) {
+    const client = selectedOp.client_display_name || stripPhone(selectedOp.client_phone) || 'Cliente';
+    return (
+      <>
+        <div className="rounded-lg border border-border bg-muted/40 px-3 py-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-sm font-medium text-foreground">{client}</span>
+            <span className="shrink-0 text-xs text-muted-foreground">{selectedOp.pair_symbol}</span>
+          </div>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Cotizado {formatNumber(selectedOp.from_amount)} {selectedOp.from_currency} →{' '}
+            {formatNumber(selectedOp.to_amount)} {selectedOp.to_currency}
+          </p>
+        </div>
+
+        <OutgoingCoveragePanel
+          paymentId={payment.id}
+          operationUuid={selectedOp.uuid}
+          onChange={setSettledAmount}
+        />
+
+        <DialogFooter className="gap-2 sm:justify-between">
+          <Button variant="ghost" onClick={() => setMode('pick')} disabled={submitting}>
+            <ArrowLeft className="h-4 w-4" />
+            Volver
+          </Button>
+          <Button onClick={() => doLink(selectedOp.uuid)} disabled={submitting}>
+            {submitting ? 'Guardando…' : 'Vincular'}
+          </Button>
+        </DialogFooter>
+      </>
     );
   }
 
@@ -344,13 +364,13 @@ export function LinkOperationPanel({
         </div>
       ) : null}
 
-      <div className="-mx-1 flex-1 space-y-2 overflow-y-auto px-1 py-1">
+      <div className="-mx-1 min-h-0 flex-1 space-y-2 overflow-y-auto px-1 py-1">
         {loading ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Cargando operaciones…</p>
         ) : filtered.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
             {table === 'outgoing' && statusView === 'completed'
-              ? 'No hay operaciones completadas sin pago saliente en este alcance.'
+              ? 'No hay operaciones completadas con saldo por cubrir en este alcance.'
               : scope === 'global'
               ? 'Sin operaciones que coincidan.'
               : 'Sin cotizaciones en este alcance. Prueba "Ver todas".'}
@@ -377,7 +397,14 @@ export function LinkOperationPanel({
                   <span>
                     {formatNumber(op.from_amount)} {op.from_currency} → {formatNumber(op.to_amount)} {op.to_currency}
                   </span>
-                  <StatusBadge tone={statusMeta.tone} icon={statusMeta.icon}>{statusMeta.label}</StatusBadge>
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    {(op.delivered_amount ?? 0) > 0.01 && (op.pending_amount ?? 0) > 0.01 ? (
+                      <StatusBadge tone="warning">
+                        faltan {formatNumber(op.pending_amount ?? 0)} {op.currency ?? op.from_currency}
+                      </StatusBadge>
+                    ) : null}
+                    <StatusBadge tone={statusMeta.tone} icon={statusMeta.icon}>{statusMeta.label}</StatusBadge>
+                  </span>
                 </div>
               </button>
             );
@@ -385,57 +412,43 @@ export function LinkOperationPanel({
         )}
       </div>
 
-      {canPartial && selectedOp && (
-        <div className="space-y-1.5 rounded-lg border border-border bg-muted/40 p-3">
-          <label htmlFor="settle-amount" className="text-xs font-medium text-foreground">
-            Monto realmente cambiado ({selectedOp.from_currency}) — opcional
-          </label>
-          <Input
-            id="settle-amount"
-            type="text"
-            inputMode="decimal"
-            value={settleAmount}
-            onChange={(e) => setSettleAmount(e.target.value)}
-            placeholder={`${formatNumber(selectedOp.from_amount)} (todo)`}
-            className="h-10"
-          />
-          {surplus !== null ? (
-            <p className="text-xs text-muted-foreground">
-              La operación se completa por {formatNumber(settleValue)} {selectedOp.from_currency} y se
-              acreditan{' '}
-              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                {formatNumber(surplus)} USD
-              </span>{' '}
-              como saldo a favor del cliente.
-            </p>
-          ) : settleBlocking ? (
-            <p className="text-xs text-destructive">
-              Debe ser mayor a 0 y menor que {formatNumber(selectedOp.from_amount)}.
-            </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Si el cliente cambió menos del total, el resto queda como saldo a favor.
-            </p>
-          )}
-        </div>
-      )}
-
       <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-between">
-        <Button
-          variant="ghost"
-          onClick={() => doLink(null)}
-          disabled={submitting || !payment.operation_uuid}
-        >
-          <Link2Off className="h-4 w-4" />
-          Desvincular
-        </Button>
+        {onPick ? (
+          <span />
+        ) : (
+          <Button
+            variant="ghost"
+            onClick={() => doLink(null)}
+            disabled={submitting || !payment.operation_uuid}
+          >
+            <Link2Off className="h-4 w-4" />
+            Desvincular
+          </Button>
+        )}
         <div className="flex gap-2">
           <Button variant="outline" onClick={onCancel} disabled={submitting}>
             {cancelLabel}
           </Button>
-          <Button onClick={() => doLink(selected)} disabled={submitting || !selected || settleBlocking}>
-            {submitting ? 'Guardando…' : surplus !== null ? 'Vincular y acreditar' : 'Vincular'}
-          </Button>
+          {onPick ? (
+            <Button
+              onClick={() => {
+                const op = operations.find((o) => o.uuid === selected);
+                if (op) onPick(op);
+              }}
+              disabled={!selected}
+            >
+              {pickLabel}
+            </Button>
+          ) : table === 'outgoing' ? (
+            <Button onClick={() => setMode('coverage')} disabled={submitting || !selected}>
+              Continuar
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button onClick={() => doLink(selected)} disabled={submitting || !selected}>
+              {submitting ? 'Guardando…' : 'Vincular'}
+            </Button>
+          )}
         </div>
       </DialogFooter>
 

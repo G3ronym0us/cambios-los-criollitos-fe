@@ -60,9 +60,6 @@ const SCENARIO_LABELS = {
   VIA_PARTNER: 'Vía socio',
 } as const;
 
-// Lados "from" que liquidan en USD: solo estos pueden acreditar excedente al saldo a favor.
-const USD_SIDES = new Set(['USD', 'ZELLE', 'PAYPAL']);
-
 const NO_FUND_VALUE = '__no_fund__';
 
 function stripPhone(phone: string | null) {
@@ -131,6 +128,31 @@ function PaymentItem({
             {payment.amount != null ? formatNumber(payment.amount) : '—'} {payment.currency ?? ''}
           </p>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">{description}</p>
+          {/* Un mismo comprobante puede repartirse entre varias operaciones: aquí se ve
+              qué parte respalda a ESTA. */}
+          {incoming
+            && payment.allocated_to_operation != null
+            && payment.amount != null
+            && Math.abs(payment.allocated_to_operation - payment.amount) > 0.01 ? (
+            <p className="mt-1 truncate text-xs text-amber-600 dark:text-amber-400">
+              {formatNumber(payment.allocated_to_operation)} {payment.currency ?? ''} de este
+              comprobante son de esta operación
+            </p>
+          ) : null}
+          {/* Un saliente cubre una parte del valor del trato: a qué tasa quedó esa parte y
+              cuánto se aparta de la que se cotizó. */}
+          {!incoming && payment.settled_amount != null ? (
+            <p className="mt-1 truncate text-xs text-muted-foreground">
+              Cubre {formatNumber(payment.settled_amount)}
+              {payment.settled_rate ? ` · tasa ${formatNumber(payment.settled_rate)}` : ''}
+              {payment.settled_reference_rate && payment.settled_rate
+                && Math.abs(payment.settled_rate - payment.settled_reference_rate) > 0.0001 ? (
+                <span className="text-amber-600 dark:text-amber-400">
+                  {' '}(cotizada {formatNumber(payment.settled_reference_rate)})
+                </span>
+              ) : null}
+            </p>
+          ) : null}
           {payment.reference ? (
             <p className="mt-1 truncate text-xs text-muted-foreground">Ref. {payment.reference}</p>
           ) : null}
@@ -172,7 +194,7 @@ export default function OperationDetailPage() {
     reloadPayments,
     updateFund,
     updateDetails,
-    partialSettle,
+    updateValue,
     markDelivered,
   } = useOperationDetail(uuid);
   const [editOpen, setEditOpen] = useState(false);
@@ -230,17 +252,9 @@ export default function OperationDetailPage() {
   const operationNotes = operation.notes ? formatOperationNotes(operation.notes) : null;
   const selectedFund = funds.find((fund) => fund.uuid === selectedFundUuid);
 
-  // Corrección retroactiva: op COMPLETED con lado origen USD que se completó por el
-  // total cuando el cliente solo cambió una parte.
-  const canCorrect =
-    operation.status === 'COMPLETED' &&
-    USD_SIDES.has((operation.from_currency || '').toUpperCase());
-  const settleValue = parseFloat(settleAmount.replace(',', '.'));
-  const settleValid =
-    !Number.isNaN(settleValue) && settleValue > 0 && settleValue < operation.from_amount - 0.01;
-  const surplus = settleValid
-    ? Math.round((operation.from_amount - settleValue) * 100) / 100
-    : null;
+  // Corregir cuánto vale el trato. A diferencia de la corrección vieja, sube y baja.
+  const newValue = parseFloat(settleAmount.replace(',', '.'));
+  const newValueValid = !Number.isNaN(newValue) && newValue > 0;
 
   // Entrega de USD efectivo: PENDING → RECEIVED (una sola dirección).
   const confirmDelivered = async () => {
@@ -289,7 +303,7 @@ export default function OperationDetailPage() {
   const resolveOrphan = async (action: OrphanAction, note: string | null) => {
     if (!orphan) return;
     setResolvingOrphan(true);
-    const res = await paymentService.linkOperation(orphan.table, orphan.payment.id, null, null, {
+    const res = await paymentService.linkOperation(orphan.table, orphan.payment.id, null, {
       action,
       note,
     });
@@ -330,19 +344,18 @@ export default function OperationDetailPage() {
     }
   };
 
-  const saveSettle = async () => {
-    if (surplus === null) return;
+  const saveValue = async () => {
+    if (!newValueValid) return;
     setSavingSettle(true);
-    const result = await partialSettle(settleValue);
+    const result = await updateValue(newValue);
     setSavingSettle(false);
-    if (result.success && result.data) {
-      toast.success(
-        `Operación corregida — ${formatNumber(result.data.credited)} USD acreditados como saldo a favor (saldo: ${formatNumber(result.data.balance_after)})`,
-      );
+    if (result.success) {
+      toast.success(`Valor actualizado a ${formatNumber(newValue)} ${operation.currency ?? operation.from_currency}`);
       setCorrecting(false);
       setSettleAmount('');
+      reloadPayments();
     } else {
-      toast.error(result.error || 'No se pudo corregir la operación');
+      toast.error(result.error || 'No se pudo actualizar el valor');
     }
   };
 
@@ -477,35 +490,69 @@ export default function OperationDetailPage() {
       <Card>
         <CardContent className="flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div>
-            <p className="text-sm text-muted-foreground">Conversión acordada</p>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-xl font-semibold text-foreground sm:text-2xl">
-              <span>{formatNumber(operation.from_amount)} {operation.from_currency}</span>
-              <ArrowRight className="h-5 w-5 text-muted-foreground" />
-              <span>{formatNumber(operation.to_amount)} {operation.to_currency}</span>
+            {/* El valor del trato manda: es lo que entrega el cliente y sobre lo que se
+                contabiliza, sin importar en cuántas monedas se haya pagado. */}
+            <p className="text-sm text-muted-foreground">Valor de la operación</p>
+            <div className="mt-1 flex flex-wrap items-baseline gap-2 text-xl font-semibold text-foreground sm:text-2xl">
+              <span>
+                {formatNumber(operation.amount ?? operation.from_amount)}{' '}
+                {operation.currency ?? operation.from_currency}
+              </span>
+              {operation.amount_usdt != null ? (
+                <span className="text-sm font-normal text-muted-foreground">
+                  ≈ {formatNumber(operation.amount_usdt)} USDT
+                  {operation.bcv_amount != null
+                    ? ` · ${formatNumber(operation.bcv_amount)} USD BCV`
+                    : ''}
+                </span>
+              ) : null}
             </div>
+            {(operation.pending_amount ?? 0) > 0.01 ? (
+              <p className="mt-1 text-sm">
+                <span className="text-muted-foreground">Entregado </span>
+                <span className="font-medium text-foreground">
+                  {formatNumber(operation.delivered_amount ?? 0)} de{' '}
+                  {formatNumber(operation.amount ?? operation.from_amount)}
+                </span>
+                <span className="text-amber-600 dark:text-amber-400">
+                  {' '}· pendiente {formatNumber(operation.pending_amount ?? 0)}{' '}
+                  {operation.currency ?? operation.from_currency}
+                </span>
+              </p>
+            ) : null}
+            <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+              Cotizado: {formatNumber(operation.from_amount)} {operation.from_currency}
+              <ArrowRight className="h-3 w-3" />
+              {formatNumber(operation.to_amount)} {operation.to_currency}
+            </p>
           </div>
           <div className="flex items-center gap-3 sm:flex-col sm:items-end">
             <div className="sm:text-right">
-              <p className="text-sm text-muted-foreground">Tasa utilizada</p>
+              <p className="text-sm text-muted-foreground">Tasa cotizada</p>
               <p className="mt-1 text-lg font-semibold text-foreground">{formatNumber(operation.rate_used)}</p>
             </div>
-            {canCorrect && !correcting ? (
+            {!correcting ? (
               <Button
                 variant="ghost"
                 className="min-h-11 px-3"
-                onClick={() => setCorrecting(true)}
+                onClick={() => {
+                  setSettleAmount(String(operation.amount ?? operation.from_amount));
+                  setCorrecting(true);
+                }}
               >
                 <Undo2 className="h-4 w-4" />
-                Corregir monto
+                Editar valor
               </Button>
             ) : null}
           </div>
         </CardContent>
-        {canCorrect && correcting ? (
+        {correcting ? (
           <CardContent className="border-t px-4 pt-4 sm:px-6">
+            {/* El valor se corrige hacia arriba y hacia abajo: subirlo era imposible con la
+                corrección vieja, que solo sabía achicar la operación. */}
             <div className="space-y-2 rounded-lg bg-muted/60 p-3">
               <label htmlFor="settle-amount" className="text-sm font-medium text-foreground">
-                Monto realmente cambiado ({operation.from_currency})
+                Valor de la operación ({operation.currency ?? operation.from_currency})
               </label>
               <Input
                 id="settle-amount"
@@ -513,28 +560,41 @@ export default function OperationDetailPage() {
                 inputMode="decimal"
                 value={settleAmount}
                 onChange={(e) => setSettleAmount(e.target.value)}
-                placeholder={`Menor que ${formatNumber(operation.from_amount)}`}
+                placeholder={formatNumber(operation.amount ?? operation.from_amount)}
                 className="h-11"
                 autoFocus
               />
-              {surplus !== null ? (
+              {newValueValid && newValue !== (operation.amount ?? operation.from_amount) ? (
                 <p className="text-xs leading-5 text-muted-foreground">
-                  La operación (y su transacción) quedará en {formatNumber(settleValue)}{' '}
-                  {operation.from_currency} → {formatNumber(Math.round(settleValue * (operation.to_amount / operation.from_amount) * 100) / 100)}{' '}
-                  {operation.to_currency}, y se acreditarán{' '}
-                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                    {formatNumber(surplus)} USD
-                  </span>{' '}
-                  como saldo a favor del cliente.
+                  La cotización se reescala a{' '}
+                  {formatNumber(
+                    Math.round(newValue * (operation.to_amount / operation.from_amount) * 100) / 100,
+                  )}{' '}
+                  {operation.to_currency}.
+                  {newValue < (operation.amount ?? operation.from_amount) ? (
+                    <>
+                      {' '}Lo que sobre del comprobante quedará{' '}
+                      <span className="font-semibold text-amber-600 dark:text-amber-400">sin asignar</span>,
+                      para repartirlo a otra operación o acreditarlo al saldo.
+                    </>
+                  ) : (
+                    <>
+                      {' '}Faltará cubrir{' '}
+                      <span className="font-semibold text-amber-600 dark:text-amber-400">
+                        {formatNumber(
+                          Math.round((newValue - (operation.delivered_amount ?? 0)) * 100) / 100,
+                        )}{' '}
+                        {operation.currency ?? operation.from_currency}
+                      </span>{' '}
+                      con los pagos de salida.
+                    </>
+                  )}
                 </p>
-              ) : settleAmount.trim() !== '' ? (
-                <p className="text-xs text-destructive">
-                  Debe ser mayor a 0 y menor que {formatNumber(operation.from_amount)}.
-                </p>
+              ) : settleAmount.trim() !== '' && !newValueValid ? (
+                <p className="text-xs text-destructive">El valor debe ser mayor a 0.</p>
               ) : (
                 <p className="text-xs leading-5 text-muted-foreground">
-                  El resto del monto original se acredita como saldo a favor. Solo se puede
-                  corregir una vez por operación.
+                  Cuánto vale el trato para el cliente. Los pagos de salida dicen cómo se cubre.
                 </p>
               )}
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -551,10 +611,10 @@ export default function OperationDetailPage() {
                 </Button>
                 <Button
                   className="min-h-11"
-                  onClick={saveSettle}
-                  disabled={savingSettle || surplus === null}
+                  onClick={saveValue}
+                  disabled={savingSettle || !newValueValid}
                 >
-                  {savingSettle ? 'Corrigiendo…' : 'Corregir y acreditar'}
+                  {savingSettle ? 'Guardando…' : 'Guardar valor'}
                 </Button>
               </div>
             </div>

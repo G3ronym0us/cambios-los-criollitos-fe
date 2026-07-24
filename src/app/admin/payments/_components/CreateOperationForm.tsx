@@ -19,12 +19,13 @@ import { adminService } from '@/services/adminService';
 import { clientService } from '@/services/clientService';
 import { fundService } from '@/services/fundService';
 import { paymentService } from '@/services/paymentService';
+import { useConfirm } from '@/hooks/useConfirm';
 import { ratesService } from '@/services/ratesService';
 import type { CurrencyPairData } from '@/types/admin';
 import type { ExchangeRateResponse } from '@/types/currency';
 import type { FundGroup } from '@/types/fund';
 import type { PaymentData, PaymentTable } from '@/types/payment';
-import { formatAmountForInput, sanitizeAmountInput } from '@/utils/functions';
+import { formatAmountForInput, formatNumber, sanitizeAmountInput } from '@/utils/functions';
 
 interface CreateOperationFormProps {
   payment: PaymentData;
@@ -46,6 +47,7 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
   const [fundGroupUuid, setFundGroupUuid] = useState('');
   const [exchangeUserUuid, setExchangeUserUuid] = useState('');
   const [creating, setCreating] = useState(false);
+  const confirm = useConfirm();
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
 
@@ -205,6 +207,18 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
     setExchangeUserUuid(mgr?.user_uuid ?? '');
   }, [selectedGroup]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Cuánto vale el comprobante en la moneda del valor de la operación: si el pago es del lado
+  // origen, él mismo; si es del lado destino (un Pix en BRL), lo que da la tasa.
+  const paymentValueEquivalent = (() => {
+    if (payment.amount == null) return null;
+    const cur = (payment.currency || '').toUpperCase();
+    if (cur && cur === fromCur.toUpperCase()) return Number(payment.amount);
+    if (cur && cur === toCur.toUpperCase() && effectiveRate && effectiveRate > 0) {
+      return Number(payment.amount) / effectiveRate;
+    }
+    return null;
+  })();
+
   const submit = async () => {
     const fa = parseFloat(fromAmount.replace(',', '.'));
     const ta = parseFloat(toAmount.replace(',', '.'));
@@ -212,6 +226,31 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
     if (!Number.isFinite(fa) || fa <= 0 || !Number.isFinite(ta) || ta <= 0) {
       return toast.error('Ingresa montos válidos (> 0)');
     }
+
+    // El valor no cuadra con el comprobante: puede ser a propósito (el cliente cambia solo una
+    // parte, o este pago cubre menos de lo que vale el trato), pero nunca en silencio.
+    if (paymentValueEquivalent != null && Math.abs(fa - paymentValueEquivalent) > 0.01) {
+      const diff = Math.round(Math.abs(fa - paymentValueEquivalent) * 100) / 100;
+      const above = fa > paymentValueEquivalent;
+      const isIncoming = table === 'incoming';
+      const ok = await confirm({
+        title: above ? 'El valor supera al comprobante' : 'El valor es menor que el comprobante',
+        description:
+          `El comprobante de ${formatNumber(payment.amount ?? 0)} ${payment.currency ?? ''} ` +
+          `equivale a ${formatNumber(paymentValueEquivalent)} ${fromCur} y estás creando la ` +
+          `operación por ${formatNumber(fa)} ${fromCur}. ` +
+          (above
+            ? isIncoming
+              ? `Faltarán ${formatNumber(diff)} ${fromCur} por cubrir con otro pago.`
+              : `La tasa efectiva de este pago quedará en ${formatNumber((Number(payment.amount) || 0) / fa)}.`
+            : isIncoming
+              ? `Quedarán ${formatNumber(diff)} ${fromCur} del comprobante sin asignar: podrás repartirlos a otra operación o acreditarlos al saldo del cliente.`
+              : `La tasa efectiva de este pago quedará en ${formatNumber((Number(payment.amount) || 0) / fa)}.`),
+        confirmText: 'Crear así',
+      });
+      if (!ok) return;
+    }
+
     setCreating(true);
     const res = await paymentService.createOperation(table, payment.id, {
       fromCurrency: fromCur,
@@ -270,7 +309,7 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label htmlFor="op-from">Monto {fromCur || 'origen'}</Label>
+            <Label htmlFor="op-from">Valor {fromCur || 'origen'}</Label>
             <Input
               id="op-from"
               inputMode="decimal"
@@ -281,7 +320,7 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="op-to">Monto {toCur || 'destino'}</Label>
+            <Label htmlFor="op-to">Equivale a {toCur || 'destino'}</Label>
             <Input
               id="op-to"
               inputMode="decimal"

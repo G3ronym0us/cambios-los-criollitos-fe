@@ -1,7 +1,16 @@
 import { ApiResponse } from '@/types/auth';
 import { httpClient } from '@/utils/httpInterceptor';
 import type { LoanData } from '@/types/client';
-import type { LoanPreferredValue, LoanValuation, PaymentData, PaymentPage, PaymentQuery, PaymentTable } from '@/types/payment';
+import type {
+  LoanPreferredValue,
+  LoanValuation,
+  OutgoingCoverage,
+  PaymentAllocationSummary,
+  PaymentData,
+  PaymentPage,
+  PaymentQuery,
+  PaymentTable,
+} from '@/types/payment';
 import type { OrphanAction, UnlinkPreview } from '@/types/operation';
 
 export class PaymentService {
@@ -17,6 +26,37 @@ export class PaymentService {
     return { success: result.success, data: result.data, error: result.error };
   }
 
+  // Cuánto del valor de una operación cubriría este comprobante de salida.
+  async outgoingCoverage(
+    paymentId: number,
+    operationUuid: string,
+  ): Promise<ApiResponse<OutgoingCoverage>> {
+    const result = await httpClient.get<OutgoingCoverage>(
+      `/payments/outgoing/${paymentId}/coverage?operation_uuid=${operationUuid}`,
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  // Reparto de un pago entrante entre operaciones: qué cubre y qué queda sin asignar.
+  async getAllocations(paymentId: number): Promise<ApiResponse<PaymentAllocationSummary>> {
+    const result = await httpClient.get<PaymentAllocationSummary>(
+      `/payments/incoming/${paymentId}/allocations`,
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  // Reemplaza el reparto completo (la suma no puede pasarse del monto del pago).
+  async setAllocations(
+    paymentId: number,
+    allocations: { operation_uuid: string; amount: number }[],
+  ): Promise<ApiResponse<PaymentAllocationSummary>> {
+    const result = await httpClient.put<PaymentAllocationSummary>(
+      `/payments/incoming/${paymentId}/allocations`,
+      { allocations },
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
   // Qué dejaría atrás desvincular este pago (¿su operación se queda sin comprobantes?).
   async unlinkPreview(table: PaymentTable, paymentId: number): Promise<ApiResponse<UnlinkPreview>> {
     const result = await httpClient.get<UnlinkPreview>(
@@ -26,24 +66,23 @@ export class PaymentService {
   }
 
   // Vincula (operationUuid) o desvincula (null) un pago a una operación.
-  // settleAmount (solo salientes): monto USD realmente cambiado; la op se
-  // redimensiona y el excedente se acredita como saldo a favor al completar.
+  // settledAmount (solo salientes): cuánto del valor de la operación cubre este comprobante.
   // orphan (solo al desvincular el último pago): qué hacer con la operación que queda
   // sin respaldo — sin esto el backend responde 409.
   async linkOperation(
     table: PaymentTable,
     paymentId: number,
     operationUuid: string | null,
-    settleAmount?: number | null,
     orphan?: { action: OrphanAction; note?: string | null },
+    settledAmount?: number | null,
   ): Promise<ApiResponse<PaymentData>> {
     const result = await httpClient.patch<PaymentData>(
       `/payments/${table}/${paymentId}/operation`,
       {
         operation_uuid: operationUuid,
-        settle_amount: settleAmount ?? null,
         orphan_action: orphan?.action ?? null,
         orphan_note: orphan?.note ?? null,
+        settled_amount: settledAmount ?? null,
       },
     );
     return { success: result.success, data: result.data, error: result.error };

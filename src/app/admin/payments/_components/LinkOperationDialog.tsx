@@ -20,7 +20,7 @@ interface LinkOperationDialogProps {
 export function LinkOperationDialog({ payment, table, onClose, onLinked }: LinkOperationDialogProps) {
   return (
     <Dialog open={payment !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-lg">
+      <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Vincular a operación</DialogTitle>
           <DialogDescription>

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Banknote, Eye, FileText, Forward, HandCoins, IdCard, Link2, Link2Off, PiggyBank, Tag, Users, Wallet } from 'lucide-react';
+import { Banknote, Eye, FileText, Forward, HandCoins, IdCard, Link2, Link2Off, PiggyBank, Split, Tag, Users, Wallet } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -116,6 +116,18 @@ export function PaymentItem({ payment: p, outgoing, onLink, onViewRawText, onSav
             )}
             {outgoing && p.source_payment_id ? (
               <StatusBadge tone="info" icon={Forward}>Reenvío</StatusBadge>
+            ) : null}
+            {/* El comprobante trae más de lo que cubren sus operaciones: hay que asignarlo
+                a otro cambio o acreditarlo al saldo del cliente. */}
+            {!outgoing && (p.unassigned_amount ?? 0) > 0.01 ? (
+              <StatusBadge tone="warning" icon={Split}>
+                {formatNumber(p.unassigned_amount ?? 0)} sin asignar
+              </StatusBadge>
+            ) : null}
+            {!outgoing && (p.allocations_count ?? 0) > 1 ? (
+              <StatusBadge tone="info" icon={Split}>
+                Reparto en {p.allocations_count} ops
+              </StatusBadge>
             ) : null}
           </div>
           <div className="flex items-center gap-2">

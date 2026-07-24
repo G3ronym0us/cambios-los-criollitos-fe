@@ -321,7 +321,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         className={cn(
-          'flex max-h-[85vh] flex-col',
+          'flex max-h-[85vh] flex-col overflow-hidden',
           step === 'loan' ? 'sm:max-w-2xl' : 'sm:max-w-lg',
         )}
       >

@@ -131,7 +131,7 @@ export function LinkPaymentDialog({ operation, open, onClose, onLinked }: LinkPa
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-lg">
+      <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Vincular pago a la operación</DialogTitle>
           <DialogDescription>
