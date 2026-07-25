@@ -1,25 +1,17 @@
 'use client';
 
-import { Wallet } from 'lucide-react';
+import { Plus, Wallet } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { AddMemberDialog } from './_components/AddMemberDialog';
-import { BalanceCards } from './_components/BalanceCards';
-import { CreateGroupDialog } from './_components/CreateGroupDialog';
-import { EditGroupDialog } from './_components/EditGroupDialog';
-import { EditMemberDialog } from './_components/EditMemberDialog';
-import { GroupSelector } from './_components/GroupSelector';
-import { MemberPositionsList } from './_components/MemberPositionsList';
-import { MembersList } from './_components/MembersList';
-import { MovementsFilters } from './_components/MovementsFilters';
-import { MovementsList } from './_components/MovementsList';
-import { PendingDepositsList } from './_components/PendingDepositsList';
-import { RegisterMovementDialog } from './_components/RegisterMovementDialog';
-import { useFunds } from './_hooks/useFunds';
+import { FundDialogs } from './_components/FundDialogs';
+import { GroupSummary } from './_components/GroupSummary';
+import { GroupsList } from './_components/GroupsList';
+import { useFundGroups } from './_hooks/useFundGroups';
 
-export default function FundsAdminPage() {
-  const { state, actions } = useFunds();
+export default function FundsListPage() {
+  const { resources, mutations, state, actions } = useFundGroups();
 
   if (state.loadingGroups) {
     return <LoadingState label="Cargando fondos..." fullHeight />;
@@ -29,10 +21,18 @@ export default function FundsAdminPage() {
     <div className="space-y-6">
       <PageHeader
         title="Fondos"
-        description="Gestión de posiciones y movimientos de fondos físicos."
+        description="Grupos de fondos físicos y sus posiciones."
+        actions={
+          state.isModeratorOrAbove ? (
+            <Button size="lg" onClick={mutations.actions.openCreateGroup}>
+              <Plus className="h-4 w-4" />
+              Nuevo grupo
+            </Button>
+          ) : undefined
+        }
       />
 
-      {state.groups.length === 0 ? (
+      {!state.hasGroups ? (
         <EmptyState
           icon={Wallet}
           title="No hay grupos de fondos"
@@ -41,119 +41,40 @@ export default function FundsAdminPage() {
               ? 'Crea tu primer grupo para empezar a registrar movimientos.'
               : 'Espera a que un moderador cree un grupo para verlo aquí.'
           }
+          actions={
+            state.isModeratorOrAbove ? (
+              <Button onClick={mutations.actions.openCreateGroup}>
+                <Plus className="h-4 w-4" />
+                Nuevo grupo
+              </Button>
+            ) : undefined
+          }
         />
       ) : (
         <>
-          <GroupSelector
-            groups={state.groups}
-            selectedGroupUuid={state.selectedGroupUuid}
-            isModeratorOrAbove={state.isModeratorOrAbove}
-            onSelect={actions.setSelectedGroupUuid}
-            onNewGroup={actions.openCreateGroup}
-            onEditGroup={actions.openEditGroup}
-            onAddMember={actions.openAddMember}
-            onRegisterMovement={actions.openRegisterMovement}
+          <GroupSummary
+            activeCount={state.summary.activeCount}
+            totalPosition={state.summary.totalPosition}
+            totalMembers={state.summary.totalMembers}
+            loadingPosition={state.loadingBalances}
           />
 
-          <BalanceCards balance={state.groupBalance} loading={state.loadingBalance} />
-
-          {state.groupBalance ? (
-            <MemberPositionsList members={state.groupBalance.by_member} />
-          ) : null}
-
-          {state.isModeratorOrAbove ? (
-            <>
-              <PendingDepositsList
-                groupUuid={state.selectedGroupUuid || null}
-                availableUsers={state.availableUsers}
-                onConfirmed={actions.reloadGroupData}
-              />
-
-              <MembersList
-                members={state.selectedGroupMembers}
-                canEdit={state.isModeratorOrAbove}
-                onEdit={actions.openEditMember}
-              />
-
-              <MovementsFilters
-                filters={state.movementFilters}
-                hasActiveFilters={state.hasActiveFilters}
-                onChange={actions.setMovementFilters}
-                onReset={actions.resetFilters}
-              />
-
-              <MovementsList
-                movements={state.movements}
-                loading={state.loadingMovements}
-                isRoot={state.isRoot}
-                page={state.movementsPage}
-                totalPages={state.totalMovementsPages}
-                total={state.movementsTotal}
-                getUserDisplayName={actions.getUserDisplayName}
-                onDelete={actions.handleDeleteMovement}
-                onPageChange={actions.setMovementsPage}
-              />
-            </>
-          ) : null}
+          <GroupsList
+            groups={state.filteredGroups}
+            balances={state.balances}
+            loadingBalances={state.loadingBalances}
+            isModeratorOrAbove={state.isModeratorOrAbove}
+            search={state.search}
+            statusFilter={state.statusFilter}
+            onSearch={actions.setSearch}
+            onStatusFilter={actions.setStatusFilter}
+            onAddMember={(g) => mutations.actions.openAddMember(g.uuid)}
+            onEditGroup={mutations.actions.openEditGroup}
+          />
         </>
       )}
 
-      <CreateGroupDialog
-        open={state.showCreateGroup}
-        value={state.createGroupForm}
-        currencies={state.availableCurrencies}
-        groupClients={state.availableGroupClients}
-        error={state.formError}
-        submitting={state.formLoading}
-        onChange={actions.setCreateGroupForm}
-        onSubmit={actions.handleCreateGroup}
-        onCancel={actions.closeCreateGroup}
-      />
-
-      <EditGroupDialog
-        open={state.showEditGroup}
-        group={state.selectedGroup ?? null}
-        value={state.editGroupForm}
-        groupClients={state.availableGroupClients}
-        error={state.formError}
-        submitting={state.formLoading}
-        onChange={actions.setEditGroupForm}
-        onSubmit={actions.handleUpdateGroup}
-        onCancel={actions.closeEditGroup}
-      />
-
-      <AddMemberDialog
-        open={state.showAddMember}
-        value={state.addMemberForm}
-        availableUsers={state.availableUsers}
-        error={state.formError}
-        submitting={state.formLoading}
-        onChange={actions.setAddMemberForm}
-        onSubmit={actions.handleAddMember}
-        onCancel={actions.closeAddMember}
-      />
-
-      <EditMemberDialog
-        open={state.showEditMember}
-        member={state.editMemberTarget}
-        value={state.editMemberForm}
-        error={state.formError}
-        submitting={state.formLoading}
-        onChange={actions.setEditMemberForm}
-        onSubmit={actions.handleUpdateMember}
-        onCancel={actions.closeEditMember}
-      />
-
-      <RegisterMovementDialog
-        open={state.showRegisterMovement}
-        value={state.movementForm}
-        availableUsers={state.availableUsers}
-        error={state.formError}
-        submitting={state.formLoading}
-        onChange={actions.setMovementForm}
-        onSubmit={actions.handleRegisterMovement}
-        onCancel={actions.closeRegisterMovement}
-      />
+      <FundDialogs mutations={mutations} resources={resources} />
     </div>
   );
 }

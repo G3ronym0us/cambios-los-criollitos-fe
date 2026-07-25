@@ -1,4 +1,5 @@
 import Cookies from 'js-cookie';
+import { normalizeErrorDetail } from './apiError';
 
 export interface HttpResponse<T = unknown> {
   success: boolean;
@@ -105,7 +106,10 @@ export class HttpInterceptor {
             };
           }
 
-          errorMessage = errorData.detail || errorData.message || errorMessage;
+          // `detail` puede ser string (errores propios) o un array de objetos
+          // (validación 422 de FastAPI). Se normaliza SIEMPRE a string para no
+          // pasarle un objeto a la UI (toast/React no renderizan objetos).
+          errorMessage = normalizeErrorDetail(errorData, errorMessage);
         } catch {
           // Si no se puede parsear el error, usar el status
           errorMessage = `Error ${response.status}: ${response.statusText}`;

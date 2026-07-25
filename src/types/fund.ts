@@ -42,11 +42,17 @@ export interface FundMovement {
   uuid: string;
   group_uuid: string;
   user_uuid: string;
-  user: {
+  // Gestor/moderador del movimiento: el backend lo envía plano en `username`
+  // (no como objeto anidado). `user` queda como legacy opcional.
+  username?: string | null;
+  user?: {
     uuid: string;
     username: string;
     full_name?: string;
   };
+  // Quién registró el movimiento (puede diferir del gestor).
+  recorded_by_uuid?: string | null;
+  recorded_by_username?: string | null;
   movement_type: MovementType;
   amount: number;
   currency: string;

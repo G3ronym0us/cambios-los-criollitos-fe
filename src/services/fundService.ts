@@ -17,6 +17,7 @@ import {
 } from '@/types/fund';
 import { ApiResponse } from '@/types/auth';
 import { httpClient } from '@/utils/httpInterceptor';
+import { buildMovementsQuery } from './fundMovementsQuery';
 
 export class FundService {
   async getGroups(activeOnly = true): Promise<ApiResponse<FundGroup[]>> {
@@ -68,14 +69,7 @@ export class FundService {
     groupUuid: string,
     filters: FundMovementFilters = {}
   ): Promise<ApiResponse<FundMovementsResponse>> {
-    const params = new URLSearchParams();
-    if (filters.movement_type) params.append('movement_type', filters.movement_type);
-    if (filters.date_from) params.append('date_from', filters.date_from);
-    if (filters.date_to) params.append('date_to', filters.date_to);
-    if (filters.page) params.append('page', filters.page.toString());
-    if (filters.per_page) params.append('per_page', filters.per_page.toString());
-
-    const queryString = params.toString();
+    const queryString = buildMovementsQuery(filters);
     const endpoint = queryString
       ? `/funds/groups/${groupUuid}/movements?${queryString}`
       : `/funds/groups/${groupUuid}/movements`;
