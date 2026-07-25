@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 import {
   Select,
   SelectContent,
@@ -141,6 +142,24 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
   const effectiveRate = activeRate
     ? activeRate.inverse_percentage ? 1 / activeRate.rate : activeRate.rate
     : null;
+
+  /**
+   * El margen que sale de lo escrito: la tasa a la que se le está pagando al cliente contra
+   * la tasa base del par. Es el mismo cálculo que hace el backend al crear la operación
+   * (`implied_margin`), así que lo que se ve aquí es lo que va a quedar registrado.
+   */
+  const impliedMargin = (() => {
+    if (!activeRate) return null;
+    const from = Number(fromAmount);
+    const to = Number(toAmount);
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from <= 0 || to <= 0) return null;
+    const baseRate = activeRate.base_rate ?? activeRate.rate;
+    if (!baseRate || baseRate <= 0) return null;
+    const baseEffective = activeRate.inverse_percentage ? 1 / baseRate : baseRate;
+    if (!Number.isFinite(baseEffective) || baseEffective <= 0) return null;
+    const margin = (1 - to / from / baseEffective) * 100;
+    return Number.isFinite(margin) ? Math.round(margin * 100) / 100 : null;
+  })();
 
   const creationStatus = table === 'incoming'
     ? { label: 'Pendiente', detail: 'Se completará al vincular el pago saliente.' }
@@ -352,6 +371,26 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
                   ? `1 ${fromCur} = ${effectiveRate.toLocaleString('es-VE', { maximumFractionDigits: 6 })} ${toCur}. Al modificar un monto, el otro se recalcula automáticamente.`
                   : 'Puedes indicar ambos montos manualmente.'}
               </p>
+              {impliedMargin !== null ? (
+                <p className="pt-0.5 text-muted-foreground">
+                  Margen que se registrará:{' '}
+                  <span
+                    className={cn(
+                      'font-mono font-semibold tabular-nums',
+                      impliedMargin < 0
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : impliedMargin === 0
+                          ? 'text-foreground'
+                          : 'text-emerald-600 dark:text-emerald-400',
+                    )}
+                  >
+                    {impliedMargin.toLocaleString('es-VE', { maximumFractionDigits: 2 })}%
+                  </span>
+                  {impliedMargin < 0
+                    ? ' — le estás pagando por encima de la tasa, la operación va a perder'
+                    : ''}
+                </p>
+              ) : null}
             </div>
           </div>
         ) : null}
