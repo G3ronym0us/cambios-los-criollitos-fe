@@ -6,6 +6,8 @@ import {
   OperationListResponse,
   OperationStatus,
   OperationStats,
+  ProfitAllocationInput,
+  ProfitAllocationList,
 } from '@/types/operation';
 import type { PaymentData } from '@/types/payment';
 
@@ -85,6 +87,24 @@ export class OperationService {
   }
 
   // Corrige cuánto vale el trato (sube y baja).
+  async getProfitAllocations(uuid: string): Promise<ApiResponse<ProfitAllocationList>> {
+    const result = await httpClient.get<ProfitAllocationList>(
+      `/operations/${uuid}/profit-allocations`,
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  async setProfitAllocations(
+    uuid: string,
+    allocations: ProfitAllocationInput[],
+  ): Promise<ApiResponse<ProfitAllocationList>> {
+    const result = await httpClient.put<ProfitAllocationList>(
+      `/operations/${uuid}/profit-allocations`,
+      { allocations },
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
   async updateValue(uuid: string, amount: number): Promise<ApiResponse<OperationData>> {
     const result = await httpClient.patch<OperationData>(`/operations/${uuid}/value`, { amount });
     return { success: result.success, data: result.data, error: result.error };

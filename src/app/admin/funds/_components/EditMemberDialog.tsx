@@ -10,6 +10,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import type { FundGroupMemberFlat, UpdateFundMember } from '@/types/fund';
 
@@ -67,6 +69,31 @@ export function EditMemberDialog({
               onCheckedChange={(checked) => onChange({ ...value, is_fund_manager: checked })}
             />
           </label>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-member-share">Parte de la ganancia (%)</Label>
+            <Input
+              id="edit-member-share"
+              type="number"
+              inputMode="decimal"
+              step="5"
+              min={0}
+              max={100}
+              value={value.profit_share_percentage ?? ''}
+              onChange={(e) =>
+                onChange({
+                  ...value,
+                  profit_share_percentage: e.target.value === '' ? null : Number(e.target.value),
+                })
+              }
+              placeholder="Ej: 50"
+              className="h-10"
+            />
+            <p className="text-xs text-muted-foreground">
+              Qué porción de la ganancia del fondo le toca. Entre todos los socios debe sumar
+              100%.
+            </p>
+          </div>
 
           <div className="rounded-lg border border-border bg-muted/40 px-3 py-2">
             <p className="text-sm font-medium text-foreground">WhatsApp del socio</p>

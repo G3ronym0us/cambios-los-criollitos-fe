@@ -43,6 +43,9 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { cn } from '@/lib/utils';
 import { formatCaracasDateTime, formatNumber } from '@/utils/functions';
 import { getStatusMeta } from '@/utils/operationStatus';
+import { useAuth } from '@/contexts/AuthContext';
+import { Role } from '@/utils/enums';
+import { ProfitAllocationCard } from './_components/ProfitAllocationCard';
 import { operationService } from '@/services/operationService';
 import { paymentService } from '@/services/paymentService';
 import { useConfirm } from '@/hooks/useConfirm';
@@ -197,6 +200,8 @@ export default function OperationDetailPage() {
     updateValue,
     markDelivered,
   } = useOperationDetail(uuid);
+  const { user } = useAuth();
+  const isModeratorOrAbove = user?.role === Role.MODERATOR || user?.role === Role.ROOT;
   const [editOpen, setEditOpen] = useState(false);
   const [linkPaymentOpen, setLinkPaymentOpen] = useState(false);
   const [editingFund, setEditingFund] = useState(false);
@@ -891,6 +896,14 @@ export default function OperationDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          <ProfitAllocationCard
+            operationUuid={operation.uuid}
+            clientUuid={operation.client_uuid}
+            clientName={client}
+            funds={funds}
+            canEdit={isModeratorOrAbove}
+          />
 
           <Card>
             <CardHeader className="border-b">

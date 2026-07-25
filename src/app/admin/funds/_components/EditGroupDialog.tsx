@@ -108,6 +108,32 @@ export function EditGroupDialog({
             </p>
           </div>
 
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-group-profit">Ganancia del fondo (%)</Label>
+            <Input
+              id="edit-group-profit"
+              type="number"
+              inputMode="decimal"
+              step="0.5"
+              min={0}
+              max={99}
+              value={value.default_profit_percentage ?? ''}
+              onChange={(e) =>
+                onChange({
+                  ...value,
+                  default_profit_percentage: e.target.value === '' ? null : Number(e.target.value),
+                })
+              }
+              placeholder="Ej: 7"
+              className="h-10"
+            />
+            <p className="text-xs text-muted-foreground">
+              Cuánto se queda el fondo de lo que se le cobra al cliente. Si se cobró 8% y aquí
+              dice 7, el 1% restante queda sin asignar en cada operación. Vacío = el fondo se
+              queda con todo lo cobrado.
+            </p>
+          </div>
+
           {error ? (
             <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}

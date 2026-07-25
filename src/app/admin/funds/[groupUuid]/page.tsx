@@ -13,6 +13,7 @@ import { FundsBreadcrumb } from '../_components/FundsBreadcrumb';
 import { MemberPositionsList } from '../_components/MemberPositionsList';
 import { MembersList } from '../_components/MembersList';
 import { MovementsPreview } from '../_components/MovementsPreview';
+import { ProfitConfigCard } from '../_components/ProfitConfigCard';
 import { PendingDepositsList } from '../_components/PendingDepositsList';
 import { useFundGroupDetail } from '../_hooks/useFundGroupDetail';
 import { avatarClass, initialOf } from '../_lib/format';
@@ -109,6 +110,13 @@ export default function FundGroupDetailPage() {
       ) : null}
 
       {state.balance ? <MemberPositionsList members={state.balance.by_member} /> : null}
+
+      <ProfitConfigCard
+        group={group}
+        members={state.members}
+        canEdit={state.isModeratorOrAbove}
+        onEditGroup={() => mutations.actions.openEditGroup(group)}
+      />
 
       {state.isModeratorOrAbove ? (
         <MembersList

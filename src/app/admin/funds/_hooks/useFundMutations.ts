@@ -115,7 +115,10 @@ export function useFundMutations({
   const openEditGroup = useCallback((group: FundGroup) => {
     setTargetGroupUuid(group.uuid);
     setEditGroupTarget(group);
-    setEditGroupForm({ whatsapp_group_jid: group.whatsapp_group_jid ?? null });
+    setEditGroupForm({
+      whatsapp_group_jid: group.whatsapp_group_jid ?? null,
+      default_profit_percentage: group.default_profit_percentage ?? null,
+    });
     setFormError('');
     setShowEditGroup(true);
   }, []);
@@ -133,10 +136,18 @@ export function useFundMutations({
       setFormError('El JID debe terminar en @g.us');
       return;
     }
+    const profit = editGroupForm.default_profit_percentage;
+    if (profit != null && (profit < 0 || profit > 99)) {
+      setFormError('La ganancia del fondo va entre 0 y 99%');
+      return;
+    }
     setFormLoading(true);
-    const payload: UpdateFundGroup = jid
-      ? { whatsapp_group_jid: jid }
-      : { clear_whatsapp_group_jid: true };
+    const payload: UpdateFundGroup = {
+      ...(jid ? { whatsapp_group_jid: jid } : { clear_whatsapp_group_jid: true }),
+      ...(profit != null
+        ? { default_profit_percentage: profit }
+        : { clear_default_profit_percentage: true }),
+    };
     const result = await fundService.updateGroup(targetGroupUuid, payload);
     setFormLoading(false);
     if (result.success) {
@@ -185,6 +196,7 @@ export function useFundMutations({
       setEditMemberTarget(member);
       setEditMemberForm({
         is_fund_manager: member.is_fund_manager,
+        profit_share_percentage: member.profit_share_percentage ?? null,
         whatsapp_phone: member.whatsapp_phone ?? null,
       });
       setFormError('');
@@ -203,8 +215,14 @@ export function useFundMutations({
     setFormError('');
     setFormLoading(true);
     const phone = (editMemberForm.whatsapp_phone ?? '').trim() || null;
+    const share = editMemberForm.profit_share_percentage;
+    if (share != null && (share < 0 || share > 100)) {
+      setFormError('La parte de la ganancia va entre 0 y 100%');
+      return;
+    }
     const payload: UpdateFundMember = {
       is_fund_manager: editMemberForm.is_fund_manager,
+      ...(share != null ? { profit_share_percentage: share } : {}),
       ...(phone ? { whatsapp_phone: phone } : { clear_whatsapp_phone: true }),
     };
     const result = await fundService.updateMember(

@@ -1,6 +1,6 @@
 'use client';
 
-import { UserCog, Phone, ShieldCheck } from 'lucide-react';
+import { UserCog, Percent, Phone, ShieldCheck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -47,6 +47,12 @@ export function MembersList({ members, canEdit, onEdit }: MembersListProps) {
                       <Badge variant="secondary" className="gap-1">
                         <ShieldCheck className="h-3 w-3" />
                         Gestor
+                      </Badge>
+                    ) : null}
+                    {(member.profit_share_percentage ?? 0) > 0 ? (
+                      <Badge variant="outline" className="gap-1 tabular-nums">
+                        <Percent className="h-3 w-3" />
+                        {member.profit_share_percentage} de la ganancia
                       </Badge>
                     ) : null}
                   </div>

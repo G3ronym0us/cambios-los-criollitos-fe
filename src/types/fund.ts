@@ -11,6 +11,8 @@ export interface FundGroupMemberFlat {
   user_uuid: string;
   username: string | null;
   is_fund_manager: boolean;
+  /** Parte de la ganancia del fondo que le toca (los socios del grupo suman 100). */
+  profit_share_percentage?: number | null;
   whatsapp_phone?: string | null;
 }
 
@@ -22,6 +24,8 @@ export interface FundGroup {
   created_at: string;
   currency?: string;
   whatsapp_group_jid?: string | null;
+  /** Cuánto del margen cobrado al cliente se queda el fondo. null = todo lo cobrado. */
+  default_profit_percentage?: number | null;
   members?: FundGroupMemberFlat[];
 }
 
@@ -127,16 +131,20 @@ export interface CreateFundGroup {
 export interface UpdateFundGroup {
   whatsapp_group_jid?: string | null;
   clear_whatsapp_group_jid?: boolean;
+  default_profit_percentage?: number | null;
+  clear_default_profit_percentage?: boolean;
 }
 
 export interface AddFundMember {
   user_uuid: string;
   is_fund_manager?: boolean;
+  profit_share_percentage?: number | null;
   whatsapp_phone?: string | null;
 }
 
 export interface UpdateFundMember {
   is_fund_manager?: boolean;
+  profit_share_percentage?: number | null;
   whatsapp_phone?: string | null;
   clear_whatsapp_phone?: boolean;
 }

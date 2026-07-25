@@ -94,3 +94,38 @@ export interface OperationFilters {
   phone?: string;
   limit?: number;
 }
+
+/** Un destino del margen de una operación: un fondo, o el propio cliente. */
+export type ProfitDestinationType = 'FUND' | 'CLIENT';
+
+export interface ProfitAllocation {
+  uuid: string;
+  destination_type: ProfitDestinationType;
+  fund_group_uuid: string | null;
+  client_uuid: string | null;
+  destination_name: string | null;
+  percentage: number;
+  amount_usdt: number | null;
+  approved_by_uuid: string | null;
+  approved_at: string | null;
+  notes: string | null;
+}
+
+export interface ProfitAllocationList {
+  operation_uuid: string;
+  /** Lo que se le cobró al cliente. */
+  charged_percentage: number | null;
+  allocated_percentage: number;
+  /** Lo cobrado menos lo repartido; negativo = se repartió de más. */
+  unallocated_percentage: number;
+  value_usdt: number | null;
+  allocations: ProfitAllocation[];
+}
+
+export interface ProfitAllocationInput {
+  destination_type: ProfitDestinationType;
+  fund_group_uuid?: string | null;
+  client_uuid?: string | null;
+  percentage: number;
+  notes?: string | null;
+}
