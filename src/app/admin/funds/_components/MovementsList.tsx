@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, Receipt, Undo2, User } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Receipt, Undo2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -12,9 +12,8 @@ import { MOVEMENT_META } from './movementMeta';
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('es-ES', {
-    year: 'numeric',
-    month: 'short',
     day: 'numeric',
+    month: 'short',
     hour: '2-digit',
     minute: '2-digit',
     timeZone: 'UTC',
@@ -29,6 +28,21 @@ function pageWindow(page: number, totalPages: number): number[] {
   start = Math.max(1, end - span + 1);
   return Array.from({ length: end - start + 1 }, (_, i) => start + i);
 }
+
+/**
+ * Rejilla del extracto, con las mismas celdas colocadas distinto en cada tamaño.
+ *
+ * En móvil se apila como una ficha —tipo y monto arriba, luego quién, luego fecha y ganancia,
+ * y los acumulados abajo tras una línea— y desde `md` las celdas se reparten en las cuatro
+ * columnas de la cabecera. Una sola estructura: la fila de acumulados se disuelve con
+ * `md:contents` para que sus dos números pasen a ser columnas.
+ */
+const ROW_GRID =
+  'grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 md:grid-cols-[auto_minmax(0,1fr)_130px_120px_110px] md:gap-y-0';
+
+/** Cabecera: la columna del tipo no lleva título, va pegada a «Movimiento». */
+const HEADER_GRID =
+  'grid grid-cols-[minmax(0,1fr)_130px_120px_110px] gap-x-4';
 
 interface MovementsListProps {
   movements: FundMovement[];
@@ -58,7 +72,7 @@ export function MovementsList({
       <Card className="overflow-hidden">
         <ul className="divide-y divide-border">
           {[1, 2, 3, 4].map((i) => (
-            <li key={i} className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
+            <li key={i} className="flex items-center gap-3 px-4 py-3.5 sm:px-[18px]">
               <div className="h-5 w-16 shrink-0 animate-pulse rounded-full bg-muted" />
               <div className="min-w-0 flex-1 space-y-1.5">
                 <div className="h-3.5 w-32 animate-pulse rounded bg-muted" />
@@ -84,116 +98,131 @@ export function MovementsList({
 
   return (
     <div className="space-y-4">
-      <Card className="overflow-hidden">
+      <Card className="gap-0 overflow-hidden py-0">
+        {/* Cabecera del extracto: solo donde las columnas se alinean de verdad. */}
+        <div
+          className={cn(
+            HEADER_GRID,
+            'hidden border-b border-border bg-muted/40 px-[18px] py-2.5 md:grid',
+          )}
+        >
+          {['Movimiento', 'Monto', 'Saldo', 'Ganado acum.'].map((label, i) => (
+            <span
+              key={label}
+              className={cn(
+                'text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground',
+                i > 0 && 'text-right',
+              )}
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+
         <ul className="divide-y divide-border">
           {movements.map((mv) => {
             const meta = MOVEMENT_META[mv.movement_type];
             const userName = getUserDisplayName(mv.user_uuid, mv.username);
-            const showOriginal =
-              mv.currency && mv.currency !== 'USDT' && mv.currency !== 'USD';
+            const canReverse =
+              isRoot && !mv.is_reversal && !mv.is_reversed && !mv.transaction_uuid;
             return (
               <li
                 key={mv.uuid}
                 className={cn(
-                  'flex items-center gap-3 px-4 py-3.5 sm:px-5',
-                  mv.is_reversed && 'bg-muted/40',
+                  ROW_GRID,
+                  'px-4 py-3 sm:px-[18px]',
+                  mv.is_reversed && 'bg-muted/30',
                 )}
               >
-                <StatusBadge tone={meta.tone} icon={meta.icon} className="shrink-0">
+                {/* tipo — en móvil abre la ficha; en tabla es la primera columna */}
+                <StatusBadge
+                  tone={meta.tone}
+                  className="col-start-1 row-start-1 shrink-0 justify-self-start md:row-span-3 md:self-center"
+                >
                   {meta.label}
                 </StatusBadge>
 
-                <div className="min-w-0 flex-1">
-                  <p className="flex items-center gap-1.5 truncate text-sm text-foreground">
-                    <span className="truncate">{userName}</span>
-                    {mv.client_name ? (
-                      <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
-                        <User className="h-3 w-3 shrink-0" />
-                        <span className="truncate">{mv.client_name}</span>
-                      </span>
-                    ) : null}
-                  </p>
-                  <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-                    <span>{formatDate(mv.movement_date)}</span>
-                    {mv.is_reversal ? (
-                      <span className="inline-flex items-center gap-1 font-medium text-amber-600 dark:text-amber-400">
-                        <Undo2 className="h-3 w-3" />
-                        anula un movimiento
-                      </span>
-                    ) : null}
-                    {mv.is_reversed ? (
-                      <span className="font-medium text-muted-foreground">· reversado</span>
-                    ) : null}
-                  </p>
-                  {(mv.is_reversal || mv.is_reversed) && mv.notes ? (
-                    <p className="truncate text-xs italic text-muted-foreground">{mv.notes}</p>
+                {/* monto */}
+                <p
+                  className={cn(
+                    'col-start-2 row-start-1 justify-self-end font-mono text-[13.5px] font-bold tabular-nums md:col-start-3 md:row-start-1',
+                    mv.is_reversed
+                      ? 'text-muted-foreground line-through'
+                      : mv.is_reversal
+                        ? 'text-primary'
+                        : 'text-foreground',
+                  )}
+                >
+                  {mv.is_reversal ? '−' : ''}
+                  {formatUSDT(mv.amount_usdt)} USDT
+                </p>
+
+                {/* quién, y con quién */}
+                <p className="col-span-2 row-start-2 truncate text-sm text-foreground md:col-span-1 md:col-start-2 md:row-start-1">
+                  {userName}
+                  {mv.client_name ? (
+                    <span className="font-normal text-muted-foreground">
+                      {' → '}
+                      {mv.client_name}
+                    </span>
                   ) : null}
+                </p>
+
+                {/* cuándo */}
+                <p className="col-start-1 row-start-3 truncate text-[11.5px] text-muted-foreground md:col-start-2 md:row-start-2">
+                  {formatDate(mv.movement_date)}
+                </p>
+
+                {/* la ganancia que dejó: junto a la fecha en móvil, bajo el monto en tabla */}
+                {mv.profit_amount_usdt != null && !mv.is_reversed ? (
+                  <p className="col-start-2 row-start-3 justify-self-end whitespace-nowrap text-[11px] font-semibold tabular-nums text-emerald-600 md:col-start-3 md:row-start-2 dark:text-emerald-400">
+                    +{formatUSDT(mv.profit_amount_usdt)} USDT
+                    {mv.profit_percentage != null
+                      ? ` · ${formatPercentage(mv.profit_percentage)}`
+                      : ''}
+                  </p>
+                ) : null}
+
+                {/* el motivo de la anulación */}
+                {(mv.is_reversal || mv.is_reversed) && mv.notes ? (
+                  <p className="col-span-2 row-start-4 flex items-center gap-1 text-[11px] text-primary md:col-span-1 md:col-start-2 md:row-start-3">
+                    <Undo2 className="h-2.5 w-2.5 shrink-0" />
+                    <span className="truncate">
+                      {mv.is_reversed ? `Anulado: ${mv.notes}` : mv.notes}
+                    </span>
+                  </p>
+                ) : null}
+
+                {/* acumulados: una línea aparte en móvil, dos columnas en tabla */}
+                <div className="col-span-2 row-start-5 flex items-center justify-between gap-4 border-t border-border/60 pt-1.5 text-[10.5px] text-muted-foreground md:contents">
+                  <span className="md:col-start-4 md:row-span-3 md:row-start-1 md:self-center md:text-right md:text-[12.5px]">
+                    <span className="md:hidden">Saldo </span>
+                    <span className="font-mono font-medium tabular-nums text-muted-foreground">
+                      {mv.running_balance_usdt != null
+                        ? formatUSDT(mv.running_balance_usdt)
+                        : '—'}
+                    </span>
+                  </span>
+                  <span className="md:col-start-5 md:row-span-3 md:row-start-1 md:self-center md:text-right md:text-[12.5px]">
+                    <span className="md:hidden">Ganado </span>
+                    <span className="font-mono font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                      {mv.running_profit_usdt != null ? formatUSDT(mv.running_profit_usdt) : '—'}
+                    </span>
+                  </span>
                 </div>
 
-                <div className="shrink-0 text-right">
-                  <p
-                    className={cn(
-                      'font-mono text-sm font-semibold tabular-nums',
-                      mv.is_reversed
-                        ? 'text-muted-foreground line-through'
-                        : mv.is_reversal
-                          ? 'text-amber-600 dark:text-amber-400'
-                          : 'text-foreground',
-                    )}
-                  >
-                    {mv.is_reversal ? '−' : ''}
-                    {formatUSDT(mv.amount_usdt)} USDT
-                  </p>
-                  {showOriginal ? (
-                    <p className="font-mono text-xs text-muted-foreground">
-                      {formatUSDT(mv.amount)} {mv.currency}
-                    </p>
-                  ) : null}
-                  {/* Lo que dejó el movimiento, no lo que movió: solo los que vienen de una
-                      operación con transacción tienen ganancia. */}
-                  {mv.profit_amount_usdt != null ? (
-                    <p className="font-mono text-xs tabular-nums text-emerald-600 dark:text-emerald-400">
-                      +{formatUSDT(mv.profit_amount_usdt)} USDT
-                      {mv.profit_percentage != null ? (
-                        <span className="text-muted-foreground">
-                          {' '}
-                          · {formatPercentage(mv.profit_percentage)}
-                        </span>
-                      ) : null}
-                    </p>
-                  ) : null}
-
-                  {/* Cómo quedaba el fondo justo después de este movimiento (extracto). */}
-                  {mv.running_balance_usdt != null ? (
-                    <p className="mt-0.5 border-t border-border/60 pt-0.5 font-mono text-[11px] leading-tight tabular-nums text-muted-foreground">
-                      saldo{' '}
-                      <span
-                        className={cn(
-                          'font-medium',
-                          mv.running_balance_usdt < 0
-                            ? 'text-amber-600 dark:text-amber-400'
-                            : 'text-foreground',
-                        )}
-                      >
-                        {formatUSDT(mv.running_balance_usdt)}
-                      </span>
-                      {mv.running_profit_usdt != null ? (
-                        <> · ganado {formatUSDT(mv.running_profit_usdt)}</>
-                      ) : null}
-                    </p>
-                  ) : null}
-                </div>
-
-                {isRoot && !mv.is_reversal && !mv.is_reversed && !mv.transaction_uuid ? (
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => onReverse(mv)}
-                    aria-label="Reversar movimiento"
-                    className="shrink-0 text-muted-foreground hover:bg-amber-500/10 hover:text-amber-600"
-                  >
-                    <Undo2 className="h-4 w-4" />
-                  </Button>
+                {canReverse ? (
+                  <div className="col-span-2 flex justify-end md:col-span-5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onReverse(mv)}
+                      className="h-7 gap-1.5 px-2 text-[11px] text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                    >
+                      <Undo2 className="h-3 w-3" />
+                      Reversar
+                    </Button>
+                  </div>
                 ) : null}
               </li>
             );
@@ -203,7 +232,7 @@ export function MovementsList({
 
       {totalPages > 1 ? (
         <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-[12.5px] text-muted-foreground">
             Página {page} de {totalPages} · {total} {total === 1 ? 'movimiento' : 'movimientos'}
           </p>
           <div className="flex items-center gap-1.5">
