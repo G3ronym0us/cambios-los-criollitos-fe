@@ -89,7 +89,7 @@ export default function FundMovementsPage() {
         totalPages={state.totalPages}
         total={state.total}
         getUserDisplayName={state.getUserDisplayName}
-        onDelete={mutations.actions.handleDeleteMovement}
+        onReverse={mutations.actions.openReverseMovement}
         onPageChange={actions.setPage}
       />
 

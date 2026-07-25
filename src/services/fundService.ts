@@ -83,8 +83,14 @@ export class FundService {
     return { success: result.success, data: result.data, error: result.error };
   }
 
-  async deleteMovement(uuid: string): Promise<ApiResponse<void>> {
-    const result = await httpClient.delete<void>(`/funds/movements/${uuid}`);
+  /**
+   * Anula un movimiento con otro que lo referencia. No se borra: el original queda en el
+   * libro marcado como reversado y el saldo lo corrige la reversa.
+   */
+  async reverseMovement(uuid: string, reason: string): Promise<ApiResponse<FundMovement>> {
+    const result = await httpClient.post<FundMovement>(`/funds/movements/${uuid}/reverse`, {
+      reason,
+    });
     return { success: result.success, data: result.data, error: result.error };
   }
 

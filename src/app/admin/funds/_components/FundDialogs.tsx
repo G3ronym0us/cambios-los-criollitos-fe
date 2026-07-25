@@ -5,6 +5,7 @@ import { CreateGroupDialog } from './CreateGroupDialog';
 import { EditGroupDialog } from './EditGroupDialog';
 import { EditMemberDialog } from './EditMemberDialog';
 import { RegisterMovementDialog } from './RegisterMovementDialog';
+import { ReverseMovementDialog } from './ReverseMovementDialog';
 import type { FundMutations } from '../_hooks/useFundMutations';
 import type { FundsResources } from '../_hooks/useFundsResources';
 
@@ -13,7 +14,7 @@ interface FundDialogsProps {
   resources: FundsResources;
 }
 
-/** Monta los cinco diálogos de Fondos con el estado del hook de mutaciones. */
+/** Monta los seis diálogos de Fondos con el estado del hook de mutaciones. */
 export function FundDialogs({ mutations, resources }: FundDialogsProps) {
   const { state, actions } = mutations;
 
@@ -75,6 +76,17 @@ export function FundDialogs({ mutations, resources }: FundDialogsProps) {
         onSubmit={actions.handleRegisterMovement}
         onCancel={actions.closeRegisterMovement}
       />
+      <ReverseMovementDialog
+        open={state.reverseTarget !== null}
+        movement={state.reverseTarget}
+        reason={state.reverseReason}
+        error={state.formError}
+        submitting={state.formLoading}
+        onReasonChange={actions.setReverseReason}
+        onSubmit={actions.handleReverseMovement}
+        onCancel={actions.closeReverseMovement}
+      />
+
     </>
   );
 }

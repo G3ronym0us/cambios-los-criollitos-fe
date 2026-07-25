@@ -3,7 +3,6 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { fundService } from '@/services/fundService';
-import { useConfirm } from '@/hooks/useConfirm';
 import {
   AddFundMember,
   CreateFundGroup,
@@ -53,7 +52,6 @@ export function useFundMutations({
   defaultGroupUuid,
   onChanged,
 }: UseFundMutationsOptions) {
-  const confirm = useConfirm();
   const { setGroups, reloadGroups } = resources;
 
   const [targetGroupUuid, setTargetGroupUuid] = useState('');
@@ -63,6 +61,8 @@ export function useFundMutations({
   const [showAddMember, setShowAddMember] = useState(false);
   const [showEditMember, setShowEditMember] = useState(false);
   const [showRegisterMovement, setShowRegisterMovement] = useState(false);
+  const [reverseTarget, setReverseTarget] = useState<FundMovement | null>(null);
+  const [reverseReason, setReverseReason] = useState('');
 
   const [createGroupForm, setCreateGroupForm] = useState<CreateFundGroup>(emptyGroupForm);
   const [editGroupTarget, setEditGroupTarget] = useState<FundGroup | null>(null);
@@ -277,25 +277,37 @@ export function useFundMutations({
   }, [targetGroupUuid, movementForm, closeRegisterMovement, onChanged]);
 
   // ---- Eliminar movimiento ----
-  const handleDeleteMovement = useCallback(
-    async (movement: FundMovement) => {
-      const ok = await confirm({
-        title: '¿Eliminar movimiento?',
-        description: 'Esta acción no se puede deshacer.',
-        confirmText: 'Eliminar',
-        variant: 'destructive',
-      });
-      if (!ok) return;
-      const result = await fundService.deleteMovement(movement.uuid);
-      if (result.success) {
-        toast.success('Movimiento eliminado');
-        onChanged?.();
-      } else {
-        toast.error(result.error || 'Error al eliminar movimiento');
-      }
-    },
-    [confirm, onChanged],
-  );
+  // ---- Reversar movimiento (antes: borrarlo) ----
+  const openReverseMovement = useCallback((movement: FundMovement) => {
+    setReverseTarget(movement);
+    setReverseReason('');
+    setFormError('');
+  }, []);
+  const closeReverseMovement = useCallback(() => {
+    setReverseTarget(null);
+    setReverseReason('');
+    setFormError('');
+  }, []);
+
+  const handleReverseMovement = useCallback(async () => {
+    if (!reverseTarget) return;
+    const reason = reverseReason.trim();
+    if (reason.length < 3) {
+      setFormError('Escribe el motivo: es lo que queda explicando la reversa');
+      return;
+    }
+    setFormError('');
+    setFormLoading(true);
+    const result = await fundService.reverseMovement(reverseTarget.uuid, reason);
+    setFormLoading(false);
+    if (result.success) {
+      closeReverseMovement();
+      toast.success('Movimiento reversado');
+      onChanged?.();
+    } else {
+      setFormError(result.error || 'Error al reversar el movimiento');
+    }
+  }, [reverseTarget, reverseReason, closeReverseMovement, onChanged]);
 
   return {
     state: {
@@ -304,6 +316,8 @@ export function useFundMutations({
       showAddMember,
       showEditMember,
       showRegisterMovement,
+      reverseTarget,
+      reverseReason,
       createGroupForm,
       editGroupTarget,
       editGroupForm,
@@ -335,7 +349,10 @@ export function useFundMutations({
       handleAddMember,
       handleUpdateMember,
       handleRegisterMovement,
-      handleDeleteMovement,
+      openReverseMovement,
+      closeReverseMovement,
+      handleReverseMovement,
+      setReverseReason,
     },
   };
 }

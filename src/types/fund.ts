@@ -73,6 +73,12 @@ export interface FundMovement {
   /** Acumulados hasta este movimiento (extracto), sobre todo el historial del grupo. */
   running_balance_usdt?: number | null;
   running_profit_usdt?: number | null;
+  /** Anulación: esta fila anula a otra, o ya fue anulada por otra. */
+  is_reversal?: boolean;
+  is_reversed?: boolean;
+  reverses_movement_uuid?: string | null;
+  reversed_by_movement_uuid?: string | null;
+  reversed_at?: string | null;
   created_at: string;
 }
 

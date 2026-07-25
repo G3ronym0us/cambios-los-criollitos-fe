@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, Receipt, Trash2, User } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Receipt, Undo2, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -38,7 +38,7 @@ interface MovementsListProps {
   totalPages: number;
   total: number;
   getUserDisplayName: (uuid: string, fallback?: string | null) => string;
-  onDelete: (movement: FundMovement) => void;
+  onReverse: (movement: FundMovement) => void;
   onPageChange: (page: number) => void;
 }
 
@@ -50,7 +50,7 @@ export function MovementsList({
   totalPages,
   total,
   getUserDisplayName,
-  onDelete,
+  onReverse,
   onPageChange,
 }: MovementsListProps) {
   if (loading && movements.length === 0) {
@@ -92,7 +92,13 @@ export function MovementsList({
             const showOriginal =
               mv.currency && mv.currency !== 'USDT' && mv.currency !== 'USD';
             return (
-              <li key={mv.uuid} className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
+              <li
+                key={mv.uuid}
+                className={cn(
+                  'flex items-center gap-3 px-4 py-3.5 sm:px-5',
+                  mv.is_reversed && 'bg-muted/40',
+                )}
+              >
                 <StatusBadge tone={meta.tone} icon={meta.icon} className="shrink-0">
                   {meta.label}
                 </StatusBadge>
@@ -107,11 +113,35 @@ export function MovementsList({
                       </span>
                     ) : null}
                   </p>
-                  <p className="text-xs text-muted-foreground">{formatDate(mv.movement_date)}</p>
+                  <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+                    <span>{formatDate(mv.movement_date)}</span>
+                    {mv.is_reversal ? (
+                      <span className="inline-flex items-center gap-1 font-medium text-amber-600 dark:text-amber-400">
+                        <Undo2 className="h-3 w-3" />
+                        anula un movimiento
+                      </span>
+                    ) : null}
+                    {mv.is_reversed ? (
+                      <span className="font-medium text-muted-foreground">· reversado</span>
+                    ) : null}
+                  </p>
+                  {(mv.is_reversal || mv.is_reversed) && mv.notes ? (
+                    <p className="truncate text-xs italic text-muted-foreground">{mv.notes}</p>
+                  ) : null}
                 </div>
 
                 <div className="shrink-0 text-right">
-                  <p className="font-mono text-sm font-semibold tabular-nums text-foreground">
+                  <p
+                    className={cn(
+                      'font-mono text-sm font-semibold tabular-nums',
+                      mv.is_reversed
+                        ? 'text-muted-foreground line-through'
+                        : mv.is_reversal
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-foreground',
+                    )}
+                  >
+                    {mv.is_reversal ? '−' : ''}
                     {formatUSDT(mv.amount_usdt)} USDT
                   </p>
                   {showOriginal ? (
@@ -154,15 +184,15 @@ export function MovementsList({
                   ) : null}
                 </div>
 
-                {isRoot ? (
+                {isRoot && !mv.is_reversal && !mv.is_reversed && !mv.transaction_uuid ? (
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    onClick={() => onDelete(mv)}
-                    aria-label="Eliminar movimiento"
-                    className="shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => onReverse(mv)}
+                    aria-label="Reversar movimiento"
+                    className="shrink-0 text-muted-foreground hover:bg-amber-500/10 hover:text-amber-600"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Undo2 className="h-4 w-4" />
                   </Button>
                 ) : null}
               </li>
