@@ -12,6 +12,7 @@ import { FundDialogs } from '../../_components/FundDialogs';
 import { FundsBreadcrumb } from '../../_components/FundsBreadcrumb';
 import { MovementsFilters } from '../../_components/MovementsFilters';
 import { MovementsList } from '../../_components/MovementsList';
+import { MovementsTotals } from '../../_components/MovementsTotals';
 import { useFundMovements } from '../../_hooks/useFundMovements';
 
 export default function FundMovementsPage() {
@@ -72,6 +73,12 @@ export default function FundMovementsPage() {
         hasActiveFilters={state.hasActiveFilters}
         onChange={actions.setFilters}
         onReset={actions.resetFilters}
+      />
+
+      <MovementsTotals
+        totals={state.totals}
+        loading={state.loading}
+        hasActiveFilters={state.hasActiveFilters}
       />
 
       <MovementsList

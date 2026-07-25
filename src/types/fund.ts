@@ -70,6 +70,9 @@ export interface FundMovement {
   profit_percentage?: number | null;
   profit_amount?: number | null;
   profit_amount_usdt?: number | null;
+  /** Acumulados hasta este movimiento (extracto), sobre todo el historial del grupo. */
+  running_balance_usdt?: number | null;
+  running_profit_usdt?: number | null;
   created_at: string;
 }
 
@@ -113,12 +116,28 @@ export interface FundMovementFilters {
   per_page?: number;
 }
 
+/** Acumulados de TODO lo que cae bajo el filtro, no de la página que se está viendo. */
+export interface FundMovementTotals {
+  deposits_usdt: number;
+  deposits_count: number;
+  exchanges_usdt: number;
+  exchanges_count: number;
+  personal_usdt: number;
+  adjustments_usdt: number;
+  /** Entradas menos salidas (cambios + personales). */
+  net_usdt: number;
+  /** Ganancia dejada por los movimientos que vienen de una operación. */
+  profit_usdt: number;
+  profit_count: number;
+}
+
 export interface FundMovementsResponse {
   movements: FundMovement[];
   total: number;
   page: number;
   per_page: number;
   total_pages: number;
+  totals?: FundMovementTotals | null;
 }
 
 export interface CreateFundGroup {

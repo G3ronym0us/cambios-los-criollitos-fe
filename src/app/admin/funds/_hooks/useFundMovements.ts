@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { fundService } from '@/services/fundService';
-import type { FundMovement, FundMovementFilters } from '@/types/fund';
+import type { FundMovement, FundMovementFilters, FundMovementTotals } from '@/types/fund';
 import { useFundsResources } from './useFundsResources';
 import { useFundMutations } from './useFundMutations';
 
@@ -19,6 +19,7 @@ export function useFundMovements(groupUuid: string) {
 
   const [movements, setMovements] = useState<FundMovement[]>([]);
   const [total, setTotal] = useState(0);
+  const [totals, setTotals] = useState<FundMovementTotals | null>(null);
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState<FundMovementFilters>({});
   const [loading, setLoading] = useState(true);
@@ -34,6 +35,7 @@ export function useFundMovements(groupUuid: string) {
     if (res.success && res.data) {
       setMovements(res.data.movements);
       setTotal(res.data.total);
+      setTotals(res.data.totals ?? null);
     } else if (!res.success) {
       toast.error(res.error || 'Error al cargar movimientos');
     }
@@ -72,6 +74,7 @@ export function useFundMovements(groupUuid: string) {
       groupUuid,
       movements,
       total,
+      totals,
       page,
       totalPages,
       filters,

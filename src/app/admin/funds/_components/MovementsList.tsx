@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { cn } from '@/lib/utils';
 import type { FundMovement } from '@/types/fund';
-import { formatUSDT } from '../_lib/format';
+import { formatPercentage, formatUSDT } from '../_lib/format';
 import { MOVEMENT_META } from './movementMeta';
 
 function formatDate(value: string) {
@@ -117,6 +117,39 @@ export function MovementsList({
                   {showOriginal ? (
                     <p className="font-mono text-xs text-muted-foreground">
                       {formatUSDT(mv.amount)} {mv.currency}
+                    </p>
+                  ) : null}
+                  {/* Lo que dejó el movimiento, no lo que movió: solo los que vienen de una
+                      operación con transacción tienen ganancia. */}
+                  {mv.profit_amount_usdt != null ? (
+                    <p className="font-mono text-xs tabular-nums text-emerald-600 dark:text-emerald-400">
+                      +{formatUSDT(mv.profit_amount_usdt)} USDT
+                      {mv.profit_percentage != null ? (
+                        <span className="text-muted-foreground">
+                          {' '}
+                          · {formatPercentage(mv.profit_percentage)}
+                        </span>
+                      ) : null}
+                    </p>
+                  ) : null}
+
+                  {/* Cómo quedaba el fondo justo después de este movimiento (extracto). */}
+                  {mv.running_balance_usdt != null ? (
+                    <p className="mt-0.5 border-t border-border/60 pt-0.5 font-mono text-[11px] leading-tight tabular-nums text-muted-foreground">
+                      saldo{' '}
+                      <span
+                        className={cn(
+                          'font-medium',
+                          mv.running_balance_usdt < 0
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-foreground',
+                        )}
+                      >
+                        {formatUSDT(mv.running_balance_usdt)}
+                      </span>
+                      {mv.running_profit_usdt != null ? (
+                        <> · ganado {formatUSDT(mv.running_profit_usdt)}</>
+                      ) : null}
                     </p>
                   ) : null}
                 </div>

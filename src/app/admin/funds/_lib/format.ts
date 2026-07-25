@@ -6,6 +6,14 @@ export function formatUSDT(value: number): string {
   }).format(value);
 }
 
+/** Formatea un porcentaje sin decimales de relleno: 7 → «7%», 3,5 → «3,5%». */
+export function formatPercentage(value: number): string {
+  return `${new Intl.NumberFormat('es-ES', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value)}%`;
+}
+
 /** Paleta de acentos para avatares de grupo — determinista por nombre, coherente en light/dark. */
 const AVATAR_CLASSES = [
   'bg-primary/10 text-primary',
