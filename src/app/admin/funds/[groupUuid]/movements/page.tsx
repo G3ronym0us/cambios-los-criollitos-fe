@@ -89,7 +89,10 @@ export default function FundMovementsPage() {
         totalPages={state.totalPages}
         total={state.total}
         getUserDisplayName={state.getUserDisplayName}
+        focusUuid={state.focusUuid}
         onReverse={mutations.actions.openReverseMovement}
+        onGoToMovement={actions.goToMovement}
+        onClearFocus={actions.clearFocus}
         onPageChange={actions.setPage}
       />
 

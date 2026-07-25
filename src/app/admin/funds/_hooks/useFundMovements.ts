@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { fundService } from '@/services/fundService';
 import type { FundMovement, FundMovementFilters, FundMovementTotals } from '@/types/fund';
@@ -23,6 +23,9 @@ export function useFundMovements(groupUuid: string) {
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState<FundMovementFilters>({});
   const [loading, setLoading] = useState(true);
+  // Movimiento al que hay que saltar tras cargar la página (el par de una anulación).
+  const [focusUuid, setFocusUuid] = useState<string | null>(null);
+  const pendingFocus = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     if (!groupUuid) return;
@@ -51,6 +54,50 @@ export function useFundMovements(groupUuid: string) {
     void load();
   }, [load]);
 
+  /**
+   * Salta al otro lado de una anulación: del movimiento anulado a su reversa y al revés.
+   * Casi nunca están en la misma página —la reversa se fecha el día de la corrección— así
+   * que se le pregunta al backend en cuál cae. Si los filtros lo dejan fuera, se limpian:
+   * es lo que el operador quiere cuando pide ver la otra mitad.
+   */
+  const goToMovement = useCallback(
+    async (uuid: string) => {
+      const onScreen = movements.some((m) => m.uuid === uuid);
+      if (onScreen) {
+        setFocusUuid(uuid);
+        return;
+      }
+      const located = await fundService.locateMovement(uuid, {
+        ...filters,
+        per_page: MOVEMENTS_PER_PAGE,
+      });
+      if (!located.success || !located.data) {
+        toast.error(located.error || 'No se pudo ubicar el movimiento');
+        return;
+      }
+      pendingFocus.current = uuid;
+      if (located.data.found && located.data.page) {
+        setPage(located.data.page);
+        return;
+      }
+      // Fuera del filtro actual: se limpia y se vuelve a ubicar sin él.
+      const retry = await fundService.locateMovement(uuid, { per_page: MOVEMENTS_PER_PAGE });
+      setFilters({});
+      setPage(retry.data?.page ?? 1);
+      toast.info('Se quitaron los filtros para mostrar el movimiento');
+    },
+    [movements, filters],
+  );
+
+  // Una vez cargada la página destino, se marca la fila para resaltarla.
+  useEffect(() => {
+    if (!pendingFocus.current || loading) return;
+    if (movements.some((m) => m.uuid === pendingFocus.current)) {
+      setFocusUuid(pendingFocus.current);
+      pendingFocus.current = null;
+    }
+  }, [movements, loading]);
+
   const mutations = useFundMutations({
     resources,
     defaultGroupUuid: groupUuid,
@@ -75,6 +122,7 @@ export function useFundMovements(groupUuid: string) {
       movements,
       total,
       totals,
+      focusUuid,
       page,
       totalPages,
       filters,
@@ -85,6 +133,8 @@ export function useFundMovements(groupUuid: string) {
       getUserDisplayName: resources.getUserDisplayName,
     },
     actions: {
+      goToMovement,
+      clearFocus: () => setFocusUuid(null),
       setFilters,
       resetFilters,
       setPage,

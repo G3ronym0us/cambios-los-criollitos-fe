@@ -2,6 +2,7 @@ import {
   FundGroup,
   FundGroupMember,
   FundMovement,
+  FundMovementLocation,
   FundMovementsResponse,
   GroupBalance,
   UserPosition,
@@ -80,6 +81,23 @@ export class FundService {
 
   async createMovement(data: CreateFundMovement): Promise<ApiResponse<FundMovement>> {
     const result = await httpClient.post<FundMovement>('/funds/movements', data);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  /** En qué página del historial está un movimiento, con los filtros que se estén usando. */
+  async locateMovement(
+    uuid: string,
+    filters: FundMovementFilters & { per_page?: number } = {},
+  ): Promise<ApiResponse<FundMovementLocation>> {
+    const params = new URLSearchParams();
+    if (filters.movement_type) params.set('movement_type', filters.movement_type);
+    if (filters.date_from) params.set('date_from', filters.date_from);
+    if (filters.date_to) params.set('date_to', filters.date_to);
+    if (filters.per_page) params.set('per_page', String(filters.per_page));
+    const query = params.toString();
+    const result = await httpClient.get<FundMovementLocation>(
+      `/funds/movements/${uuid}/locate${query ? `?${query}` : ''}`,
+    );
     return { success: result.success, data: result.data, error: result.error };
   }
 

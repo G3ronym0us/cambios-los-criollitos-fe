@@ -1,6 +1,7 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, Receipt, Undo2 } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { ArrowUpRight, ChevronLeft, ChevronRight, Receipt, Undo2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -52,7 +53,11 @@ interface MovementsListProps {
   totalPages: number;
   total: number;
   getUserDisplayName: (uuid: string, fallback?: string | null) => string;
+  /** Movimiento al que se acaba de saltar: se resalta hasta que el operador lo ve. */
+  focusUuid?: string | null;
   onReverse: (movement: FundMovement) => void;
+  onGoToMovement: (uuid: string) => void;
+  onClearFocus: () => void;
   onPageChange: (page: number) => void;
 }
 
@@ -64,9 +69,21 @@ export function MovementsList({
   totalPages,
   total,
   getUserDisplayName,
+  focusUuid,
   onReverse,
+  onGoToMovement,
+  onClearFocus,
   onPageChange,
 }: MovementsListProps) {
+  const focusedRow = useRef<HTMLLIElement | null>(null);
+
+  // Al llegar desde el otro lado de una anulación, traer la fila a la vista y soltar la marca.
+  useEffect(() => {
+    if (!focusUuid || !focusedRow.current) return;
+    focusedRow.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const timer = setTimeout(onClearFocus, 2600);
+    return () => clearTimeout(timer);
+  }, [focusUuid, onClearFocus]);
   if (loading && movements.length === 0) {
     return (
       <Card className="overflow-hidden">
@@ -125,13 +142,18 @@ export function MovementsList({
             const userName = getUserDisplayName(mv.user_uuid, mv.username);
             const canReverse =
               isRoot && !mv.is_reversal && !mv.is_reversed && !mv.transaction_uuid;
+            // El otro lado de la anulación: la corrección si está anulado, el original si es la reversa.
+            const counterpartUuid =
+              mv.reversed_by_movement_uuid ?? mv.reverses_movement_uuid ?? null;
             return (
               <li
                 key={mv.uuid}
+                ref={mv.uuid === focusUuid ? focusedRow : undefined}
                 className={cn(
                   ROW_GRID,
-                  'px-4 py-3 sm:px-[18px]',
+                  'scroll-mt-24 px-4 py-3 transition-colors duration-500 sm:px-[18px]',
                   mv.is_reversed && 'bg-muted/30',
+                  mv.uuid === focusUuid && 'bg-primary/10 ring-1 ring-inset ring-primary/40',
                 )}
               >
                 {/* tipo — en móvil abre la ficha; en tabla es la primera columna */}
@@ -184,13 +206,21 @@ export function MovementsList({
                 ) : null}
 
                 {/* el motivo de la anulación */}
-                {(mv.is_reversal || mv.is_reversed) && mv.notes ? (
-                  <p className="col-span-2 row-start-4 flex items-center gap-1 text-[11px] text-primary md:col-span-1 md:col-start-2 md:row-start-3">
+                {counterpartUuid ? (
+                  <button
+                    type="button"
+                    onClick={() => onGoToMovement(counterpartUuid)}
+                    title={
+                      mv.is_reversed ? 'Ver la corrección' : 'Ver el movimiento que anula'
+                    }
+                    className="col-span-2 row-start-4 flex min-w-0 items-center gap-1 text-left text-[11px] text-primary hover:underline md:col-span-1 md:col-start-2 md:row-start-3"
+                  >
                     <Undo2 className="h-2.5 w-2.5 shrink-0" />
                     <span className="truncate">
-                      {mv.is_reversed ? `Anulado: ${mv.notes}` : mv.notes}
+                      {mv.is_reversed ? `Anulado: ${mv.notes ?? 'sin motivo'}` : mv.notes}
                     </span>
-                  </p>
+                    <ArrowUpRight className="h-2.5 w-2.5 shrink-0" />
+                  </button>
                 ) : null}
 
                 {/* acumulados: una línea aparte en móvil, dos columnas en tabla */}

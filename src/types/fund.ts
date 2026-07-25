@@ -146,6 +146,15 @@ export interface FundMovementsResponse {
   totals?: FundMovementTotals | null;
 }
 
+/** Dónde cae un movimiento dentro del historial, para poder saltar hasta él. */
+export interface FundMovementLocation {
+  movement_uuid: string;
+  group_uuid?: string | null;
+  page?: number | null;
+  /** false = los filtros actuales lo dejan fuera; no hay página a la que ir. */
+  found: boolean;
+}
+
 export interface CreateFundGroup {
   name: string;
   currency: string;
