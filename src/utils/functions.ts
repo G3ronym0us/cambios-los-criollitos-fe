@@ -78,6 +78,53 @@ export const formatCaracasDate = (value: string | null | undefined): string => {
   });
 };
 
+/** Día calendario en Caracas como `YYYY-MM-DD`, para comparar "¿es hoy?" sin líos de UTC. */
+const caracasDayKey = (date: Date): string =>
+  date.toLocaleDateString('en-CA', { timeZone: 'America/Caracas' });
+
+/**
+ * Versión corta para listas apretadas: solo la hora si el timestamp es de hoy en Caracas
+ * ("14:32"), y día + hora si es de otro día ("25 jul 14:32").
+ */
+export const formatCaracasShortDateTime = (value: string | null | undefined): string => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  const time = date.toLocaleTimeString('es-VE', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'America/Caracas',
+  });
+  if (caracasDayKey(date) === caracasDayKey(new Date())) return time;
+  const day = date.toLocaleDateString('es-VE', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'America/Caracas',
+  });
+  return `${day} ${time}`;
+};
+
+/** "hace 3 min" / "hace 3 h" / "hace 2 d". Acompaña a la hora absoluta, no la sustituye. */
+export const formatRelativeTime = (
+  value: string | null | undefined,
+  nowMs: number = Date.now(),
+): string => {
+  if (!value) return '';
+  const time = new Date(value).getTime();
+  if (Number.isNaN(time)) return '';
+  const diffSec = Math.round((nowMs - time) / 1000);
+  const abs = Math.abs(diffSec);
+  if (abs < 60) return 'hace un momento';
+  // Un timestamp en el futuro (reloj desfasado) se lee "en X" en vez de mentir con "hace".
+  const prefix = diffSec >= 0 ? 'hace' : 'en';
+  const minutes = Math.floor(abs / 60);
+  if (minutes < 60) return `${prefix} ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${prefix} ${hours} h`;
+  return `${prefix} ${Math.floor(hours / 24)} d`;
+};
+
 /**
  * ¿El "cliente" de una operación es en realidad un marcador de que aún no sabemos quién
  * es? Cubre el JID de un grupo contable (comprobante reenviado, ops antiguas) y los

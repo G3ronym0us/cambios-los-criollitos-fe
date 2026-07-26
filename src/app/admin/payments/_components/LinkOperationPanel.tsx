@@ -1,7 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, Link2Off, Plus, Search, Globe, Users, UserRound } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Clock,
+  Link2Off,
+  Plus,
+  Search,
+  Globe,
+  Sparkles,
+  Users,
+  UserRound,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -10,8 +21,15 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { operationService } from '@/services/operationService';
 import { paymentService } from '@/services/paymentService';
 import { fundService } from '@/services/fundService';
-import { formatNumber } from '@/utils/functions';
+import { formatCaracasShortDateTime, formatNumber, formatRelativeTime } from '@/utils/functions';
 import { getStatusMeta } from '@/utils/operationStatus';
+import {
+  AMOUNT_TOLERANCE,
+  canScorePayment,
+  pickSuggestion,
+  scoreOperation,
+  type OperationScore,
+} from '@/utils/operationMatch';
 import type { OperationData, OrphanAction, UnlinkPreview } from '@/types/operation';
 import type { FundGroup } from '@/types/fund';
 import type { PaymentData, PaymentTable } from '@/types/payment';
@@ -45,6 +63,19 @@ function samePhone(a: string | null, b: string | null) {
 
 type Scope = 'auto' | 'global';
 type StatusView = 'active' | 'completed';
+type SortMode = 'suggested' | 'amount' | 'time';
+
+/** Operación candidata con su puntuación frente al comprobante que se está vinculando. */
+type ScoredOperation = OperationScore & { uuid: string; op: OperationData };
+
+/** Cuánto se aparta el monto de la operación del comprobante: "±0", "-7", "+43". */
+function formatDelta(delta: number) {
+  if (Math.abs(delta) < 0.005) return '±0';
+  return `${delta > 0 ? '+' : '-'}${formatNumber(Math.abs(delta))}`;
+}
+
+const byCreatedAtDesc = (a: ScoredOperation, b: ScoredOperation) =>
+  (b.op.created_at ?? '').localeCompare(a.op.created_at ?? '');
 
 export function LinkOperationPanel({
   payment,
@@ -61,6 +92,7 @@ export function LinkOperationPanel({
   const [search, setSearch] = useState('');
   const [scope, setScope] = useState<Scope>('auto');
   const [statusView, setStatusView] = useState<StatusView>('active');
+  const [sortMode, setSortMode] = useState<SortMode>('suggested');
   const [selected, setSelected] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [mode, setMode] = useState<'pick' | 'create' | 'coverage'>('pick');
@@ -68,12 +100,17 @@ export function LinkOperationPanel({
   const [settledAmount, setSettledAmount] = useState<number | null>(null);
   // Desvincular el último comprobante de una op abre el cuadro de decisión.
   const [orphan, setOrphan] = useState<UnlinkPreview | null>(null);
+  // Pago cuya sugerencia ya se preseleccionó: se hace una sola vez, para no mover después la
+  // selección del operador al cambiar de pestaña o de alcance.
+  const autoPickedFor = useRef<number | null>(null);
 
   useEffect(() => {
     setSelected(payment.operation_uuid);
     setSearch('');
     setScope('auto');
     setStatusView('active');
+    setSortMode('suggested');
+    autoPickedFor.current = null;
     let active = true;
     setLoading(true);
     Promise.all([
@@ -169,11 +206,37 @@ export function LinkOperationPanel({
     });
   }, [payment.operation_uuid, scoped, statusView, table]);
 
-  const filtered = useMemo(() => {
+  // ¿Se puede comparar? Sin monto en el comprobante no hay sugerencia ni orden por cercanía.
+  const scorable = canScorePayment(payment);
+
+  const scored = useMemo<ScoredOperation[]>(() => {
+    const nowMs = Date.now();
+    return availableByStatus.map((op) => ({
+      uuid: op.uuid,
+      op,
+      ...scoreOperation(op, payment, table, nowMs),
+    }));
+  }, [availableByStatus, payment, table]);
+
+  // Se calcula sobre todo el alcance visible y NO sobre lo que filtra el buscador: escribir
+  // para ubicar una operación no debe cambiar cuál es la sugerida.
+  const suggestion = useMemo(() => (scorable ? pickSuggestion(scored) : null), [scorable, scored]);
+
+  // Si la sugerencia es inequívoca, queda preseleccionada — el operador todavía tiene que
+  // confirmar con Continuar/Vincular, así que nunca se vincula nada solo.
+  useEffect(() => {
+    if (payment.operation_uuid) return;
+    if (autoPickedFor.current === payment.id) return;
+    if (!suggestion?.confident) return;
+    autoPickedFor.current = payment.id;
+    setSelected(suggestion.uuid);
+  }, [payment.id, payment.operation_uuid, suggestion]);
+
+  const ranked = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = !q
-      ? availableByStatus
-      : availableByStatus.filter((op) => {
+      ? [...scored]
+      : scored.filter(({ op }) => {
           const amounts = `${op.from_amount} ${op.to_amount}`;
           return (
             (op.client_display_name || '').toLowerCase().includes(q) ||
@@ -183,8 +246,25 @@ export function LinkOperationPanel({
             amounts.includes(q)
           );
         });
+
+    if (sortMode === 'time') {
+      list.sort(byCreatedAtDesc);
+    } else if (sortMode === 'amount') {
+      // Por cercanía al monto del comprobante; las que no se pueden comparar, al final.
+      list.sort((a, b) => {
+        const ra = a.relative ?? Number.POSITIVE_INFINITY;
+        const rb = b.relative ?? Number.POSITIVE_INFINITY;
+        return ra !== rb ? ra - rb : byCreatedAtDesc(a, b);
+      });
+    } else {
+      // Sin comprobante que comparar todos puntúan 0 y manda la recencia (el orden de siempre).
+      list.sort((a, b) => b.score - a.score || byCreatedAtDesc(a, b));
+      const i = suggestion ? list.findIndex((s) => s.uuid === suggestion.uuid) : -1;
+      if (i > 0) list.unshift(...list.splice(i, 1));
+    }
+    // El corte va DESPUÉS de ordenar: al revés la sugerida podía quedar fuera de la lista.
     return list.slice(0, 60);
-  }, [availableByStatus, search]);
+  }, [scored, search, sortMode, suggestion]);
 
   const scopeLabel = (() => {
     if (scope === 'global') return 'Todas las operaciones';
@@ -336,6 +416,37 @@ export function LinkOperationPanel({
         </Button>
       </div>
 
+      {scorable ? (
+        <>
+          <div className="flex rounded-lg bg-muted p-1" role="group" aria-label="Orden de las operaciones">
+            {(
+              [
+                ['suggested', 'Sugerida'],
+                ['amount', 'Monto'],
+                ['time', 'Hora'],
+              ] as const
+            ).map(([value, label]) => (
+              <Button
+                key={value}
+                type="button"
+                variant={sortMode === value ? 'secondary' : 'ghost'}
+                className="h-11 flex-1"
+                onClick={() => setSortMode(value)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1.5 text-xs">
+            <span className="text-muted-foreground">Comprobante</span>
+            <span className="truncate font-medium text-foreground">
+              {formatNumber(payment.amount ?? 0)} {payment.currency ?? ''} ·{' '}
+              {formatCaracasShortDateTime(payment.created_at)}
+            </span>
+          </div>
+        </>
+      ) : null}
+
       {table === 'outgoing' ? (
         <div className="space-y-1.5">
           <div className="flex rounded-lg bg-muted p-1" role="group" aria-label="Estado de las operaciones disponibles">
@@ -367,7 +478,7 @@ export function LinkOperationPanel({
       <div className="-mx-1 min-h-0 flex-1 space-y-2 overflow-y-auto px-1 py-1">
         {loading ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Cargando operaciones…</p>
-        ) : filtered.length === 0 ? (
+        ) : ranked.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
             {table === 'outgoing' && statusView === 'completed'
               ? 'No hay operaciones completadas con saldo por cubrir en este alcance.'
@@ -376,8 +487,9 @@ export function LinkOperationPanel({
               : 'Sin cotizaciones en este alcance. Prueba "Ver todas".'}
           </p>
         ) : (
-          filtered.map((op) => {
+          ranked.map(({ op, delta, relative }) => {
             const isSel = selected === op.uuid;
+            const isSuggested = suggestion?.uuid === op.uuid;
             const client = op.client_display_name || stripPhone(op.client_phone) || 'Cliente';
             const statusMeta = getStatusMeta(op.status);
             return (
@@ -387,7 +499,7 @@ export function LinkOperationPanel({
                 onClick={() => setSelected(op.uuid)}
                 className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
                   isSel ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-                }`}
+                } ${isSuggested ? 'ring-1 ring-primary/40' : ''}`}
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate text-sm font-medium text-foreground">{client}</span>
@@ -398,6 +510,9 @@ export function LinkOperationPanel({
                     {formatNumber(op.from_amount)} {op.from_currency} → {formatNumber(op.to_amount)} {op.to_currency}
                   </span>
                   <span className="flex shrink-0 items-center gap-1.5">
+                    {isSuggested ? (
+                      <StatusBadge tone="primary" icon={Sparkles}>Sugerida</StatusBadge>
+                    ) : null}
                     {(op.delivered_amount ?? 0) > 0.01 && (op.pending_amount ?? 0) > 0.01 ? (
                       <StatusBadge tone="warning">
                         faltan {formatNumber(op.pending_amount ?? 0)} {op.currency ?? op.from_currency}
@@ -405,6 +520,25 @@ export function LinkOperationPanel({
                     ) : null}
                     <StatusBadge tone={statusMeta.tone} icon={statusMeta.icon}>{statusMeta.label}</StatusBadge>
                   </span>
+                </div>
+                <div className="mt-0.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <span className="flex min-w-0 items-center gap-1">
+                    <Clock className="h-3 w-3 shrink-0" />
+                    <span className="truncate">
+                      {formatCaracasShortDateTime(op.created_at)} · {formatRelativeTime(op.created_at)}
+                    </span>
+                  </span>
+                  {delta != null ? (
+                    <span
+                      className={`shrink-0 tabular-nums ${
+                        (relative ?? 1) <= AMOUNT_TOLERANCE
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
+                      {formatDelta(delta)}
+                    </span>
+                  ) : null}
                 </div>
               </button>
             );
