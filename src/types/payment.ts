@@ -108,7 +108,9 @@ export interface PaymentDeposit {
 // ---- Reparto de un pago entrante entre operaciones ----
 
 export interface PaymentAllocation {
-  uuid: string;
+  // null = reparto implícito: lo que el vínculo directo del pago ya asigna a esa operación,
+  // todavía sin fila en la tabla de reparto. Se materializa si el operador guarda el panel.
+  uuid: string | null;
   amount: number;
   operation_uuid: string | null;
   operation_status: OperationStatus | null;

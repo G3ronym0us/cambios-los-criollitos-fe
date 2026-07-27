@@ -80,6 +80,34 @@ export interface OperationListResponse {
   total: number;
 }
 
+// ---- Emparejamiento comprobante ↔ operación ----
+// La regla vive en el backend (app/services/operation_match_service.py), compartida con el
+// matcher automático del bot. El front solo consume el resultado: nada de umbrales aquí.
+
+export interface OperationMatchScore {
+  uuid: string;
+  /** Esperado − pagado, con signo: se pinta como "+43" / "-7". */
+  delta: number | null;
+  relative: number | null;
+  currency_matches: boolean;
+  amount_score: number;
+  time_score: number;
+  score: number;
+  /** Calza en monto y moneda: candidata legítima. */
+  within_tolerance: boolean;
+}
+
+export interface OperationSuggestion {
+  uuid: string;
+  /** Gana con claridad; solo entonces el selector la preselecciona. */
+  confident: boolean;
+}
+
+export interface OperationMatchResponse {
+  suggestion: OperationSuggestion | null;
+  candidates: OperationMatchScore[];
+}
+
 export interface OperationStats {
   pending: number;
   completed: number;

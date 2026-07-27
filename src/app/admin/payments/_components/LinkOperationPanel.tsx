@@ -23,14 +23,13 @@ import { paymentService } from '@/services/paymentService';
 import { fundService } from '@/services/fundService';
 import { formatCaracasShortDateTime, formatNumber, formatRelativeTime } from '@/utils/functions';
 import { getStatusMeta } from '@/utils/operationStatus';
-import {
-  AMOUNT_TOLERANCE,
-  canScorePayment,
-  pickSuggestion,
-  scoreOperation,
-  type OperationScore,
-} from '@/utils/operationMatch';
-import type { OperationData, OrphanAction, UnlinkPreview } from '@/types/operation';
+import type {
+  OperationData,
+  OperationMatchResponse,
+  OperationMatchScore,
+  OrphanAction,
+  UnlinkPreview,
+} from '@/types/operation';
 import type { FundGroup } from '@/types/fund';
 import type { PaymentData, PaymentTable } from '@/types/payment';
 import { CreateOperationForm } from './CreateOperationForm';
@@ -65,8 +64,8 @@ type Scope = 'auto' | 'global';
 type StatusView = 'active' | 'completed';
 type SortMode = 'suggested' | 'amount' | 'time';
 
-/** Operación candidata con su puntuación frente al comprobante que se está vinculando. */
-type ScoredOperation = OperationScore & { uuid: string; op: OperationData };
+/** Operación candidata junto a la puntuación que le dio el backend (si la tiene). */
+type ScoredOperation = { op: OperationData; score: OperationMatchScore | null };
 
 /** Cuánto se aparta el monto de la operación del comprobante: "±0", "-7", "+43". */
 function formatDelta(delta: number) {
@@ -87,6 +86,9 @@ export function LinkOperationPanel({
   pickLabel = 'Elegir',
 }: LinkOperationPanelProps) {
   const [operations, setOperations] = useState<OperationData[]>([]);
+  // Puntuación de las candidatas frente a este comprobante: la calcula el backend, con la
+  // misma regla que usa el matcher automático del bot.
+  const [match, setMatch] = useState<OperationMatchResponse | null>(null);
   const [groups, setGroups] = useState<FundGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -113,6 +115,12 @@ export function LinkOperationPanel({
     autoPickedFor.current = null;
     let active = true;
     setLoading(true);
+    setMatch(null);
+    // La puntuación viaja en paralelo con el listado: si falla, el selector sigue usable
+    // (sin sugerencia y ordenado por recencia, como antes de existir el scoring).
+    operationService.matchForPayment(payment.id, table).then((res) => {
+      if (active && res.success && res.data) setMatch(res.data);
+    });
     Promise.all([
       operationService.getOperations({ limit: 500 }),
       table === 'outgoing'
@@ -207,20 +215,26 @@ export function LinkOperationPanel({
   }, [payment.operation_uuid, scoped, statusView, table]);
 
   // ¿Se puede comparar? Sin monto en el comprobante no hay sugerencia ni orden por cercanía.
-  const scorable = canScorePayment(payment);
+  const scorable = payment.amount != null && payment.amount > 0;
 
-  const scored = useMemo<ScoredOperation[]>(() => {
-    const nowMs = Date.now();
-    return availableByStatus.map((op) => ({
-      uuid: op.uuid,
-      op,
-      ...scoreOperation(op, payment, table, nowMs),
-    }));
-  }, [availableByStatus, payment, table]);
+  const scores = useMemo(
+    () => new Map((match?.candidates ?? []).map((c) => [c.uuid, c])),
+    [match],
+  );
 
-  // Se calcula sobre todo el alcance visible y NO sobre lo que filtra el buscador: escribir
-  // para ubicar una operación no debe cambiar cuál es la sugerida.
-  const suggestion = useMemo(() => (scorable ? pickSuggestion(scored) : null), [scorable, scored]);
+  const scored = useMemo<ScoredOperation[]>(
+    () => availableByStatus.map((op) => ({ op, score: scores.get(op.uuid) ?? null })),
+    [availableByStatus, scores],
+  );
+
+  // La sugerencia la decide el backend sobre TODAS las operaciones recientes; aquí solo se
+  // respeta si además está a la vista (pestaña y alcance actuales).
+  const suggestion = useMemo(() => {
+    if (!match?.suggestion) return null;
+    return availableByStatus.some((op) => op.uuid === match.suggestion!.uuid)
+      ? match.suggestion
+      : null;
+  }, [match, availableByStatus]);
 
   // Si la sugerencia es inequívoca, queda preseleccionada — el operador todavía tiene que
   // confirmar con Continuar/Vincular, así que nunca se vincula nada solo.
@@ -252,14 +266,15 @@ export function LinkOperationPanel({
     } else if (sortMode === 'amount') {
       // Por cercanía al monto del comprobante; las que no se pueden comparar, al final.
       list.sort((a, b) => {
-        const ra = a.relative ?? Number.POSITIVE_INFINITY;
-        const rb = b.relative ?? Number.POSITIVE_INFINITY;
+        const ra = a.score?.relative ?? Number.POSITIVE_INFINITY;
+        const rb = b.score?.relative ?? Number.POSITIVE_INFINITY;
         return ra !== rb ? ra - rb : byCreatedAtDesc(a, b);
       });
     } else {
-      // Sin comprobante que comparar todos puntúan 0 y manda la recencia (el orden de siempre).
-      list.sort((a, b) => b.score - a.score || byCreatedAtDesc(a, b));
-      const i = suggestion ? list.findIndex((s) => s.uuid === suggestion.uuid) : -1;
+      // Sin puntuación (o si el backend falló) todas valen 0 y manda la recencia: el orden
+      // de siempre, que es exactamente el comportamiento previo al scoring.
+      list.sort((a, b) => (b.score?.score ?? 0) - (a.score?.score ?? 0) || byCreatedAtDesc(a, b));
+      const i = suggestion ? list.findIndex((s) => s.op.uuid === suggestion.uuid) : -1;
       if (i > 0) list.unshift(...list.splice(i, 1));
     }
     // El corte va DESPUÉS de ordenar: al revés la sugerida podía quedar fuera de la lista.
@@ -487,7 +502,7 @@ export function LinkOperationPanel({
               : 'Sin cotizaciones en este alcance. Prueba "Ver todas".'}
           </p>
         ) : (
-          ranked.map(({ op, delta, relative }) => {
+          ranked.map(({ op, score }) => {
             const isSel = selected === op.uuid;
             const isSuggested = suggestion?.uuid === op.uuid;
             const client = op.client_display_name || stripPhone(op.client_phone) || 'Cliente';
@@ -528,15 +543,15 @@ export function LinkOperationPanel({
                       {formatCaracasShortDateTime(op.created_at)} · {formatRelativeTime(op.created_at)}
                     </span>
                   </span>
-                  {delta != null ? (
+                  {score?.delta != null ? (
                     <span
                       className={`shrink-0 tabular-nums ${
-                        (relative ?? 1) <= AMOUNT_TOLERANCE
+                        score.within_tolerance
                           ? 'text-emerald-600 dark:text-emerald-400'
                           : 'text-muted-foreground'
                       }`}
                     >
-                      {formatDelta(delta)}
+                      {formatDelta(score.delta)}
                     </span>
                   ) : null}
                 </div>

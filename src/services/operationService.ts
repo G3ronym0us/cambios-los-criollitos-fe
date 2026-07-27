@@ -4,12 +4,13 @@ import {
   OperationData,
   OperationFilters,
   OperationListResponse,
+  OperationMatchResponse,
   OperationStatus,
   OperationStats,
   ProfitAllocationInput,
   ProfitAllocationList,
 } from '@/types/operation';
-import type { PaymentData } from '@/types/payment';
+import type { PaymentData, PaymentTable } from '@/types/payment';
 
 export interface OperationPayments {
   incoming: PaymentData[];
@@ -27,6 +28,24 @@ export class OperationService {
 
     const qs = params.toString();
     const result = await httpClient.get<OperationListResponse>(qs ? `/operations?${qs}` : '/operations');
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  /**
+   * Puntúa las operaciones recientes contra un comprobante, para ordenar el selector de
+   * "vincular pago" y marcar la más probable. La regla es la misma que usa el matcher
+   * automático del bot: vive en el backend, no se duplica aquí.
+   */
+  async matchForPayment(
+    paymentId: number,
+    table: PaymentTable,
+    limit = 500,
+  ): Promise<ApiResponse<OperationMatchResponse>> {
+    const result = await httpClient.post<OperationMatchResponse>('/operations/match', {
+      payment_id: paymentId,
+      table,
+      limit,
+    });
     return { success: result.success, data: result.data, error: result.error };
   }
 
