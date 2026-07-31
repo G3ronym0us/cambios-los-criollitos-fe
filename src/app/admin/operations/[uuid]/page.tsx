@@ -692,15 +692,28 @@ export default function OperationDetailPage() {
             </CardContent>
           </Card>
 
-          {operationNotes ? (
+          {operationNotes || operation.beneficiary_alias ? (
             <Card>
               <CardHeader className="border-b">
                 <CardTitle>Notas y datos de pago</CardTitle>
               </CardHeader>
-              <CardContent className="px-4 sm:px-6">
-                <p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">
-                  {operationNotes}
-                </p>
+              <CardContent className="space-y-3 px-4 sm:px-6">
+                {operation.beneficiary_alias ? (
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Beneficiario: </span>
+                    <span className="font-medium">{operation.beneficiary_alias}</span>
+                    {operation.beneficiary_ambiguous ? (
+                      <span className="ml-2 text-xs text-destructive">
+                        nombre ambiguo — desambigua en el cliente
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+                {operationNotes ? (
+                  <p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">
+                    {operationNotes}
+                  </p>
+                ) : null}
               </CardContent>
             </Card>
           ) : null}

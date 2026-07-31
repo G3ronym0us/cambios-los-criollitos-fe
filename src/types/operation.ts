@@ -43,6 +43,12 @@ export interface OperationData {
   delivery_status: DeliveryStatus | null;
   delivered_at: string | null;
   notes: string | null;
+  // Nombre del beneficiario dicho en el mensaje ("a yelitza"), aunque no tenga cuenta
+  // guardada todavía; `beneficiary_account_uuid` sólo está seteado si ya se resolvió a una
+  // cuenta de la libreta del cliente. `beneficiary_ambiguous` = había varias con ese nombre.
+  beneficiary_alias: string | null;
+  beneficiary_account_uuid: string | null;
+  beneficiary_ambiguous: boolean;
   // La op quedó sin ningún comprobante y un operador aceptó dejarla así.
   no_payments_ack_by_username: string | null;
   no_payments_ack_at: string | null;

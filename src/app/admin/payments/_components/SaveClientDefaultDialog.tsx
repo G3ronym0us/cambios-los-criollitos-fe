@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -42,6 +43,7 @@ export function SaveClientDefaultDialog({ payment, onClose }: SaveClientDefaultD
   const [saving, setSaving] = useState(false);
   const [info, setInfo] = useState('');
   const [currency, setCurrency] = useState('');
+  const [alias, setAlias] = useState('');
 
   const clientUuid = payment?.client_uuid ?? null;
 
@@ -55,6 +57,7 @@ export function SaveClientDefaultDialog({ payment, onClose }: SaveClientDefaultD
     setLoading(true);
     setInfo(buildPaymentBlock(payment) ?? '');
     setCurrency(suggestedCurrency(payment) || '');
+    setAlias('');
     clientService.getClient(clientUuid).then((res) => {
       if (cancelled) return;
       if (res.success && res.data) {
@@ -73,9 +76,13 @@ export function SaveClientDefaultDialog({ payment, onClose }: SaveClientDefaultD
 
   const current = client?.default_payment_info ?? null;
   const candidate = buildPaymentBlock(payment ?? ({} as PaymentData));
+  const hasAlias = alias.trim().length > 0;
   // "Si es igual a los actuales no diga nada": el bloque candidato coincide con el guardado
-  // (misma moneda incluida). El operador editó nada aún → sin cambio que confirmar.
+  // (misma moneda incluida). El operador editó nada aún → sin cambio que confirmar. Sólo
+  // aplica cuando se está guardando la cuenta predeterminada (sin alias): con alias esto es
+  // siempre una cuenta nueva de la libreta, aunque el bloque coincida con la predeterminada.
   const alreadySame =
+    !hasAlias &&
     !!current &&
     sameBlock(current, candidate) &&
     (client?.default_payment_currency ?? '') === (suggestedCurrency(payment ?? ({} as PaymentData)) || '');
@@ -86,7 +93,9 @@ export function SaveClientDefaultDialog({ payment, onClose }: SaveClientDefaultD
 
   const dirty =
     info.trim().length > 0 &&
-    (!sameBlock(info, current) || (currency || '') !== (client?.default_payment_currency ?? ''));
+    (hasAlias ||
+      !sameBlock(info, current) ||
+      (currency || '') !== (client?.default_payment_currency ?? ''));
 
   const handleSave = async () => {
     if (!clientUuid) return;
@@ -99,14 +108,18 @@ export function SaveClientDefaultDialog({ payment, onClose }: SaveClientDefaultD
       return;
     }
     setSaving(true);
-    const res = await clientService.updateClient(clientUuid, {
-      default_payment_info: info.trim(),
-      default_payment_currency: currency,
+    const res = await clientService.createAccount(clientUuid, {
+      alias: hasAlias ? alias.trim() : null,
+      payment_info: info.trim(),
+      currency,
+      is_default: !hasAlias,
     });
     setSaving(false);
     if (res.success) {
-      toast.success('Datos predeterminados del cliente actualizados');
+      toast.success(hasAlias ? `Cuenta de ${alias.trim()} guardada` : 'Datos predeterminados del cliente actualizados');
       onClose();
+    } else if (res.error === 'El cliente ya tiene esa cuenta guardada') {
+      toast.error('El cliente ya tiene esa cuenta guardada');
     } else {
       toast.error(res.error || 'No se pudieron guardar los datos');
     }
@@ -152,6 +165,21 @@ export function SaveClientDefaultDialog({ payment, onClose }: SaveClientDefaultD
             )}
 
             <div className="space-y-1.5">
+              <Label htmlFor="beneficiary-alias">Nombre del beneficiario (opcional)</Label>
+              <Input
+                id="beneficiary-alias"
+                value={alias}
+                onChange={(e) => setAlias(e.target.value)}
+                placeholder="Ej. Yelitza Bolívar"
+              />
+              <p className="text-xs text-muted-foreground">
+                {hasAlias
+                  ? 'Se guarda como una cuenta más de la libreta del cliente, no como la predeterminada.'
+                  : 'Déjalo vacío para guardar esta cuenta como la predeterminada del cliente.'}
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
               <Label htmlFor="default-info">{current ? 'Datos nuevos' : 'Datos'}</Label>
               <Textarea
                 id="default-info"
@@ -193,7 +221,7 @@ export function SaveClientDefaultDialog({ payment, onClose }: SaveClientDefaultD
               Cancelar
             </Button>
             <Button onClick={handleSave} disabled={saving || !dirty || !canSave}>
-              {saving ? 'Guardando...' : 'Guardar datos del cliente'}
+              {saving ? 'Guardando...' : hasAlias ? 'Guardar cuenta' : 'Guardar datos del cliente'}
             </Button>
           </DialogFooter>
         ) : null}
