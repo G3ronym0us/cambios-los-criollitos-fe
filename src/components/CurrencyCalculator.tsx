@@ -9,6 +9,7 @@ import { adminService } from "../services/adminService";
 import { getCurrencyName } from "../utils/currencyConfig";
 import { Role } from "../utils/enums";
 import { orientRateForDisplay } from "../utils/functions";
+import { pairRoundingFrom, quotePair } from "../utils/rounding";
 
 interface Rate {
   from_currency: string;
@@ -18,6 +19,12 @@ interface Rate {
   percentage?: number | null;
   inverse_percentage: boolean;
   currency_pair_uuid?: string;
+  // Redondeo configurado en el par. Llega en `/rates`; sin aplicarlo la
+  // calculadora muestra una tasa distinta a la que cotiza el bot.
+  rounding_mode?: string | null;
+  rounding_step?: number | null;
+  rounding_direction?: string | null;
+  rounding_amount_side?: string | null;
 }
 
 interface CurrencyCalculatorProps {
@@ -32,6 +39,12 @@ interface CalculatorState {
   toCurrency: string;
   result: number | null;
   rate: number | null;
+  /**
+   * Cómo interpretar `rate`. Normalmente es el `inverse_percentage` del par,
+   * pero el redondeo en modo RATE devuelve la tasa ya en forma directa, así
+   * que la vista tiene que leer este flag y no el del par.
+   */
+  rateInverse?: boolean;
   bcvAmount?: string;
 }
 
@@ -73,22 +86,6 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
   // Función para redondear valores calculados a 2 decimales
   const roundToDecimals = (value: number, decimals: number = 2): number => {
     return Math.round(value * Math.pow(10, decimals)) / Math.pow(10, decimals);
-  };
-
-  // Helper: Aplicar conversión de tasa
-  const applyRateConversion = (
-    amount: number,
-    rate: number,
-    inversePercentage: boolean,
-    isReverseCalculation: boolean
-  ): number => {
-    if (isReverseCalculation) {
-      // Calculando FROM desde TO (dirección inversa)
-      return inversePercentage ? amount * rate : amount / rate;
-    } else {
-      // Calculando TO desde FROM (dirección normal)
-      return inversePercentage ? amount / rate : amount * rate;
-    }
   };
 
   // Helper: Calcular monto BCV equivalente usando la tasa activa (USD o EUR)
@@ -169,42 +166,60 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
     // Sync slider to the new pair's percentage
     setSliderValue(directRate.percentage ?? 0);
 
+    // Redondeo configurado del par: la cotización tiene que dar el mismo número
+    // que el bot y el backend, que lo aplican al cotizar.
+    const rounding = pairRoundingFrom(directRate);
+
     // Calcular el monto faltante según la entrada
     let finalFromAmount: number;
     let finalToAmount: number;
+    let quotedRate = directRate.rate;
+    let quotedInverse = directRate.inverse_percentage;
 
     if (toAmount !== undefined) {
       // Usuario editó campo TO → calcular FROM
       setLastEdited('to');
-      const calculated = applyRateConversion(
+      const quote = quotePair(
         toAmount,
         directRate.rate,
         directRate.inverse_percentage,
-        true // cálculo inverso
+        'RECEIVE',
+        rounding
       );
-      finalFromAmount = roundToDecimals(calculated, 2);
-      finalToAmount = bcvValue ? roundToDecimals(toAmount, 2) : toAmount;
+      finalFromAmount = roundToDecimals(quote.fromAmount, 2);
+      finalToAmount = bcvValue ? roundToDecimals(quote.toAmount, 2) : quote.toAmount;
+      quotedRate = quote.rate;
+      quotedInverse = quote.inverse;
     } else {
       // Usuario editó campo FROM → calcular TO
       setLastEdited('from');
-      const calculated = applyRateConversion(
+      const quote = quotePair(
         fromAmount!,
         directRate.rate,
         directRate.inverse_percentage,
-        false // cálculo normal
+        'SEND',
+        rounding
       );
-      finalFromAmount = bcvValue ? roundToDecimals(fromAmount!, 2) : fromAmount!;
-      finalToAmount = roundToDecimals(calculated, 2);
+      finalFromAmount = bcvValue ? roundToDecimals(quote.fromAmount, 2) : quote.fromAmount;
+      finalToAmount = roundToDecimals(quote.toAmount, 2);
+      quotedRate = quote.rate;
+      quotedInverse = quote.inverse;
 
       // Al cambiar de moneda, si el monto TO queda en 0 (tasa muy chica para
       // ese FROM), sembrar TO=1 y recalcular FROM para que la carga sea útil.
       if (seedToOnZero && finalToAmount === 0) {
         setLastEdited('to');
         finalToAmount = 1;
-        finalFromAmount = roundToDecimals(
-          applyRateConversion(1, directRate.rate, directRate.inverse_percentage, true),
-          2
+        const seeded = quotePair(
+          1,
+          directRate.rate,
+          directRate.inverse_percentage,
+          'RECEIVE',
+          rounding
         );
+        finalFromAmount = roundToDecimals(seeded.fromAmount, 2);
+        quotedRate = seeded.rate;
+        quotedInverse = seeded.inverse;
       }
     }
 
@@ -226,7 +241,8 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
       toCurrency,
       amount: finalFromAmount,
       result: finalToAmount,
-      rate: directRate.rate,
+      rate: quotedRate,
+      rateInverse: quotedInverse,
       bcvAmount: amountBCV ? amountBCV.toString() : "",
     }));
   };
@@ -273,16 +289,21 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
       ) ?? rates[0];
 
     if (directRate) {
-      const result = directRate.inverse_percentage
-        ? 1 / directRate.rate
-        : 1 * directRate.rate;
+      const quote = quotePair(
+        1,
+        directRate.rate,
+        directRate.inverse_percentage,
+        'SEND',
+        pairRoundingFrom(directRate)
+      );
       setCalculator((prev) => ({
         ...prev,
         fromCurrency: directRate.from_currency,
         toCurrency: directRate.to_currency,
         amount: 1,
-        result: result,
-        rate: directRate.rate,
+        result: quote.toAmount,
+        rate: quote.rate,
+        rateInverse: quote.inverse,
       }));
       setSliderValue(directRate.percentage ?? 0);
     }
@@ -321,18 +342,20 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
       currentRate.inverse_percentage
     );
     const activeRate = bcvMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
+    // El redondeo del par también aplica sobre la tasa de vista previa: es la
+    // que se va a cotizar si se guarda el porcentaje.
+    const rounding = pairRoundingFrom(currentRate);
 
     if (lastEdited === 'to' && calculator.result != null) {
       // El usuario escribió el monto TO: mantenerlo fijo y recalcular FROM
-      const newAmount = roundToDecimals(
-        applyRateConversion(
-          calculator.result,
-          previewRate,
-          currentRate.inverse_percentage,
-          true
-        ),
-        2
+      const quote = quotePair(
+        calculator.result,
+        previewRate,
+        currentRate.inverse_percentage,
+        'RECEIVE',
+        rounding
       );
+      const newAmount = roundToDecimals(quote.fromAmount, 2);
       const newBcv = getBCVAmount(
         newAmount,
         calculator.result,
@@ -344,7 +367,8 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
       setCalculator((prev) => ({
         ...prev,
         amount: newAmount,
-        rate: previewRate,
+        rate: quote.rate,
+        rateInverse: quote.inverse,
         bcvAmount: newBcv !== undefined ? newBcv.toString() : prev.bcvAmount,
       }));
       return;
@@ -352,16 +376,17 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
 
     if (calculator.amount === undefined) return;
 
-    const newResult = applyRateConversion(
+    const quote = quotePair(
       calculator.amount,
       previewRate,
       currentRate.inverse_percentage,
-      false
+      'SEND',
+      rounding
     );
 
     const newBcv = getBCVAmount(
       calculator.amount,
-      roundToDecimals(newResult, 2),
+      roundToDecimals(quote.toAmount, 2),
       calculator.fromCurrency,
       calculator.toCurrency,
       activeRate
@@ -369,8 +394,9 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
 
     setCalculator((prev) => ({
       ...prev,
-      result: roundToDecimals(newResult, 2),
-      rate: previewRate,
+      result: roundToDecimals(quote.toAmount, 2),
+      rate: quote.rate,
+      rateInverse: quote.inverse,
       bcvAmount: newBcv !== undefined ? newBcv.toString() : prev.bcvAmount,
     }));
   };
@@ -405,7 +431,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
     if (calculator.rate) {
       const oriented = orientRateForDisplay(
         calculator.rate,
-        currentRate?.inverse_percentage ?? false,
+        calculator.rateInverse ?? currentRate?.inverse_percentage ?? false,
         calculator.fromCurrency,
         calculator.toCurrency
       );
@@ -570,7 +596,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
             <span className="text-base font-bold tabular-nums text-foreground">
               {orientRateForDisplay(
                 calculator.rate,
-                currentRate.inverse_percentage,
+                calculator.rateInverse ?? currentRate.inverse_percentage,
                 calculator.fromCurrency,
                 calculator.toCurrency
               ).value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
@@ -802,7 +828,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
             fromCurrency={calculator.fromCurrency}
             toCurrency={calculator.toCurrency}
             rate={calculator.rate}
-            inversePercentage={currentRate?.inverse_percentage ?? false}
+            inversePercentage={calculator.rateInverse ?? currentRate?.inverse_percentage ?? false}
             bcvAmount={calculator.bcvAmount}
             bcvMode={bcvMode}
           />
