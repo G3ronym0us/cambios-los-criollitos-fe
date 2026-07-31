@@ -4,6 +4,9 @@ import {
   BalanceAdjust,
   BalanceEntry,
   BalanceSummary,
+  ClientAccount,
+  ClientAccountCreate,
+  ClientAccountUpdate,
   ClientData,
   ClientFilters,
   ClientListResponse,
@@ -71,6 +74,28 @@ export class ClientService {
       `/clients/${clientUuid}/loans/${loanUuid}/repayments`,
       { preferred_amount: preferredAmount, notes: notes ?? null },
     );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  // Libreta de cuentas del cliente (beneficiarios con nombre). Listar requiere usuario
+  // autenticado; crear/editar/borrar requieren moderador+ en el backend.
+  async getAccounts(clientUuid: string): Promise<ApiResponse<{ items: ClientAccount[] }>> {
+    const result = await httpClient.get<{ items: ClientAccount[] }>(`/clients/${clientUuid}/accounts`);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  async createAccount(clientUuid: string, data: ClientAccountCreate): Promise<ApiResponse<ClientAccount>> {
+    const result = await httpClient.post<ClientAccount>(`/clients/${clientUuid}/accounts`, data);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  async updateAccount(accountUuid: string, data: ClientAccountUpdate): Promise<ApiResponse<ClientAccount>> {
+    const result = await httpClient.patch<ClientAccount>(`/clients/accounts/${accountUuid}`, data);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  async deleteAccount(accountUuid: string): Promise<ApiResponse<void>> {
+    const result = await httpClient.delete<void>(`/clients/accounts/${accountUuid}`);
     return { success: result.success, data: result.data, error: result.error };
   }
 }

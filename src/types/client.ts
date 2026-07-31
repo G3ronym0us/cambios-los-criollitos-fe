@@ -98,6 +98,37 @@ export interface ClientLoansSummary {
   loans: LoanData[];
 }
 
+// Cuenta de pago guardada de un cliente. `alias` es el nombre del beneficiario
+// ("Yelitza Bolívar"); null en la cuenta predeterminada, que es la que se usa cuando el
+// cliente cotiza sin nombrar a nadie.
+export interface ClientAccount {
+  uuid: string;
+  alias: string | null;
+  payment_info: string;
+  currency: string;
+  is_default: boolean;
+  is_confirmed: boolean;
+  source: 'MESSAGE' | 'RECEIPT' | 'MANUAL';
+  last_used_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ClientAccountCreate {
+  alias?: string | null;
+  payment_info: string;
+  currency: string;
+  is_default?: boolean;
+}
+
+export interface ClientAccountUpdate {
+  alias?: string | null;
+  payment_info?: string;
+  currency?: string;
+  is_default?: boolean;
+  is_confirmed?: boolean;
+}
+
 export interface ClientListResponse {
   items: ClientData[];
   total: number;
