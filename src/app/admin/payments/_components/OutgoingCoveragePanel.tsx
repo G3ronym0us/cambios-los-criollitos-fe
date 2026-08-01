@@ -65,12 +65,17 @@ export function OutgoingCoveragePanel({
     onChange(value);
   };
 
+  // Las tasas vienen en "moneda del comprobante por unidad de valor", que en un COP-VES da
+  // 0,2455 — ilegible redondeada a dos decimales. Si es < 1 se muestran todas dadas vuelta
+  // (4,0738 pesos por bolívar), que es como el operador las piensa. Solo presentación.
+  const flipped = (coverage.reference_rate ?? 1) < 1;
+  const showRate = (rate: number) =>
+    (flipped ? 1 / rate : rate).toLocaleString('es-ES', { maximumFractionDigits: 4 });
+
   // Tasa a la que quedaría el cambio con el monto elegido, para mostrarla al vuelo.
   const chosen =
     mode === 'RATE' ? suggested : mode === 'FULL' ? pending : Number.isFinite(customValue) ? customValue : null;
   const effectiveRate = chosen && chosen > 0 ? paid / chosen : null;
-  const rateDiff =
-    effectiveRate && coverage.reference_rate ? effectiveRate - coverage.reference_rate : null;
 
   const option = (active: boolean) =>
     `w-full rounded-lg border px-3 py-2 text-left transition-colors ${
@@ -102,7 +107,8 @@ export function OutgoingCoveragePanel({
             ) : null}
           </span>
           <span className="block text-xs text-muted-foreground">
-            {formatNumber(paid)} {payCur} ÷ {formatNumber(coverage.reference_rate ?? 0)}
+            {formatNumber(paid)} {payCur} {flipped ? '×' : '÷'}{' '}
+            {showRate(coverage.reference_rate ?? 0)}
           </span>
         </button>
       ) : null}
@@ -113,7 +119,7 @@ export function OutgoingCoveragePanel({
             Cubre el pendiente · {formatNumber(pending)} {cur}
           </span>
           <span className="block text-xs text-muted-foreground">
-            Tasa efectiva {formatNumber(coverage.full_effective_rate ?? 0)}
+            Tasa efectiva {showRate(coverage.full_effective_rate ?? 0)}
             {coverage.full_rate_difference != null && coverage.full_amount_difference != null ? (
               <>
                 {' · '}
@@ -151,8 +157,10 @@ export function OutgoingCoveragePanel({
         />
         {mode === 'CUSTOM' && effectiveRate ? (
           <p className="mt-1 text-xs text-muted-foreground">
-            Tasa efectiva {formatNumber(effectiveRate)}
-            {rateDiff != null ? ` (${rateDiff > 0 ? '+' : ''}${formatNumber(rateDiff)})` : ''}
+            Tasa efectiva {showRate(effectiveRate)}
+            {coverage.reference_rate
+              ? ` (referencia ${showRate(coverage.reference_rate)})`
+              : ''}
           </p>
         ) : null}
       </div>
