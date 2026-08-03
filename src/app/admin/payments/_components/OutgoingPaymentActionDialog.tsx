@@ -30,7 +30,7 @@ import { formatAmountForInput, formatCaracasDateTime, formatNumber, sanitizeAmou
 import { CurrencyType, type CurrencyData } from '@/types/admin';
 import type { OrphanAction, UnlinkPreview } from '@/types/operation';
 import { UnlinkOrphanDialog } from './UnlinkOrphanDialog';
-import type { LoanPreferredValue, LoanValuation, PaymentData } from '@/types/payment';
+import type { LoanPreferredValue, LoanValuation, PaymentData, PaymentSuggestion } from '@/types/payment';
 import { LinkOperationPanel } from './LinkOperationPanel';
 
 interface OutgoingPaymentActionDialogProps {
@@ -59,11 +59,15 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
   const [valuation, setValuation] = useState<LoanValuation | null>(null);
   const [valuationLoading, setValuationLoading] = useState(false);
   const [valuationError, setValuationError] = useState<string | null>(null);
+  // Operación que el matcher propone: se muestra dentro de la opción "vincular", para que
+  // clasificar no obligue a abrir el buscador solo para comprobar qué hay al otro lado.
+  const [suggestion, setSuggestion] = useState<PaymentSuggestion | null>(null);
 
   useEffect(() => {
     setStep('choose');
     setDesc('');
     setSubmitting(false);
+    setSuggestion(null);
     const paymentCurrency = (payment?.currency || '').toUpperCase();
     const normalizedCurrency = ['ZELLE', 'PAYPAL'].includes(paymentCurrency) ? 'USD' : paymentCurrency;
     setPaymentCurrency(paymentCurrency || 'VES');
@@ -76,6 +80,15 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
     setValuation(null);
     setValuationLoading(false);
     setValuationError(null);
+
+    if (!payment || payment.operation_uuid || payment.amount == null) return;
+    let active = true;
+    paymentService.getSuggestions('outgoing', [payment.id]).then((res) => {
+      if (active && res.success && res.data) setSuggestion(res.data.items[0] ?? null);
+    });
+    return () => {
+      active = false;
+    };
   }, [payment]);
 
   useEffect(() => {
@@ -328,16 +341,50 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
         {step === 'choose' ? (
           <>
             <DialogHeader>
-              <DialogTitle>¿Qué quieres hacer con este pago?</DialogTitle>
+              <DialogTitle>¿Qué es este pago saliente?</DialogTitle>
               <DialogDescription>
                 Clasifica el pago saliente antes de vincularlo a una operación.
               </DialogDescription>
             </DialogHeader>
+
+            {/* Con qué se está decidiendo: el comprobante, sin salir del cuadro. */}
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="text-sm font-bold tabular-nums text-foreground">
+                  {payment.amount != null ? formatNumber(payment.amount) : '—'}{' '}
+                  <span className="text-xs font-semibold text-muted-foreground">
+                    {payment.currency ?? ''}
+                  </span>
+                </p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {[
+                    payment.bank_to || payment.bank_from || payment.provider,
+                    payment.account_number || payment.phone_to,
+                    payment.identification,
+                    formatCaracasDateTime(payment.created_at),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              </div>
+              <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-muted-foreground">
+                Saliente
+              </span>
+            </div>
+
             <div className="space-y-2">
               <ChoiceButton
                 icon={Link2}
-                title="Vincular a una operación"
-                description="Asociar el pago a una cotización del cliente."
+                title="Pago de una operación"
+                description={
+                  suggestion
+                    ? `Sugerida: ${[suggestion.from_currency, suggestion.to_currency]
+                        .filter(Boolean)
+                        .join('→')}${
+                        suggestion.to_amount != null ? ` · ${formatNumber(suggestion.to_amount)}` : ''
+                      }`
+                    : 'Asociar el pago a una cotización del cliente.'
+                }
                 active={current === 'operation'}
                 onClick={goOperation}
               />

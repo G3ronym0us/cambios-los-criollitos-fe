@@ -1,21 +1,29 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { paymentService } from '@/services/paymentService';
-import { PaymentData, PaymentTable } from '@/types/payment';
+import type { DateRange } from '@/lib/dateRange';
+import {
+  AttentionFilter,
+  PaymentData,
+  PaymentStats,
+  PaymentSuggestion,
+  PaymentTable,
+} from '@/types/payment';
 
 export type OutgoingClass = 'ALL' | 'UNLINKED' | 'OPERATIONAL' | 'LOAN' | 'PERSONAL' | 'IRRELEVANT';
 
 const OUT_CLASSES: OutgoingClass[] = ['ALL', 'UNLINKED', 'OPERATIONAL', 'LOAN', 'PERSONAL', 'IRRELEVANT'];
+const ATTENTION_FILTERS: AttentionFilter[] = ['ALL', 'ATTENTION', 'RECONCILED'];
 
 const TAB_STORAGE_KEY = 'payments-active-tab';
-// Card a la que volver tras "Ver operación" (sessionStorage, lo escribe PaymentItem).
+// Fila a la que volver tras "Ver operación" (sessionStorage, lo escribe la lista).
 export const PAYMENT_FOCUS_KEY = 'payments-focus';
 const PAGE_SIZE = 50;
 const MAX_REQUEST_SIZE = 200; // límite del backend por petición
-const FOCUS_MAX_ITEMS = 500; // tope de páginas a cargar buscando la card de retorno
+const FOCUS_MAX_ITEMS = 500; // tope de páginas a cargar buscando la fila de retorno
 const SEARCH_DEBOUNCE_MS = 300;
 
 export function usePayments() {
@@ -33,6 +41,14 @@ export function usePayments() {
     const c = searchParams.get('class') as OutgoingClass | null;
     return c && OUT_CLASSES.includes(c) ? c : 'ALL';
   });
+  const [attention, setAttention] = useState<AttentionFilter>(() => {
+    const a = searchParams.get('att') as AttentionFilter | null;
+    return a && ATTENTION_FILTERS.includes(a) ? a : 'ALL';
+  });
+  const [range, setRange] = useState<DateRange>(() => ({
+    from: searchParams.get('from') ?? undefined,
+    to: searchParams.get('to') ?? undefined,
+  }));
   const [debouncedSearch, setDebouncedSearch] = useState(() => (searchParams.get('q') ?? '').trim());
 
   // Lista de la pestaña activa (acumulada por scroll infinito).
@@ -40,12 +56,18 @@ export function usePayments() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Diferenciamos "no hay pagos" de "no se pudieron cargar": el diseño les da pantallas distintas.
+  const [error, setError] = useState<string | null>(null);
 
   // Totales sin filtrar por tabla (para los badges de las pestañas).
   const [totalIncoming, setTotalIncoming] = useState(0);
   const [totalOutgoing, setTotalOutgoing] = useState(0);
 
-  // Card a enfocar (retorno desde el detalle de operación).
+  // Agregados de la franja de atención y sugerencias de las filas cargadas.
+  const [stats, setStats] = useState<PaymentStats | null>(null);
+  const [suggestions, setSuggestions] = useState<Record<number, PaymentSuggestion>>({});
+
+  // Fila a enfocar (retorno desde el detalle de operación).
   const pendingFocus = useRef<{ table: PaymentTable; id: number } | null>(null);
   const [focusId, setFocusId] = useState<number | null>(null);
 
@@ -54,6 +76,16 @@ export function usePayments() {
 
   // Guard de carrera: ignora respuestas de peticiones que ya no son la última.
   const reqId = useRef(0);
+
+  const filters = useMemo(
+    () => ({
+      search: debouncedSearch,
+      outClass: effectiveOutClass,
+      dateFrom: range.from,
+      dateTo: range.to,
+    }),
+    [debouncedSearch, effectiveOutClass, range.from, range.to],
+  );
 
   // ── Pestaña inicial: foco pendiente > ?tab= de la URL > pestaña persistida ─
   useEffect(() => {
@@ -94,11 +126,14 @@ export function usePayments() {
     if (tab === 'outgoing') params.set('tab', 'outgoing');
     if (debouncedSearch) params.set('q', debouncedSearch);
     if (tab === 'outgoing' && outClass !== 'ALL') params.set('class', outClass);
+    if (attention !== 'ALL') params.set('att', attention);
+    if (range.from) params.set('from', range.from);
+    if (range.to) params.set('to', range.to);
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }, [tab, debouncedSearch, outClass, pathname, router]);
+  }, [tab, debouncedSearch, outClass, attention, range.from, range.to, pathname, router]);
 
-  // ── Totales sin filtrar (badges) ──────────────────────────────────────────
+  // ── Totales sin filtrar (badges de pestaña) ───────────────────────────────
   const loadTotals = useCallback(async () => {
     const [inc, out] = await Promise.all([
       paymentService.getPayments('incoming', { limit: 1 }),
@@ -112,25 +147,77 @@ export function usePayments() {
     loadTotals();
   }, [loadTotals]);
 
-  // ── Primera página (al cambiar pestaña / búsqueda / clasificación) ────────
+  // ── Franja de atención ────────────────────────────────────────────────────
+  // No depende de `attention`: es la cifra que ese propio segmento selecciona.
+  // Lleva su propio guard de carrera: al cambiar de pestaña salen dos peticiones y si la
+  // de entrantes contesta la última, la franja se queda anunciando el saldo de la otra bandeja.
+  const statsReqId = useRef(0);
+  const loadStats = useCallback(async () => {
+    const id = ++statsReqId.current;
+    const res = await paymentService.getStats(tab, filters);
+    if (id !== statsReqId.current) return;
+    setStats(res.success && res.data ? res.data : null);
+  }, [tab, filters]);
+
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
+
+  // ── Sugerencias de las filas visibles ─────────────────────────────────────
+  // Solo para lo que no tiene destino: en una fila ya vinculada la sugerencia sobra.
+  // Se piden en bloque y se acumulan, así el scroll infinito no repite lo ya resuelto.
+  const askedForSuggestions = useRef<Set<number>>(new Set());
+
+  // Cambiar de bandeja o de filtros invalida lo acumulado. Va ANTES del efecto que pide:
+  // así el que pide ve el conjunto ya vacío y no se pisa con una respuesta de los filtros viejos.
+  useEffect(() => {
+    askedForSuggestions.current = new Set();
+    setSuggestions({});
+  }, [tab, filters, attention]);
+
+  useEffect(() => {
+    const pending = items
+      .filter((p) => !p.operation_uuid && !p.deposit && !p.loan && p.amount != null)
+      .map((p) => p.id)
+      .filter((id) => !askedForSuggestions.current.has(id));
+    if (pending.length === 0) return;
+    pending.forEach((id) => askedForSuggestions.current.add(id));
+    let active = true;
+    paymentService.getSuggestions(tab, pending).then((res) => {
+      if (!active || !res.success || !res.data) return;
+      setSuggestions((prev) => {
+        const next = { ...prev };
+        for (const s of res.data!.items) next[s.payment_id] = s;
+        return next;
+      });
+    });
+    return () => {
+      active = false;
+    };
+  }, [items, tab]);
+
+  // ── Primera página (al cambiar pestaña / búsqueda / filtros) ──────────────
   const fetchFirstPage = useCallback(async () => {
     const id = ++reqId.current;
     setLoading(true);
     const res = await paymentService.getPayments(tab, {
       limit: PAGE_SIZE,
       offset: 0,
-      search: debouncedSearch,
-      outClass: effectiveOutClass,
+      attention,
+      ...filters,
     });
     if (id !== reqId.current) return; // llegó una petición más nueva
     if (res.success && res.data) {
       setItems(res.data.items);
       setTotal(res.data.total);
+      setError(null);
     } else {
-      toast.error(res.error || 'Error al cargar pagos');
+      setItems([]);
+      setTotal(0);
+      setError(res.error || 'No se pudieron cargar los pagos');
     }
     setLoading(false);
-  }, [tab, debouncedSearch, effectiveOutClass]);
+  }, [tab, attention, filters]);
 
   useEffect(() => {
     fetchFirstPage();
@@ -143,8 +230,8 @@ export function usePayments() {
     const res = await paymentService.getPayments(tab, {
       limit: PAGE_SIZE,
       offset: items.length,
-      search: debouncedSearch,
-      outClass: effectiveOutClass,
+      attention,
+      ...filters,
     });
     if (res.success && res.data) {
       setItems((prev) => [...prev, ...res.data!.items]);
@@ -153,9 +240,9 @@ export function usePayments() {
       toast.error(res.error || 'Error al cargar más pagos');
     }
     setLoadingMore(false);
-  }, [tab, debouncedSearch, effectiveOutClass, items.length, total, loading, loadingMore]);
+  }, [tab, attention, filters, items.length, total, loading, loadingMore]);
 
-  // ── Retorno desde "Ver operación": cargar hasta encontrar la card ─────────
+  // ── Retorno desde "Ver operación": cargar hasta encontrar la fila ─────────
   useEffect(() => {
     const f = pendingFocus.current;
     if (!f || loading || loadingMore || f.table !== tab) return;
@@ -175,6 +262,8 @@ export function usePayments() {
     setSearch('');
     setDebouncedSearch('');
     setOutClass('ALL');
+    setAttention('ALL');
+    setRange({});
     pendingFocus.current = { table, id };
     setFocusId(id);
     selectTab(table);
@@ -186,6 +275,7 @@ export function usePayments() {
   // así la lista no colapsa a la primera página ni se pierde el scroll.
   const refreshInPlace = useCallback(async () => {
     loadTotals();
+    loadStats();
     const count = Math.min(Math.max(items.length, PAGE_SIZE), 1000);
     const id = ++reqId.current;
     const requests = [];
@@ -194,8 +284,8 @@ export function usePayments() {
         paymentService.getPayments(tab, {
           limit: Math.min(MAX_REQUEST_SIZE, count - offset),
           offset,
-          search: debouncedSearch,
-          outClass: effectiveOutClass,
+          attention,
+          ...filters,
         }),
       );
     }
@@ -207,17 +297,22 @@ export function usePayments() {
     } else {
       toast.error('No se pudo refrescar la lista de pagos');
     }
-  }, [items.length, tab, debouncedSearch, effectiveOutClass, loadTotals]);
+  }, [items.length, tab, attention, filters, loadTotals, loadStats]);
 
   const reload = useCallback(() => {
     loadTotals();
+    loadStats();
     fetchFirstPage();
-  }, [loadTotals, fetchFirstPage]);
+  }, [loadTotals, loadStats, fetchFirstPage]);
 
-  const hasActiveFilters = search.trim() !== '' || outClass !== 'ALL';
+  const hasActiveFilters =
+    search.trim() !== '' || outClass !== 'ALL' || attention !== 'ALL' || !!range.from || !!range.to;
+
   const resetFilters = useCallback(() => {
     setSearch('');
     setOutClass('ALL');
+    setAttention('ALL');
+    setRange({});
   }, []);
 
   return {
@@ -226,12 +321,17 @@ export function usePayments() {
       total,
       totalIncoming,
       totalOutgoing,
+      stats,
+      suggestions,
       loading,
       loadingMore,
+      error,
       hasMore: items.length < total,
       tab,
       search,
       outClass,
+      attention,
+      range,
       hasActiveFilters,
       focusId,
     },
@@ -239,6 +339,8 @@ export function usePayments() {
       setTab: selectTab,
       setSearch,
       setOutClass,
+      setAttention,
+      setRange,
       resetFilters,
       reload,
       refreshInPlace,

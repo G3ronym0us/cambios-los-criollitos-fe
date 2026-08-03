@@ -9,6 +9,8 @@ import type {
   PaymentData,
   PaymentPage,
   PaymentQuery,
+  PaymentStats,
+  PaymentSuggestion,
   PaymentTable,
 } from '@/types/payment';
 import type { OrphanAction, UnlinkPreview } from '@/types/operation';
@@ -19,11 +21,42 @@ export class PaymentService {
     const sp = new URLSearchParams();
     sp.set('limit', String(query.limit ?? 50));
     sp.set('offset', String(query.offset ?? 0));
-    if (query.search) sp.set('search', query.search);
-    if (query.outClass && query.outClass !== 'ALL') sp.set('out_class', query.outClass);
+    this.appendFilters(sp, query);
     if (query.unlinkedOnly) sp.set('unlinked_only', 'true');
+    if (query.attention && query.attention !== 'ALL') sp.set('attention', query.attention);
     const result = await httpClient.get<PaymentPage>(`/payments/${table}?${sp.toString()}`);
     return { success: result.success, data: result.data, error: result.error };
+  }
+
+  // Agregados de la franja de atención. Toma los mismos filtros que el listado salvo
+  // `attention`: la cifra de "por atender" es justamente la que ese segmento selecciona.
+  async getStats(table: PaymentTable, query: PaymentQuery = {}): Promise<ApiResponse<PaymentStats>> {
+    const sp = new URLSearchParams();
+    this.appendFilters(sp, query);
+    const qs = sp.toString();
+    const result = await httpClient.get<PaymentStats>(
+      `/payments/${table}/stats${qs ? `?${qs}` : ''}`,
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  // Operación sugerida para una tanda de comprobantes (una página del listado).
+  async getSuggestions(
+    table: PaymentTable,
+    paymentIds: number[],
+  ): Promise<ApiResponse<{ items: PaymentSuggestion[] }>> {
+    const result = await httpClient.post<{ items: PaymentSuggestion[] }>(
+      `/payments/${table}/suggestions`,
+      { payment_ids: paymentIds },
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  private appendFilters(sp: URLSearchParams, query: PaymentQuery) {
+    if (query.search) sp.set('search', query.search);
+    if (query.outClass && query.outClass !== 'ALL') sp.set('out_class', query.outClass);
+    if (query.dateFrom) sp.set('date_from', query.dateFrom);
+    if (query.dateTo) sp.set('date_to', query.dateTo);
   }
 
   // Cuánto del valor de una operación cubriría este comprobante de salida.

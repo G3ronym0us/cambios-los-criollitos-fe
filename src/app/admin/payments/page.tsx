@@ -5,11 +5,11 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PaymentData, PaymentTable } from '@/types/payment';
+import { PaymentsAttentionStrip } from './_components/PaymentsAttentionStrip';
 import { PaymentsFilters } from './_components/PaymentsFilters';
 import { PaymentsList } from './_components/PaymentsList';
-import { IncomingPaymentActionDialog } from './_components/IncomingPaymentActionDialog';
+import { IncomingPaymentDrawer } from './_components/IncomingPaymentDrawer';
 import { OutgoingPaymentActionDialog } from './_components/OutgoingPaymentActionDialog';
-import { PaymentRawTextDialog } from './_components/PaymentRawTextDialog';
 import { SaveClientDefaultDialog } from './_components/SaveClientDefaultDialog';
 import { usePayments } from './_hooks/usePayments';
 
@@ -17,7 +17,6 @@ function PaymentsAdminContent() {
   const { state, actions } = usePayments();
   const [actioningIncoming, setActioningIncoming] = useState<PaymentData | null>(null);
   const [actioning, setActioning] = useState<PaymentData | null>(null);
-  const [viewingRawText, setViewingRawText] = useState<PaymentData | null>(null);
   const [savingClientData, setSavingClientData] = useState<PaymentData | null>(null);
 
   const showConvertedIncoming = (payment: PaymentData) => {
@@ -32,11 +31,60 @@ function PaymentsAdminContent() {
     setActioning(payment);
   };
 
+  const outgoing = state.tab === 'outgoing';
+
+  // Filtros y lista son idénticos en las dos pestañas salvo la clasificación de salientes;
+  // se comparten para que un cambio no se quede a medias en una de las dos.
+  const filters = (
+    <PaymentsFilters
+      search={state.search}
+      onSearchChange={actions.setSearch}
+      showClassification={outgoing}
+      outClass={state.outClass}
+      onClassChange={actions.setOutClass}
+      attention={state.attention}
+      onAttentionChange={actions.setAttention}
+      range={state.range}
+      onRangeChange={actions.setRange}
+      hasActiveFilters={state.hasActiveFilters}
+      onReset={actions.resetFilters}
+      shown={state.payments.length}
+      total={state.total}
+    />
+  );
+
+  const list = (
+    <PaymentsList
+      payments={state.payments}
+      outgoing={outgoing}
+      loading={state.loading}
+      loadingMore={state.loadingMore}
+      error={state.error}
+      hasMore={state.hasMore}
+      onLoadMore={actions.loadMore}
+      onRetry={actions.reload}
+      hasActiveFilters={state.hasActiveFilters}
+      onResetFilters={actions.resetFilters}
+      attention={state.attention}
+      suggestions={state.suggestions}
+      onManage={outgoing ? setActioning : setActioningIncoming}
+      focusId={state.focusId}
+      onFocusHandled={actions.clearFocus}
+    />
+  );
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         title="Pagos"
-        description="Pagos entrantes y salientes detectados por el bot de WhatsApp."
+        description="Comprobantes de WhatsApp leídos por el bot. Entrantes y salientes."
+      />
+
+      <PaymentsAttentionStrip
+        stats={state.stats}
+        attention={state.attention}
+        onAttentionChange={actions.setAttention}
+        outgoing={outgoing}
       />
 
       <Tabs value={state.tab} onValueChange={(v) => actions.setTab(v as PaymentTable)}>
@@ -47,72 +95,29 @@ function PaymentsAdminContent() {
 
         <TabsContent
           value="incoming"
-          className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200"
+          className="space-y-3 animate-in fade-in-0 slide-in-from-bottom-1 duration-200"
         >
-          <PaymentsFilters
-            search={state.search}
-            onSearchChange={actions.setSearch}
-            showClassification={false}
-            outClass={state.outClass}
-            onClassChange={actions.setOutClass}
-            hasActiveFilters={state.hasActiveFilters}
-            onReset={actions.resetFilters}
-          />
-          <PaymentsList
-            payments={state.payments}
-            outgoing={false}
-            loading={state.loading}
-            loadingMore={state.loadingMore}
-            hasMore={state.hasMore}
-            onLoadMore={actions.loadMore}
-            hasActiveFilters={state.hasActiveFilters}
-            onResetFilters={actions.resetFilters}
-            onLink={setActioningIncoming}
-            onViewRawText={setViewingRawText}
-            onSaveClientData={setSavingClientData}
-            focusId={state.tab === 'incoming' ? state.focusId : null}
-            onFocusHandled={actions.clearFocus}
-          />
+          {!outgoing ? filters : null}
+          {!outgoing ? list : null}
         </TabsContent>
 
         <TabsContent
           value="outgoing"
-          className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-200"
+          className="space-y-3 animate-in fade-in-0 slide-in-from-bottom-1 duration-200"
         >
-          <PaymentsFilters
-            search={state.search}
-            onSearchChange={actions.setSearch}
-            showClassification
-            outClass={state.outClass}
-            onClassChange={actions.setOutClass}
-            hasActiveFilters={state.hasActiveFilters}
-            onReset={actions.resetFilters}
-          />
-          <PaymentsList
-            payments={state.payments}
-            outgoing
-            loading={state.loading}
-            loadingMore={state.loadingMore}
-            hasMore={state.hasMore}
-            onLoadMore={actions.loadMore}
-            hasActiveFilters={state.hasActiveFilters}
-            onResetFilters={actions.resetFilters}
-            onLink={setActioning}
-            onViewRawText={setViewingRawText}
-            onSaveClientData={setSavingClientData}
-            focusId={state.tab === 'outgoing' ? state.focusId : null}
-            onFocusHandled={actions.clearFocus}
-          />
+          {outgoing ? filters : null}
+          {outgoing ? list : null}
         </TabsContent>
       </Tabs>
 
       {/* Tras vincular/marcar, refrescar EN SITIO: la lista conserva las páginas ya
           cargadas y el scroll (no vuelve al principio). */}
-      <IncomingPaymentActionDialog
+      <IncomingPaymentDrawer
         payment={actioningIncoming}
         onClose={() => setActioningIncoming(null)}
         onDone={actions.refreshInPlace}
         onConverted={showConvertedOutgoing}
+        onSaveClientData={setSavingClientData}
       />
 
       <OutgoingPaymentActionDialog
@@ -122,16 +127,10 @@ function PaymentsAdminContent() {
         onConverted={showConvertedIncoming}
       />
 
-      <PaymentRawTextDialog
-        payment={viewingRawText}
-        onClose={() => setViewingRawText(null)}
-      />
-
       <SaveClientDefaultDialog
         payment={savingClientData}
         onClose={() => setSavingClientData(null)}
       />
-
     </div>
   );
 }

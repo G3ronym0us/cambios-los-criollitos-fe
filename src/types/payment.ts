@@ -11,12 +11,45 @@ export interface PaymentPage {
   total: number;
 }
 
+// Segmento de la bandeja: lo que espera una decisión, lo ya cuadrado, o todo.
+export type AttentionFilter = 'ALL' | 'ATTENTION' | 'RECONCILED';
+
 export interface PaymentQuery {
   limit?: number;
   offset?: number;
   search?: string;
   outClass?: string;
   unlinkedOnly?: boolean;
+  attention?: AttentionFilter;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+// Agregados de la franja de atención (GET /payments/{table}/stats).
+export interface PaymentStats {
+  table: PaymentTable;
+  needs_attention: number;
+  // Dinero por atender que todavía no respalda ninguna operación, por moneda.
+  unassigned: { currency: string; amount: number; count: number }[];
+  // El monto se calcula fila a fila sobre un tope: con más pendientes se queda corto.
+  unassigned_truncated: boolean;
+  received_today: number;
+  reconciled_today: number;
+}
+
+// Operación que el matcher propone para un comprobante del listado.
+export interface PaymentSuggestion {
+  payment_id: number;
+  operation_uuid: string;
+  // false = hay otra candidata igual de cerca; se muestra igual, pero sin insistir.
+  confident: boolean;
+  score: number;
+  delta: number | null;
+  from_amount: number | null;
+  from_currency: string | null;
+  to_amount: number | null;
+  to_currency: string | null;
+  status: string | null;
 }
 
 export interface PaymentData {
@@ -60,6 +93,8 @@ export interface PaymentData {
   allocated_amount?: number;
   allocations_count?: number;
   unassigned_amount?: number;
+  // solo incoming: parte del pago acreditada al saldo del cliente en vez de a una operación.
+  credited_to_balance?: number;
   // solo en el detalle de una op: cuánto de este pago le corresponde a ESA operación.
   allocated_to_operation?: number | null;
   // solo outgoing: préstamo al cliente originado en este pago.
