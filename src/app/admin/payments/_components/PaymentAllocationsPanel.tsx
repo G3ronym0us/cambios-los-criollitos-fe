@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, Plus, Trash2, Wallet } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Plus, Trash2, TriangleAlert, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,8 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { paymentService } from '@/services/paymentService';
 import { formatNumber } from '@/utils/functions';
-import type { OperationData } from '@/types/operation';
+import { getStatusMeta } from '@/utils/operationStatus';
+import type { OperationData, OperationStatus } from '@/types/operation';
 import type { PaymentAllocationSummary, PaymentData } from '@/types/payment';
 import { LinkOperationPanel } from './LinkOperationPanel';
 
@@ -81,6 +82,45 @@ export function PaymentAllocationsPanel({
   const assigned = rows.reduce((acc, r) => acc + (Number(r.amount.replace(',', '.')) || 0), 0);
   const unassigned = Math.round((total - assigned - credited) * 100) / 100;
 
+  // Tramos de la barra de proporción. Los colores salen de los tokens de chart, que ya
+  // están calibrados para claro y oscuro; el sobrante va rayado para que no se lea como
+  // un destino más — es justamente lo que todavía no tiene ninguno.
+  const segments = (() => {
+    const base = total > 0 ? total : 1;
+    const out: { key: string; label: string; amount: number; pct: number; fill: string }[] = [];
+    rows.forEach((r, i) => {
+      const amount = Number(r.amount.replace(',', '.')) || 0;
+      if (amount <= 0) return;
+      out.push({
+        key: r.operation_uuid,
+        label: r.pair_symbol ?? 'Operación',
+        amount,
+        pct: (amount / base) * 100,
+        fill: `var(--color-chart-${(i % 5) + 1})`,
+      });
+    });
+    if (credited > 0.01) {
+      out.push({
+        key: 'saldo',
+        label: 'Saldo del cliente',
+        amount: credited,
+        pct: (credited / base) * 100,
+        fill: 'var(--color-chart-5)',
+      });
+    }
+    if (unassigned > 0.01) {
+      out.push({
+        key: 'sin-asignar',
+        label: 'Sin asignar',
+        amount: unassigned,
+        pct: (unassigned / base) * 100,
+        fill:
+          'repeating-linear-gradient(45deg, var(--color-muted-foreground) 0 3px, transparent 3px 7px)',
+      });
+    }
+    return out;
+  })();
+
   const addOperation = (op: OperationData) => {
     setPicking(false);
     if (rows.some((r) => r.operation_uuid === op.uuid)) {
@@ -145,21 +185,53 @@ export function PaymentAllocationsPanel({
   return (
     <>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
-          <span className="font-medium text-foreground">
-            {formatNumber(total)} {summary?.currency ?? payment.currency ?? ''}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            Asignado {formatNumber(assigned)}
-            {credited > 0 ? ` · Saldo ${formatNumber(credited)}` : ''}
-          </span>
-          {unassigned > 0.01 ? (
-            <StatusBadge tone="warning">Sin asignar {formatNumber(unassigned)}</StatusBadge>
-          ) : unassigned < -0.01 ? (
-            <StatusBadge tone="destructive">Se pasa {formatNumber(-unassigned)}</StatusBadge>
-          ) : (
-            <StatusBadge tone="success">Cuadrado</StatusBadge>
-          )}
+        {/* Cuánto del comprobante respalda qué, como proporción. Una lista de importes
+            obliga a sumar de cabeza para ver si sobra; la barra lo dice sin leer cifras. */}
+        <div>
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+            <span className="text-lg font-bold tabular-nums text-foreground">
+              {formatNumber(total)}{' '}
+              <span className="text-xs font-semibold text-muted-foreground">
+                {summary?.currency ?? payment.currency ?? ''}
+              </span>
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Asignado {formatNumber(assigned)}
+              {credited > 0 ? ` · saldo ${formatNumber(credited)}` : ''}
+              {unassigned > 0.01 ? ` · sin asignar ${formatNumber(unassigned)}` : ''}
+            </span>
+          </div>
+
+          <div className="flex h-2.5 overflow-hidden rounded-full border border-border bg-muted">
+            {segments.map((s) => (
+              <span
+                key={s.key}
+                title={`${s.label} · ${formatNumber(s.amount)}`}
+                style={{ width: `${s.pct}%`, background: s.fill }}
+              />
+            ))}
+          </div>
+
+          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+            {segments.map((s) => (
+              <span key={s.key} className="flex items-center gap-1.5">
+                <span
+                  aria-hidden
+                  className="h-2 w-2 shrink-0 rounded-[2px]"
+                  style={{ background: s.fill }}
+                />
+                {s.label} {formatNumber(s.amount)}
+              </span>
+            ))}
+          </div>
+
+          {unassigned < -0.01 ? (
+            <p className="mt-2">
+              <StatusBadge tone="destructive">
+                El reparto se pasa {formatNumber(-unassigned)} del comprobante
+              </StatusBadge>
+            </p>
+          ) : null}
         </div>
 
         {rows.length === 0 ? (
@@ -176,7 +248,18 @@ export function PaymentAllocationsPanel({
                       {row.pair_symbol ?? 'Operación'}
                       <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
                       {row.to_amount != null ? formatNumber(row.to_amount) : '—'} {row.to_currency ?? ''}
-                      {row.status ? <StatusBadge tone="neutral">{row.status}</StatusBadge> : null}
+                      {row.status
+                        ? (() => {
+                            // El estado con el mismo nombre y tono que en el resto de la
+                            // pantalla; antes salía el enum crudo ("QUOTED").
+                            const meta = getStatusMeta(row.status as OperationStatus);
+                            return (
+                              <StatusBadge tone={meta.tone} icon={meta.icon}>
+                                {meta.label}
+                              </StatusBadge>
+                            );
+                          })()
+                        : null}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
                       {row.paid_with.length > 0
@@ -222,7 +305,7 @@ export function PaymentAllocationsPanel({
             <Button
               variant="outline"
               size="sm"
-              className="h-9"
+              className="h-9 border-amber-500/40 text-amber-700 dark:text-amber-400"
               onClick={() => onCreditRest(unassigned)}
             >
               <Wallet className="h-3.5 w-3.5" />
@@ -230,6 +313,18 @@ export function PaymentAllocationsPanel({
             </Button>
           ) : null}
         </div>
+
+        {/* Guardar con sobrante es válido, pero deja dinero sin respaldo: decirlo antes
+            de que pulse, no después. */}
+        {unassigned > 0.01 ? (
+          <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Si guardas así, el comprobante queda con {formatNumber(unassigned)}{' '}
+              {summary?.currency ?? payment.currency ?? ''} sin respaldo: ni operación ni saldo.
+            </p>
+          </div>
+        ) : null}
       </div>
 
       <DialogFooter className="gap-2 sm:justify-between">

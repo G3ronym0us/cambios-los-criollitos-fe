@@ -295,6 +295,10 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
     }
   };
 
+  /**
+   * Opción de clasificación. La activa —la que el pago YA es— lleva anillo y el icono
+   * teñido, para que al abrir se vea de un golpe en qué estado está sin leer las cinco.
+   */
   const ChoiceButton = ({
     icon: Icon,
     title,
@@ -312,21 +316,29 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
       type="button"
       onClick={onClick}
       disabled={submitting}
-      className={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition-colors disabled:opacity-60 ${
-        active ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-      }`}
+      className={cn(
+        'flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition-colors disabled:opacity-60',
+        active
+          ? 'border-primary bg-card ring-3 ring-primary/10'
+          : 'border-border hover:bg-muted/50',
+      )}
     >
       <span
         aria-hidden
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+        className={cn(
+          'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+          active ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
+        )}
       >
-        <Icon className="h-4.5 w-4.5" />
+        <Icon className="h-4 w-4" />
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-medium text-foreground">{title}</span>
         <span className="block truncate text-xs text-muted-foreground">{description}</span>
       </span>
-      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <ChevronRight
+        className={cn('h-4 w-4 shrink-0', active ? 'text-primary' : 'text-muted-foreground')}
+      />
     </button>
   );
 
@@ -389,9 +401,16 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                 onClick={goOperation}
               />
               <ChoiceButton
+                icon={HandCoins}
+                title="Préstamo al cliente"
+                description={isLoan ? 'Este pago ya originó un préstamo.' : 'Dinero que el cliente devuelve; se indexa a una referencia.'}
+                active={current === 'loan'}
+                onClick={openLoan}
+              />
+              <ChoiceButton
                 icon={Wallet}
                 title="Gasto personal"
-                description="Pago propio del operador (requiere descripción)."
+                description="Pago propio del operador · requiere descripción."
                 active={current === 'personal'}
                 onClick={() => {
                   setDesc(payment.personal_description ?? '');
@@ -399,16 +418,9 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                 }}
               />
               <ChoiceButton
-                icon={HandCoins}
-                title="Préstamo al cliente"
-                description={isLoan ? 'Este pago ya originó un préstamo.' : 'Registra el pago como dinero que el cliente debe devolver.'}
-                active={current === 'loan'}
-                onClick={openLoan}
-              />
-              <ChoiceButton
                 icon={Ban}
                 title="Irrelevante"
-                description="No corresponde a ninguna operación (descripción opcional)."
+                description="Duplicado o ajeno a la operación."
                 active={current === 'irrelevant'}
                 onClick={() => {
                   setDesc(payment.irrelevant_description ?? '');
@@ -417,13 +429,17 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
               />
               <ChoiceButton
                 icon={ArrowRightLeft}
-                title="Convertir en pago entrante"
-                description="Muévelo a Entrantes y continúa allí con la operación correspondiente."
+                title="Convertir en entrante"
+                description="El bot lo clasificó al revés."
                 active={false}
                 onClick={convertToIncoming}
               />
             </div>
-            <DialogFooter>
+            <DialogFooter className="sm:justify-between">
+              {/* La consecuencia, donde se decide: marcar personal o irrelevante desvincula. */}
+              <span className="text-xs text-muted-foreground">
+                Marcar como personal o irrelevante desvincula la operación.
+              </span>
               <Button variant="outline" onClick={onClose} disabled={submitting}>
                 Cancelar
               </Button>
@@ -540,21 +556,37 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                   <p key={warning} className="text-xs text-amber-700 dark:text-amber-400">{warning}</p>
                 ))}
 
+                {/* Tres botones y no un desplegable: es la decisión que fija en qué unidad
+                    queda la deuda, y determina cuánto acabará pagando el cliente. Escondida
+                    tras un select se elige sin mirarla. */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="loan-preferred-value">Referencia para llevar la deuda</Label>
-                  <Select
-                    value={preferredValue}
-                    onValueChange={(value) => setPreferredValue((value as LoanPreferredValue) ?? 'FIAT')}
-                  >
-                    <SelectTrigger id="loan-preferred-value" className="h-10 w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="FIAT">Moneda fiat</SelectItem>
-                      <SelectItem value="USDT">USDT</SelectItem>
-                      {fiatCurrency.trim().toUpperCase() === 'VES' ? <SelectItem value="BCV">USD a tasa BCV</SelectItem> : null}
-                    </SelectContent>
-                  </Select>
+                  <Label>Referencia para llevar la deuda</Label>
+                  <div className="flex gap-2" role="group" aria-label="Referencia para llevar la deuda">
+                    {(
+                      [
+                        ['FIAT', `Moneda fiat${fiatCurrency ? ` (${fiatCurrency})` : ''}`],
+                        ['USDT', 'USDT'],
+                        ['BCV', 'USD a tasa BCV'],
+                      ] as const
+                    )
+                      .filter(([value]) => value !== 'BCV' || fiatCurrency.trim().toUpperCase() === 'VES')
+                      .map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setPreferredValue(value as LoanPreferredValue)}
+                          aria-pressed={preferredValue === value}
+                          className={cn(
+                            'min-h-11 flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors',
+                            preferredValue === value
+                              ? 'border-primary bg-primary/10 text-primary'
+                              : 'border-border bg-card text-foreground hover:bg-muted/50',
+                          )}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     Esta referencia determina la unidad en la que se llevará el saldo pendiente.
                   </p>
@@ -584,6 +616,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                       value={fiatAmount}
                       onChange={(event) => setAmountWithTwoDecimals(setFiatAmount, event.target.value)}
                       placeholder="0.00"
+                      className={cn(preferredValue === 'FIAT' && 'border-primary ring-3 ring-primary/10')}
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -596,6 +629,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                       value={usdtAmount}
                       onChange={(event) => setAmountWithTwoDecimals(setUsdtAmount, event.target.value)}
                       placeholder="0.00"
+                      className={cn(preferredValue === 'USDT' && 'border-primary ring-3 ring-primary/10')}
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -608,6 +642,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                       value={bcvAmount}
                       onChange={(event) => setAmountWithTwoDecimals(setBcvAmount, event.target.value)}
                       placeholder={fiatCurrency === 'VES' ? '0.00' : 'No aplica'}
+                      className={cn(preferredValue === 'BCV' && 'border-primary ring-3 ring-primary/10')}
                       disabled={fiatCurrency !== 'VES'}
                     />
                   </div>

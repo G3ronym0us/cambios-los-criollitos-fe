@@ -18,6 +18,7 @@ import { DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { cn } from '@/lib/utils';
 import { operationService } from '@/services/operationService';
 import { paymentService } from '@/services/paymentService';
 import { fundService } from '@/services/fundService';
@@ -75,6 +76,35 @@ function formatDelta(delta: number) {
 
 const byCreatedAtDesc = (a: ScoredOperation, b: ScoredOperation) =>
   (b.op.created_at ?? '').localeCompare(a.op.created_at ?? '');
+
+/**
+ * Por qué el matcher propone ESTA operación, en las palabras del propio puntaje.
+ *
+ * Sin esto la sugerencia es un sello sin argumento: el operador ve "SUGERIDA" y tiene que
+ * decidir a ciegas si confiar. Se arma solo con lo que el backend ya devuelve —cliente,
+ * monto y cercanía en el tiempo— para que no prometa más de lo que se comprobó.
+ */
+function describeMatchReason(
+  op: OperationData,
+  score: OperationMatchScore,
+  payment: PaymentData,
+): string {
+  const señales: string[] = [];
+  if (samePhone(op.client_phone, payment.client_phone)) señales.push('cliente');
+  if (score.delta != null && Math.abs(score.delta) < 0.005) señales.push('monto');
+  else if (score.within_tolerance) señales.push('monto aproximado');
+  if (score.time_score >= 0.5) señales.push('hora');
+
+  const cuando = formatRelativeTime(op.created_at);
+  if (señales.length === 0) {
+    return cuando ? `La candidata más cercana · cotizada ${cuando}` : 'La candidata más cercana';
+  }
+  const lista =
+    señales.length === 1
+      ? señales[0]
+      : `${señales.slice(0, -1).join(', ')} y ${señales[señales.length - 1]}`;
+  return `Coincide ${lista}${cuando ? ` (${cuando})` : ''}`;
+}
 
 export function LinkOperationPanel({
   payment,
@@ -383,6 +413,17 @@ export function LinkOperationPanel({
 
   return (
     <>
+      {/* Contra qué se está eligiendo. Va arriba del todo y siempre: es el dato que el
+          operador compara con cada candidata, y antes solo aparecía si había puntuación. */}
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2">
+        <span className="text-xs text-muted-foreground">Comprobante</span>
+        <span className="truncate text-xs font-semibold tabular-nums text-foreground">
+          {formatNumber(payment.amount ?? 0)} {payment.currency ?? ''}
+          {payment.provider ? ` · ${payment.provider}` : ''} ·{' '}
+          {formatCaracasShortDateTime(payment.created_at)}
+        </span>
+      </div>
+
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -432,34 +473,25 @@ export function LinkOperationPanel({
       </div>
 
       {scorable ? (
-        <>
-          <div className="flex rounded-lg bg-muted p-1" role="group" aria-label="Orden de las operaciones">
-            {(
-              [
-                ['suggested', 'Sugerida'],
-                ['amount', 'Monto'],
-                ['time', 'Hora'],
-              ] as const
-            ).map(([value, label]) => (
-              <Button
-                key={value}
-                type="button"
-                variant={sortMode === value ? 'secondary' : 'ghost'}
-                className="h-11 flex-1"
-                onClick={() => setSortMode(value)}
-              >
-                {label}
-              </Button>
-            ))}
-          </div>
-          <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1.5 text-xs">
-            <span className="text-muted-foreground">Comprobante</span>
-            <span className="truncate font-medium text-foreground">
-              {formatNumber(payment.amount ?? 0)} {payment.currency ?? ''} ·{' '}
-              {formatCaracasShortDateTime(payment.created_at)}
-            </span>
-          </div>
-        </>
+        <div className="flex rounded-lg bg-muted p-1" role="group" aria-label="Orden de las operaciones">
+          {(
+            [
+              ['suggested', 'Sugerida'],
+              ['amount', 'Monto'],
+              ['time', 'Hora'],
+            ] as const
+          ).map(([value, label]) => (
+            <Button
+              key={value}
+              type="button"
+              variant={sortMode === value ? 'secondary' : 'ghost'}
+              className="h-11 flex-1"
+              onClick={() => setSortMode(value)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
       ) : null}
 
       {table === 'outgoing' ? (
@@ -512,9 +544,13 @@ export function LinkOperationPanel({
                 key={op.uuid}
                 type="button"
                 onClick={() => setSelected(op.uuid)}
-                className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
-                  isSel ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
-                } ${isSuggested ? 'ring-1 ring-primary/40' : ''}`}
+                className={cn(
+                  'w-full rounded-lg border px-3 py-2 text-left transition-colors',
+                  isSel
+                    ? 'border-primary bg-card ring-3 ring-primary/10'
+                    : 'border-border hover:bg-muted/50',
+                  isSuggested && !isSel && 'ring-1 ring-primary/30',
+                )}
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate text-sm font-medium text-foreground">{client}</span>
@@ -555,6 +591,12 @@ export function LinkOperationPanel({
                     </span>
                   ) : null}
                 </div>
+                {/* El argumento de la sugerencia, no solo el sello. */}
+                {isSuggested && score ? (
+                  <p className="mt-1.5 border-t border-dashed border-border pt-1.5 text-xs text-muted-foreground">
+                    {describeMatchReason(op, score, payment)}
+                  </p>
+                ) : null}
               </button>
             );
           })
@@ -595,7 +637,12 @@ export function LinkOperationPanel({
             </Button>
           ) : (
             <Button onClick={() => doLink(selected)} disabled={submitting || !selected}>
-              {submitting ? 'Guardando…' : 'Vincular'}
+              {submitting
+                ? 'Guardando…'
+                : // El monto en el botón: lo que se confirma, no un verbo suelto.
+                  selected && payment.amount != null
+                  ? `Vincular ${formatNumber(payment.amount)} ${payment.currency ?? ''}`.trim()
+                  : 'Vincular'}
             </Button>
           )}
         </div>
