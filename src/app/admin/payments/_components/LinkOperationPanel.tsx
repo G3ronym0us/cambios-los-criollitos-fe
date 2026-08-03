@@ -545,10 +545,8 @@ export function LinkOperationPanel({
                 type="button"
                 onClick={() => setSelected(op.uuid)}
                 className={cn(
-                  'w-full rounded-lg border px-3 py-2 text-left transition-colors',
-                  isSel
-                    ? 'border-primary bg-card ring-3 ring-primary/10'
-                    : 'border-border hover:bg-muted/50',
+                  'w-full rounded-lg border bg-card px-3 py-2 text-left transition-colors',
+                  isSel ? 'border-primary ring-3 ring-primary/10' : 'border-border hover:bg-muted/50',
                   isSuggested && !isSel && 'ring-1 ring-primary/30',
                 )}
               >

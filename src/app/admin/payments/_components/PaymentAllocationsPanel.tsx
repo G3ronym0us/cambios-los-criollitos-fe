@@ -241,7 +241,7 @@ export function PaymentAllocationsPanel({
         ) : (
           <ul className="space-y-2">
             {rows.map((row, index) => (
-              <li key={row.operation_uuid} className="rounded-lg border border-border p-3">
+              <li key={row.operation_uuid} className="rounded-lg border border-border bg-card p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 space-y-1">
                     <p className="flex flex-wrap items-center gap-1.5 text-sm font-medium text-foreground">

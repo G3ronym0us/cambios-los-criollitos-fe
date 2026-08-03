@@ -93,8 +93,8 @@ export function UnlinkOrphanDialog({
             aria-checked={!deleting}
             onClick={() => setChoice('KEEP')}
             className={cn(
-              'flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors',
-              !deleting ? 'border-primary bg-card ring-3 ring-primary/10' : 'border-border hover:bg-muted/50',
+              'flex w-full items-start gap-3 rounded-lg border bg-card p-3 text-left transition-colors',
+              !deleting ? 'border-primary ring-3 ring-primary/10' : 'border-border hover:bg-muted/50',
             )}
           >
             <span
@@ -121,10 +121,8 @@ export function UnlinkOrphanDialog({
             onClick={() => canDelete && setChoice('DELETE_OPERATION')}
             disabled={!canDelete}
             className={cn(
-              'flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors disabled:opacity-60',
-              deleting
-                ? 'border-destructive bg-card ring-3 ring-destructive/10'
-                : 'border-destructive/30 hover:bg-muted/50',
+              'flex w-full items-start gap-3 rounded-lg border bg-card p-3 text-left transition-colors disabled:opacity-60',
+              deleting ? 'border-destructive ring-3 ring-destructive/10' : 'border-destructive/30 hover:bg-muted/50',
             )}
           >
             <span

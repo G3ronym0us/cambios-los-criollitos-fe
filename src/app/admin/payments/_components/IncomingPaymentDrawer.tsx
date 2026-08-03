@@ -75,7 +75,8 @@ function ActionRow({
       disabled={disabled}
       className={cn(
         'flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition-colors disabled:opacity-60',
-        highlight ? 'border-amber-500/40 bg-amber-500/5' : 'border-border hover:bg-muted/50',
+        'bg-card',
+        highlight ? 'border-amber-500/40' : 'border-border hover:bg-muted/50',
       )}
     >
       <span

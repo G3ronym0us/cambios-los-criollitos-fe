@@ -318,9 +318,8 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
       disabled={submitting}
       className={cn(
         'flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition-colors disabled:opacity-60',
-        active
-          ? 'border-primary bg-card ring-3 ring-primary/10'
-          : 'border-border hover:bg-muted/50',
+        'bg-card',
+        active ? 'border-primary ring-3 ring-primary/10' : 'border-border hover:bg-muted/50',
       )}
     >
       <span
@@ -333,8 +332,8 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
         <Icon className="h-4 w-4" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium text-foreground">{title}</span>
-        <span className="block truncate text-xs text-muted-foreground">{description}</span>
+        <span className="block text-[13.5px] font-semibold text-foreground">{title}</span>
+        <span className="block truncate text-[11.5px] text-muted-foreground">{description}</span>
       </span>
       <ChevronRight
         className={cn('h-4 w-4 shrink-0', active ? 'text-primary' : 'text-muted-foreground')}
@@ -346,7 +345,10 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         className={cn(
-          'flex max-h-[85vh] flex-col overflow-hidden',
+          // `bg-background` (crema) y no el blanco por defecto del popover: el diseño apila
+          // dos superficies —lienzo crema, tarjetas blancas— y con las dos en blanco las
+          // filas se aplanan y la pantalla pierde toda la profundidad del mockup.
+          'flex max-h-[85vh] flex-col overflow-hidden bg-background',
           step === 'loan' ? 'sm:max-w-2xl' : 'sm:max-w-lg',
         )}
       >
@@ -354,9 +356,6 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
           <>
             <DialogHeader>
               <DialogTitle>¿Qué es este pago saliente?</DialogTitle>
-              <DialogDescription>
-                Clasifica el pago saliente antes de vincularlo a una operación.
-              </DialogDescription>
             </DialogHeader>
 
             {/* Con qué se está decidiendo: el comprobante, sin salir del cuadro. */}

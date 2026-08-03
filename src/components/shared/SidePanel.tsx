@@ -32,7 +32,7 @@ export function SidePanel({ open, onOpenChange, children, className }: SidePanel
         />
         <DialogPrimitive.Popup
           className={cn(
-            'fixed z-50 flex flex-col bg-card text-card-foreground outline-none duration-200',
+            'fixed z-50 flex flex-col bg-background text-foreground outline-none duration-200',
             // Mobile: hoja inferior, alto acotado para que se siga viendo la lista detrás.
             'inset-x-0 bottom-0 max-h-[92vh] rounded-t-2xl ring-1 ring-foreground/10',
             'data-open:animate-in data-open:slide-in-from-bottom data-closed:animate-out data-closed:slide-out-to-bottom',
