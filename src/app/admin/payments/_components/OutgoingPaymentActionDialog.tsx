@@ -5,13 +5,11 @@ import { useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRightLeft, Ban, ChevronRight, HandCoins, Link2, RotateCcw, Tag, TriangleAlert, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  SidePanel,
+  SidePanelBody,
+  SidePanelHeader,
+  SidePanelTitle,
+} from '@/components/shared/SidePanel';
 import {
   Select,
   SelectContent,
@@ -342,46 +340,40 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
   );
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent
-        className={cn(
-          // `bg-background` (crema) y no el blanco por defecto del popover: el diseño apila
-          // dos superficies —lienzo crema, tarjetas blancas— y con las dos en blanco las
-          // filas se aplanan y la pantalla pierde toda la profundidad del mockup.
-          'flex max-h-[85vh] flex-col overflow-hidden bg-background',
-          step === 'loan' ? 'sm:max-w-2xl' : 'sm:max-w-lg',
-        )}
-      >
-        {step === 'choose' ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>¿Qué es este pago saliente?</DialogTitle>
-            </DialogHeader>
+    <SidePanel
+      open
+      onOpenChange={(open) => !open && onClose()}
+      // El préstamo pide tres columnas de importes: ahí el cajón se ensancha.
+      className={cn(step === 'loan' && 'sm:w-[min(40rem,100vw)]')}
+    >
+      <SidePanelHeader>
+        <div className="flex items-center gap-2">
+          <span className="rounded bg-muted px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-muted-foreground">
+            Saliente
+          </span>
+          <span className="font-mono text-[11.5px] text-muted-foreground">#{payment.id}</span>
+        </div>
+        <SidePanelTitle className="mt-2 text-2xl font-bold tabular-nums text-foreground">
+          {payment.amount != null ? formatNumber(payment.amount) : '—'}{' '}
+          <span className="text-base font-semibold text-muted-foreground">
+            {payment.currency ?? ''}
+          </span>
+        </SidePanelTitle>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {[
+            payment.bank_to || payment.bank_from || payment.provider,
+            payment.account_number || payment.phone_to,
+            payment.identification,
+            formatCaracasDateTime(payment.created_at),
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
+      </SidePanelHeader>
 
-            {/* Con qué se está decidiendo: el comprobante, sin salir del cuadro. */}
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2.5">
-              <div className="min-w-0">
-                <p className="text-sm font-bold tabular-nums text-foreground">
-                  {payment.amount != null ? formatNumber(payment.amount) : '—'}{' '}
-                  <span className="text-xs font-semibold text-muted-foreground">
-                    {payment.currency ?? ''}
-                  </span>
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {[
-                    payment.bank_to || payment.bank_from || payment.provider,
-                    payment.account_number || payment.phone_to,
-                    payment.identification,
-                    formatCaracasDateTime(payment.created_at),
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </p>
-              </div>
-              <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-muted-foreground">
-                Saliente
-              </span>
-            </div>
+      {step === 'choose' ? (
+        <SidePanelBody>
+            <h3 className="text-sm font-semibold text-foreground">¿Qué es este pago saliente?</h3>
 
             <div className="space-y-2">
               <ChoiceButton
@@ -434,7 +426,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                 onClick={convertToIncoming}
               />
             </div>
-            <DialogFooter className="sm:justify-between">
+            <div className="mt-auto flex items-center justify-between gap-3 border-t border-border pt-3">
               {/* La consecuencia, donde se decide: marcar personal o irrelevante desvincula. */}
               <span className="text-xs text-muted-foreground">
                 Marcar como personal o irrelevante desvincula la operación.
@@ -442,16 +434,16 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
               <Button variant="outline" onClick={onClose} disabled={submitting}>
                 Cancelar
               </Button>
-            </DialogFooter>
-          </>
-        ) : step === 'operation' ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>Vincular a operación</DialogTitle>
-              <DialogDescription>
+            </div>
+        </SidePanelBody>
+      ) : step === 'operation' ? (
+        <SidePanelBody>
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Vincular a operación</h3>
+              <p className="text-xs text-muted-foreground">
                 Elige la cotización a la que pertenece este pago. Busca por cliente, par, monto o ID.
-              </DialogDescription>
-            </DialogHeader>
+              </p>
+            </div>
             <LinkOperationPanel
               payment={payment}
               table="outgoing"
@@ -459,17 +451,19 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
               onCancel={() => setStep('choose')}
               cancelLabel="Volver"
             />
-          </>
-        ) : step === 'loan' ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>{isLoan ? 'Préstamo registrado' : 'Registrar préstamo al cliente'}</DialogTitle>
-              <DialogDescription>
+        </SidePanelBody>
+      ) : step === 'loan' ? (
+        <SidePanelBody>
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">
+                {isLoan ? 'Préstamo registrado' : 'Registrar préstamo al cliente'}
+              </h3>
+              <p className="text-xs text-muted-foreground">
                 {isLoan
                   ? 'El pago ya está clasificado como préstamo. Su saldo se gestiona desde el perfil del cliente.'
                   : 'Se guardarán el valor fiat, USDT y, cuando la fiat sea VES, el equivalente BCV.'}
-              </DialogDescription>
-            </DialogHeader>
+              </p>
+            </div>
 
             {isLoan && payment.loan ? (
               <div className="space-y-3 rounded-lg border border-border p-4">
@@ -719,7 +713,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
               </div>
             )}
 
-            <DialogFooter className="gap-2 sm:justify-between">
+            <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-3">
               <Button variant="ghost" onClick={() => setStep('choose')} disabled={submitting}>
                 <ArrowLeft className="h-4 w-4" />
                 Volver
@@ -737,20 +731,20 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                   {submitting ? 'Guardando…' : 'Registrar préstamo'}
                 </Button>
               )}
-            </DialogFooter>
-          </>
-        ) : (
-          <>
-            <DialogHeader>
-              <DialogTitle>
+            </div>
+        </SidePanelBody>
+      ) : (
+        <SidePanelBody>
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">
                 {step === 'personal' ? 'Gasto personal' : 'Marcar como irrelevante'}
-              </DialogTitle>
-              <DialogDescription>
+              </h3>
+              <p className="text-xs text-muted-foreground">
                 {step === 'personal'
                   ? 'Describe el gasto personal. La descripción es requerida.'
                   : 'Puedes añadir una descripción opcional del motivo.'}
-              </DialogDescription>
-            </DialogHeader>
+              </p>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="payment-action-desc">
                 Descripción {step === 'irrelevant' ? '(opcional)' : ''}
@@ -768,7 +762,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                 autoFocus
               />
             </div>
-            <DialogFooter className="gap-2 sm:justify-between">
+            <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-3">
               <Button variant="ghost" onClick={() => setStep('choose')} disabled={submitting}>
                 <ArrowLeft className="h-4 w-4" />
                 Volver
@@ -780,10 +774,9 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                 <Tag className="h-4 w-4" />
                 {submitting ? 'Guardando…' : 'Guardar'}
               </Button>
-            </DialogFooter>
-          </>
-        )}
-      </DialogContent>
+            </div>
+        </SidePanelBody>
+      )}
 
       <UnlinkOrphanDialog
         preview={orphan}
@@ -795,6 +788,6 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
             : saveIrrelevant({ action, note })
         }
       />
-    </Dialog>
+    </SidePanel>
   );
 }
