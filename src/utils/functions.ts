@@ -135,3 +135,11 @@ export const isUnassignedClientPhone = (phone: string | null | undefined): boole
   if (!phone) return false;
   return phone.endsWith('@g.us') || phone.startsWith('anon:');
 };
+
+/**
+ * ¿Este cliente es un negocio sin teléfono propio en el bot? Espejo de
+ * `client_entity_service.is_entity_client_phone`. A diferencia de un anónimo, una entidad
+ * sí es un cliente de verdad: tiene ficha, historial y deuda.
+ */
+export const isEntityClientPhone = (phone: string | null | undefined): boolean =>
+  !!phone && phone.startsWith('entity:');

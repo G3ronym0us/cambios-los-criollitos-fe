@@ -126,6 +126,11 @@ export interface LoanValuation {
   bcv_rate_at: string | null;
   valuation_at: string;
   warnings: string[];
+  // El comprobante llegó de un grupo (o de un cliente aún anónimo): hace falta indicar
+  // a nombre de quién queda el préstamo. `suggested_client` es la entidad vinculada a
+  // ese grupo, si existe, para preseleccionarla.
+  requires_borrower: boolean;
+  suggested_client: { uuid: string; display_name: string | null } | null;
 }
 
 export type DepositMethod = 'ZELLE' | 'BINANCE' | 'KRAKEN' | 'TRANSFER' | 'OTHER';

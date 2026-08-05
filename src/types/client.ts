@@ -13,6 +13,8 @@ export interface ClientData {
   // Cuenta de pago predeterminada del cliente (bloque de datos + moneda fiat).
   default_payment_info: string | null;
   default_payment_currency: string | null;
+  // Grupo de WhatsApp vinculado; solo lo llevan los clientes-entidad.
+  linked_group_jid: string | null;
   // Saldo a favor en USD (ledger de abonos); 0 si no tiene.
   balance: number;
   last_seen_at: string | null;
@@ -70,7 +72,8 @@ export interface LoanRepayment {
 export interface LoanData {
   uuid: string;
   client_uuid: string;
-  outgoing_payment_id: number;
+  // Vacío cuando el préstamo se dio de alta a mano, sin comprobante que lo respalde.
+  outgoing_payment_id: number | null;
   fiat_amount: number;
   fiat_currency: string;
   usdt_amount: number;
@@ -93,9 +96,39 @@ export interface LoanData {
   repayments: LoanRepayment[];
 }
 
+export interface LoanTotals {
+  by_reference: { currency: string; amount: number }[];
+  usdt_total: number | null;
+  warnings: string[];
+}
+
 export interface ClientLoansSummary {
   client_uuid: string;
   loans: LoanData[];
+  totals: LoanTotals;
+}
+
+// Equivalencias de un préstamo dado de alta a mano, con las tasas de la fecha indicada.
+export interface ManualLoanValuation {
+  fiat_amount: number;
+  fiat_currency: string;
+  usdt_amount: number | null;
+  usdt_rate: number | null;
+  bcv_amount: number | null;
+  bcv_rate: number | null;
+  valuation_at: string;
+  warnings: string[];
+}
+
+// Alta de un préstamo sin comprobante que lo respalde.
+export interface ManualLoanCreate {
+  preferred_value: LoanPreferredValue;
+  fiat_currency: string;
+  fiat_amount: number;
+  valuation_at: string;
+  usdt_amount?: number | null;
+  bcv_amount?: number | null;
+  notes?: string | null;
 }
 
 // Cuenta de pago guardada de un cliente. `alias` es el nombre del beneficiario
@@ -144,6 +177,8 @@ export interface ClientUpdate {
   preferred_pair_uuid?: string | null;
   default_payment_info?: string | null;
   default_payment_currency?: string | null;
+  // Grupo vinculado de una entidad; enviar null para desvincular.
+  linked_group_jid?: string | null;
 }
 
 export interface ClientFilters {

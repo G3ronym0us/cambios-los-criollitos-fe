@@ -2,9 +2,10 @@
 
 import { memo } from 'react';
 import Link from 'next/link';
-import { Ban, ChevronRight, Coins, Eye, Users, Wallet } from 'lucide-react';
+import { Ban, Building2, ChevronRight, Coins, Eye, Users, Wallet } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { isEntityClientPhone } from '@/utils/functions';
 import type { ClientData } from '@/types/client';
 
 interface ClientItemProps {
@@ -33,6 +34,7 @@ function formatDate(value: string | null) {
 // Memoizado: la búsqueda filtra en memoria y re-renderiza la lista en cada tecla.
 export const ClientItem = memo(function ClientItem({ client }: ClientItemProps) {
   const group = isGroup(client.phone);
+  const entity = isEntityClientPhone(client.phone);
   const displayName = client.display_name || (group ? 'Grupo sin nombre' : 'Sin nombre');
   const initial = (client.display_name || (group ? 'G' : '?')).charAt(0).toUpperCase();
   const lastSeen = formatDate(client.last_seen_at);
@@ -51,7 +53,13 @@ export const ClientItem = memo(function ClientItem({ client }: ClientItemProps) 
                 aria-hidden
                 className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground"
               >
-                {group ? <Users className="h-5 w-5" /> : <span className="text-base font-bold">{initial}</span>}
+                {entity ? (
+                  <Building2 className="h-5 w-5" />
+                ) : group ? (
+                  <Users className="h-5 w-5" />
+                ) : (
+                  <span className="text-base font-bold">{initial}</span>
+                )}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
@@ -60,6 +68,9 @@ export const ClientItem = memo(function ClientItem({ client }: ClientItemProps) 
                   </p>
                   {group ? (
                     <StatusBadge tone="neutral" icon={Users}>Grupo</StatusBadge>
+                  ) : null}
+                  {entity ? (
+                    <StatusBadge tone="neutral" icon={Building2}>Entidad</StatusBadge>
                   ) : null}
                   {client.is_blocked ? (
                     <StatusBadge tone="destructive" icon={Ban}>Bloqueado</StatusBadge>
@@ -77,7 +88,9 @@ export const ClientItem = memo(function ClientItem({ client }: ClientItemProps) 
                   ) : null}
                 </div>
                 <p className="mt-1 truncate text-sm text-muted-foreground">
-                  {formatPhone(client.phone)}
+                  {entity
+                    ? `Entidad${client.linked_group_jid ? ' · grupo vinculado' : ''}`
+                    : formatPhone(client.phone)}
                   {client.preferred_pair_symbol ? (
                     <>
                       <span className="mx-1 text-muted-foreground/50">·</span>

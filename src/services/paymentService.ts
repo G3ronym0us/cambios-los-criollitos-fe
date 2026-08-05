@@ -169,6 +169,8 @@ export class PaymentService {
       usdtAmount: number;
       bcvAmount?: number | null;
       notes?: string | null;
+      // Deudor explícito. Obligatorio cuando el comprobante se mandó a un grupo.
+      clientUuid?: string | null;
     },
   ): Promise<ApiResponse<LoanData>> {
     const result = await httpClient.post<LoanData>(`/payments/outgoing/${paymentId}/loan`, {
@@ -179,6 +181,7 @@ export class PaymentService {
       usdt_amount: body.usdtAmount,
       bcv_amount: body.bcvAmount ?? null,
       notes: body.notes ?? null,
+      client_uuid: body.clientUuid ?? null,
     });
     return { success: result.success, data: result.data, error: result.error };
   }

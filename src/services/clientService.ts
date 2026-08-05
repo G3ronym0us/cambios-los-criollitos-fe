@@ -13,6 +13,8 @@ import {
   ClientLoansSummary,
   LoanData,
   ClientUpdate,
+  ManualLoanCreate,
+  ManualLoanValuation,
 } from '@/types/client';
 
 export class ClientService {
@@ -32,6 +34,18 @@ export class ClientService {
 
   async getClient(uuid: string): Promise<ApiResponse<ClientData>> {
     const result = await httpClient.get<ClientData>(`/clients/${uuid}`);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  // Alta de un negocio sin teléfono propio. Requiere moderador+ en el backend.
+  async createEntity(data: {
+    display_name: string;
+    linked_group_jid?: string | null;
+  }): Promise<ApiResponse<ClientData>> {
+    const result = await httpClient.post<ClientData>('/clients', {
+      display_name: data.display_name,
+      linked_group_jid: data.linked_group_jid ?? null,
+    });
     return { success: result.success, data: result.data, error: result.error };
   }
 
@@ -61,6 +75,29 @@ export class ClientService {
 
   async getClientLoans(uuid: string): Promise<ApiResponse<ClientLoansSummary>> {
     const result = await httpClient.get<ClientLoansSummary>(`/clients/${uuid}/loans`);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  // Equivalencias de un préstamo sin comprobante, con las tasas de la fecha indicada.
+  async getManualLoanValuation(
+    clientUuid: string,
+    amount: number,
+    currency: string,
+    at: string,
+  ): Promise<ApiResponse<ManualLoanValuation>> {
+    const params = new URLSearchParams({ amount: String(amount), currency, at });
+    const result = await httpClient.get<ManualLoanValuation>(
+      `/clients/${clientUuid}/loans/valuation?${params.toString()}`,
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  // Registra un préstamo a mano, sin comprobante.
+  async createManualLoan(
+    clientUuid: string,
+    body: ManualLoanCreate,
+  ): Promise<ApiResponse<LoanData>> {
+    const result = await httpClient.post<LoanData>(`/clients/${clientUuid}/loans`, body);
     return { success: result.success, data: result.data, error: result.error };
   }
 

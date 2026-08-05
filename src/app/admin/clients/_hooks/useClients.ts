@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { clientService } from '@/services/clientService';
 import { ClientData } from '@/types/client';
 
@@ -68,6 +69,24 @@ export function useClients() {
   // Clientes que exceden el límite de carga y no están en memoria (ni en la búsqueda).
   const hiddenCount = Math.max(0, total - clients.length);
 
+  // Alta de un negocio sin teléfono propio (cliente-entidad).
+  const createEntity = useCallback(
+    async (displayName: string, groupJid: string | null): Promise<boolean> => {
+      const result = await clientService.createEntity({
+        display_name: displayName,
+        linked_group_jid: groupJid,
+      });
+      if (!result.success) {
+        toast.error(result.error || 'No se pudo crear la entidad');
+        return false;
+      }
+      toast.success('Entidad creada');
+      loadClients();
+      return true;
+    },
+    [loadClients],
+  );
+
   return {
     state: {
       clients: filteredClients,
@@ -78,6 +97,6 @@ export function useClients() {
       hasActiveFilters,
       hiddenCount,
     },
-    actions: { setFilters, resetFilters, reload: loadClients },
+    actions: { setFilters, resetFilters, reload: loadClients, createEntity },
   };
 }
