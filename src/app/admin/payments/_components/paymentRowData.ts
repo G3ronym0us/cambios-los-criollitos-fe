@@ -20,6 +20,21 @@ export interface PaymentRowData {
 
 const stripJid = (phone: string | null | undefined) => (phone || '').replace(/@(c|g)\.us$/, '');
 
+/**
+ * Cuánto del comprobante cubre una operación, dicho en palabras.
+ *
+ * Antes salía el delta con signo ("±0", "-200", "+280"), que obliga a recordar de qué lado
+ * se resta: el operador traducía a "sobra" o "falta" en la cabeza, en cada tarjeta. `delta`
+ * es esperado − pagado, así que negativo = el comprobante trae de más y positivo = la
+ * operación pide más de lo que llegó.
+ */
+export function describeCoverage(delta: number, paid: number, currency: string): string {
+  const unidad = currency ? ` ${currency}` : '';
+  if (Math.abs(delta) < 0.005) return 'Cubre la operación exacta';
+  if (delta < 0) return `Cubre la operación · sobran ${formatNumber(-delta)}${unidad}`;
+  return `Cubre ${formatNumber(paid)} de ${formatNumber(paid + delta)}${unidad} · faltarían ${formatNumber(delta)}`;
+}
+
 function caracasDayKey(date: Date) {
   return date.toLocaleDateString('en-CA', { timeZone: 'America/Caracas' });
 }
@@ -98,9 +113,14 @@ function describeOperation(p: PaymentData): string | null {
   return null;
 }
 
-/** "USD→BRL · 200 → 1.086" para la celda de operación sugerida. */
+/**
+ * "USD/BRL · 200 → 1.086" para la celda de operación sugerida.
+ *
+ * La barra y no la flecha entre las monedas: es el `pair_symbol` del backend, y la flecha
+ * queda libre para lo que sí es una conversión (los montos).
+ */
 export function describeSuggestion(s: PaymentSuggestion): string {
-  const pair = [s.from_currency, s.to_currency].filter(Boolean).join('→');
+  const pair = [s.from_currency, s.to_currency].filter(Boolean).join('/');
   const amounts = [
     s.from_amount != null ? formatNumber(s.from_amount) : null,
     s.to_amount != null ? formatNumber(s.to_amount) : null,

@@ -4,17 +4,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
-  Clock,
   Link2Off,
   Plus,
   Search,
   Globe,
-  Sparkles,
+  Info,
   Users,
   UserRound,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { DialogFooter } from '@/components/ui/dialog';
+import { SidePanelBody, SidePanelFooter } from '@/components/shared/SidePanel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -33,6 +32,7 @@ import type {
 } from '@/types/operation';
 import type { FundGroup } from '@/types/fund';
 import type { PaymentData, PaymentTable } from '@/types/payment';
+import { describeCoverage } from './paymentRowData';
 import { CreateOperationForm } from './CreateOperationForm';
 import { OutgoingCoveragePanel } from './OutgoingCoveragePanel';
 import { UnlinkOrphanDialog } from './UnlinkOrphanDialog';
@@ -68,10 +68,11 @@ type SortMode = 'suggested' | 'amount' | 'time';
 /** Operación candidata junto a la puntuación que le dio el backend (si la tiene). */
 type ScoredOperation = { op: OperationData; score: OperationMatchScore | null };
 
-/** Cuánto se aparta el monto de la operación del comprobante: "±0", "-7", "+43". */
-function formatDelta(delta: number) {
-  if (Math.abs(delta) < 0.005) return '±0';
-  return `${delta > 0 ? '+' : '-'}${formatNumber(Math.abs(delta))}`;
+/** Verde cuando calza, ámbar cuando deja remanente que habrá que repartir, gris si falta. */
+function coverageTone(score: OperationMatchScore) {
+  if (score.within_tolerance) return 'text-emerald-600 dark:text-emerald-400';
+  if ((score.delta ?? 0) < 0) return 'text-amber-700 dark:text-amber-400';
+  return 'text-muted-foreground';
 }
 
 const byCreatedAtDesc = (a: ScoredOperation, b: ScoredOperation) =>
@@ -88,6 +89,7 @@ function describeMatchReason(
   op: OperationData,
   score: OperationMatchScore,
   payment: PaymentData,
+  confident: boolean,
 ): string {
   const señales: string[] = [];
   if (samePhone(op.client_phone, payment.client_phone)) señales.push('cliente');
@@ -103,7 +105,11 @@ function describeMatchReason(
     señales.length === 1
       ? señales[0]
       : `${señales.slice(0, -1).join(', ')} y ${señales[señales.length - 1]}`;
-  return `Coincide ${lista}${cuando ? ` (${cuando})` : ''}`;
+  // Cuando la sugerencia es inequívoca, decirlo con todas las letras: es el mismo vínculo
+  // que el matcher del bot habría hecho solo, y eso es lo que autoriza a confirmar sin
+  // revisar el resto de la lista. La hora no se repite: ya está en la línea de arriba.
+  const respaldo = confident ? ' · el bot habría hecho este mismo vínculo' : '';
+  return `Coincide ${lista}${respaldo}`;
 }
 
 export function LinkOperationPanel({
@@ -327,6 +333,19 @@ export function LinkOperationPanel({
     [operations, selected],
   );
 
+  /**
+   * Lo que sobraría del comprobante si se vincula la candidata elegida.
+   *
+   * Solo del lado entrante: ahí el sobrante se reparte o se acredita al saldo. En el
+   * saliente un comprobante que no cubre del todo es lo normal y se resuelve en el paso
+   * de cobertura.
+   */
+  const remainder = useMemo(() => {
+    if (onPick || table !== 'incoming' || !selected) return 0;
+    const delta = scores.get(selected)?.delta;
+    return delta != null && delta < -0.01 ? -delta : 0;
+  }, [onPick, table, selected, scores]);
+
   const doLink = async (
     operationUuid: string | null,
     orphanDecision?: { action: OrphanAction; note: string | null },
@@ -381,24 +400,26 @@ export function LinkOperationPanel({
     const client = selectedOp.client_display_name || stripPhone(selectedOp.client_phone) || 'Cliente';
     return (
       <>
-        <div className="rounded-lg border border-border bg-muted/40 px-3 py-2">
-          <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-sm font-medium text-foreground">{client}</span>
-            <span className="shrink-0 text-xs text-muted-foreground">{selectedOp.pair_symbol}</span>
+        <SidePanelBody>
+          <div className="rounded-lg border border-border bg-muted/40 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate text-sm font-medium text-foreground">{client}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">{selectedOp.pair_symbol}</span>
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Cotizado {formatNumber(selectedOp.from_amount)} {selectedOp.from_currency} →{' '}
+              {formatNumber(selectedOp.to_amount)} {selectedOp.to_currency}
+            </p>
           </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Cotizado {formatNumber(selectedOp.from_amount)} {selectedOp.from_currency} →{' '}
-            {formatNumber(selectedOp.to_amount)} {selectedOp.to_currency}
-          </p>
-        </div>
 
-        <OutgoingCoveragePanel
-          paymentId={payment.id}
-          operationUuid={selectedOp.uuid}
-          onChange={setSettledAmount}
-        />
+          <OutgoingCoveragePanel
+            paymentId={payment.id}
+            operationUuid={selectedOp.uuid}
+            onChange={setSettledAmount}
+          />
+        </SidePanelBody>
 
-        <DialogFooter className="gap-2 sm:justify-between">
+        <SidePanelFooter>
           <Button variant="ghost" onClick={() => setMode('pick')} disabled={submitting}>
             <ArrowLeft className="h-4 w-4" />
             Volver
@@ -406,43 +427,38 @@ export function LinkOperationPanel({
           <Button onClick={() => doLink(selectedOp.uuid)} disabled={submitting}>
             {submitting ? 'Guardando…' : 'Vincular'}
           </Button>
-        </DialogFooter>
+        </SidePanelFooter>
       </>
     );
   }
 
   return (
     <>
-      {/* Contra qué se está eligiendo. Va arriba del todo y siempre: es el dato que el
-          operador compara con cada candidata, y antes solo aparecía si había puntuación. */}
-      <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2">
-        <span className="text-xs text-muted-foreground">Comprobante</span>
-        <span className="truncate text-xs font-semibold tabular-nums text-foreground">
-          {formatNumber(payment.amount ?? 0)} {payment.currency ?? ''}
-          {payment.provider ? ` · ${payment.provider}` : ''} ·{' '}
-          {formatCaracasShortDateTime(payment.created_at)}
-        </span>
-      </div>
-
+      {/* Contra qué se está eligiendo vive ahora en la cabecera del cajón, visible en todos
+          los pasos. Aquí abajo solo va lo que se manipula. */}
+      <SidePanelBody className="gap-0 overflow-hidden py-0">
+      {/* Bloque de filtros: fijo, separado de la lista por una línea. Sin esa separación los
+          controles y las candidatas se leían como una sola columna de bloques del mismo peso. */}
+      <div className="-mx-4 flex shrink-0 flex-col gap-2.5 border-b border-border px-4 py-3.5 sm:-mx-5 sm:px-5">
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Cliente, teléfono, par, monto o ID"
-            className="h-10 pl-9"
+            className="h-9 pl-8 text-[12.5px]"
             autoFocus
           />
         </div>
-        <Button variant="outline" className="h-10 shrink-0" onClick={() => setMode('create')}>
+        <Button variant="outline" className="h-9 shrink-0" onClick={() => setMode('create')}>
           <Plus className="h-4 w-4" />
           Crear
         </Button>
       </div>
 
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+      <div className="flex items-center justify-between gap-2.5">
+        <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-muted-foreground">
           {scope === 'global' ? (
             <Globe className="h-3.5 w-3.5 shrink-0" />
           ) : isGroup ? (
@@ -450,30 +466,35 @@ export function LinkOperationPanel({
           ) : (
             <UserRound className="h-3.5 w-3.5 shrink-0" />
           )}
-          <span className="truncate">{scopeLabel}</span>
+          {/* Cuántas hay en este alcance: sin el número, "Ver todas" no dice si amplía a
+              tres candidatas o a trescientas. */}
+          <span className="truncate">
+            {scopeLabel}
+            {availableByStatus.length > 0 ? ` · ${availableByStatus.length} disponibles` : ''}
+          </span>
         </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="shrink-0"
+        {/* Enlace, no botón: ampliar el alcance es un desvío del camino principal y no debe
+            competir en peso con "Crear" ni con la lista. El padding negativo le devuelve
+            área de toque sin engordarlo. */}
+        <button
+          type="button"
+          className="-my-2 shrink-0 py-2 text-[11.5px] font-semibold text-primary transition-colors hover:underline"
           onClick={() => setScope((s) => (s === 'global' ? 'auto' : 'global'))}
         >
-          {scope === 'global' ? (
-            <>
-              <UserRound className="h-4 w-4" />
-              {isGroup ? 'Solo del grupo' : 'Solo del cliente'}
-            </>
-          ) : (
-            <>
-              <Globe className="h-4 w-4" />
-              Ver todas
-            </>
-          )}
-        </Button>
+          {scope === 'global' ? (isGroup ? 'Solo del grupo' : 'Solo del cliente') : 'Ver todas'}
+        </button>
       </div>
 
       {scorable ? (
-        <div className="flex rounded-lg bg-muted p-1" role="group" aria-label="Orden de las operaciones">
+        <div className="flex items-center gap-2.5">
+        <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+          Ordenar
+        </span>
+        <div
+          className="flex flex-1 gap-0.5 rounded-[9px] border border-border bg-muted p-0.5"
+          role="group"
+          aria-label="Orden de las operaciones"
+        >
           {(
             [
               ['suggested', 'Sugerida'],
@@ -484,45 +505,65 @@ export function LinkOperationPanel({
             <Button
               key={value}
               type="button"
-              variant={sortMode === value ? 'secondary' : 'ghost'}
-              className="h-11 flex-1"
+              variant="ghost"
+              className={cn(
+                'h-9 flex-1 rounded-[7px] text-xs sm:h-8',
+                sortMode === value
+                  ? 'bg-card font-semibold text-foreground shadow-xs hover:bg-card'
+                  : 'font-medium text-muted-foreground',
+              )}
               onClick={() => setSortMode(value)}
             >
               {label}
             </Button>
           ))}
         </div>
+        </div>
       ) : null}
 
       {table === 'outgoing' ? (
         <div className="space-y-1.5">
-          <div className="flex rounded-lg bg-muted p-1" role="group" aria-label="Estado de las operaciones disponibles">
-            <Button
-              type="button"
-              variant={statusView === 'active' ? 'secondary' : 'ghost'}
-              className="h-11 flex-1"
-              onClick={() => setStatusView('active')}
-            >
-              Activas
-            </Button>
-            <Button
-              type="button"
-              variant={statusView === 'completed' ? 'secondary' : 'ghost'}
-              className="h-11 flex-1"
-              onClick={() => setStatusView('completed')}
-            >
-              Completadas
-            </Button>
+          <div
+            className="flex gap-0.5 rounded-[9px] border border-border bg-muted p-0.5"
+            role="group"
+            aria-label="Estado de las operaciones disponibles"
+          >
+            {(
+              [
+                ['active', 'Activas'],
+                ['completed', 'Completadas'],
+              ] as const
+            ).map(([value, label]) => (
+              <Button
+                key={value}
+                type="button"
+                variant="ghost"
+                className={cn(
+                  'h-9 flex-1 rounded-[7px] text-xs sm:h-8',
+                  statusView === value
+                    ? 'bg-card font-semibold text-foreground shadow-xs hover:bg-card'
+                    : 'font-medium text-muted-foreground',
+                )}
+                onClick={() => setStatusView(value)}
+              >
+                {label}
+              </Button>
+            ))}
           </div>
-          <p className="px-1 text-xs text-muted-foreground">
+          <p className="text-[11px] text-muted-foreground">
             {statusView === 'completed'
               ? 'Solo se muestran las completadas que todavía no tienen pago saliente.'
               : 'Operaciones cotizadas o pendientes disponibles para completar.'}
           </p>
         </div>
       ) : null}
+      </div>
 
-      <div className="-mx-1 min-h-0 flex-1 space-y-2 overflow-y-auto px-1 py-1">
+      <div
+        className="-mx-1 min-h-0 flex-1 space-y-2 overflow-y-auto px-1 py-3"
+        role="radiogroup"
+        aria-label="Operaciones candidatas"
+      >
         {loading ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Cargando operaciones…</p>
         ) : ranked.length === 0 ? (
@@ -539,74 +580,123 @@ export function LinkOperationPanel({
             const isSuggested = suggestion?.uuid === op.uuid;
             const client = op.client_display_name || stripPhone(op.client_phone) || 'Cliente';
             const statusMeta = getStatusMeta(op.status);
+            // El par ya nombra las dos monedas: repetirlas junto a cada importe alarga la
+            // línea principal sin añadir nada.
+            const pairLabel = op.pair_symbol || [op.from_currency, op.to_currency].filter(Boolean).join('/');
+            const headline = pairLabel
+              ? `${pairLabel} · ${formatNumber(op.from_amount)} → ${formatNumber(op.to_amount)}`
+              : `${formatNumber(op.from_amount)} ${op.from_currency ?? ''} → ${formatNumber(op.to_amount)} ${op.to_currency ?? ''}`;
+            const coverage =
+              score?.delta != null && payment.amount != null
+                ? describeCoverage(score.delta, payment.amount, payment.currency ?? '')
+                : null;
             return (
               <button
                 key={op.uuid}
                 type="button"
+                role="radio"
+                aria-checked={isSel}
                 onClick={() => setSelected(op.uuid)}
                 className={cn(
-                  'w-full rounded-lg border bg-card px-3 py-2 text-left transition-colors',
+                  'flex w-full gap-2.5 rounded-lg border bg-card px-3 py-2.5 text-left transition-colors',
                   isSel ? 'border-primary ring-3 ring-primary/10' : 'border-border hover:bg-muted/50',
                   isSuggested && !isSel && 'ring-1 ring-primary/30',
                 )}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm font-medium text-foreground">{client}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">{op.pair_symbol}</span>
-                </div>
-                <div className="mt-0.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                  <span>
-                    {formatNumber(op.from_amount)} {op.from_currency} → {formatNumber(op.to_amount)} {op.to_currency}
-                  </span>
-                  <span className="flex shrink-0 items-center gap-1.5">
+                {/* El punto de selección: sin él la lista se leía como navegación y no como
+                    "elige una", que es lo que confirma el botón del pie. */}
+                <span
+                  aria-hidden
+                  className={cn(
+                    'mt-1 h-3.5 w-3.5 shrink-0 rounded-full border-2',
+                    isSel ? 'border-[4px] border-primary' : 'border-border',
+                  )}
+                />
+                <span className="min-w-0 flex-1">
+                  {/* Filtrado por cliente el nombre se repite en cada tarjeta y no distingue
+                      nada: ahí manda el par. En "Ver todas" sí es el dato que separa una
+                      candidata de otra, y vuelve al primer plano. */}
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="truncate text-sm font-semibold tabular-nums text-foreground">
+                      {scope === 'global' ? client : headline}
+                    </span>
                     {isSuggested ? (
-                      <StatusBadge tone="primary" icon={Sparkles}>Sugerida</StatusBadge>
+                      <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-primary">
+                        Sugerida
+                      </span>
                     ) : null}
+                  </span>
+                  {scope === 'global' ? (
+                    <span className="mt-0.5 block truncate text-xs tabular-nums text-muted-foreground">
+                      {headline}
+                    </span>
+                  ) : null}
+
+                  <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <StatusBadge tone={statusMeta.tone} icon={statusMeta.icon}>
+                      {statusMeta.label}
+                    </StatusBadge>
                     {(op.delivered_amount ?? 0) > 0.01 && (op.pending_amount ?? 0) > 0.01 ? (
                       <StatusBadge tone="warning">
                         faltan {formatNumber(op.pending_amount ?? 0)} {op.currency ?? op.from_currency}
                       </StatusBadge>
                     ) : null}
-                    <StatusBadge tone={statusMeta.tone} icon={statusMeta.icon}>{statusMeta.label}</StatusBadge>
-                  </span>
-                </div>
-                <div className="mt-0.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                  <span className="flex min-w-0 items-center gap-1">
-                    <Clock className="h-3 w-3 shrink-0" />
-                    <span className="truncate">
+                    <span className="truncate text-xs text-muted-foreground">
                       {formatCaracasShortDateTime(op.created_at)} · {formatRelativeTime(op.created_at)}
                     </span>
                   </span>
-                  {score?.delta != null ? (
-                    <span
-                      className={`shrink-0 tabular-nums ${
-                        score.within_tolerance
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : 'text-muted-foreground'
-                      }`}
-                    >
-                      {formatDelta(score.delta)}
+
+                  {coverage || (isSuggested && score) ? (
+                    <span className="mt-1.5 block border-t border-dashed border-border pt-1.5">
+                      {coverage && score ? (
+                        <span
+                          className={cn(
+                            'block text-xs font-medium tabular-nums',
+                            coverageTone(score),
+                          )}
+                        >
+                          {coverage}
+                        </span>
+                      ) : null}
+                      {/* El argumento de la sugerencia, no solo el sello. */}
+                      {isSuggested && score ? (
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                          {describeMatchReason(op, score, payment, suggestion?.confident ?? false)}
+                        </span>
+                      ) : null}
                     </span>
                   ) : null}
-                </div>
-                {/* El argumento de la sugerencia, no solo el sello. */}
-                {isSuggested && score ? (
-                  <p className="mt-1.5 border-t border-dashed border-border pt-1.5 text-xs text-muted-foreground">
-                    {describeMatchReason(op, score, payment)}
-                  </p>
-                ) : null}
+                </span>
               </button>
             );
           })
         )}
       </div>
 
-      <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+      </SidePanelBody>
+
+      {/* La consecuencia de vincular ESTA candidata, junto al botón que la ejecuta. Antes
+          el operador vinculaba y descubría el sobrante después, ya en otra pantalla. */}
+      {remainder > 0.01 ? (
+        <div className="flex shrink-0 items-start gap-2 border-t border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-amber-700 sm:px-5 dark:text-amber-400">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <p className="text-xs text-pretty">
+            Quedarán{' '}
+            <span className="font-semibold tabular-nums">
+              {formatNumber(remainder)} {payment.currency ?? ''}
+            </span>{' '}
+            sin asignar. Podrás repartirlos o acreditarlos al saldo después de vincular.
+          </p>
+        </div>
+      ) : null}
+
+      <SidePanelFooter>
         {onPick ? (
           <span />
         ) : (
           <Button
             variant="ghost"
+            className="text-destructive hover:text-destructive"
             onClick={() => doLink(null)}
             disabled={submitting || !payment.operation_uuid}
           >
@@ -644,7 +734,7 @@ export function LinkOperationPanel({
             </Button>
           )}
         </div>
-      </DialogFooter>
+      </SidePanelFooter>
 
       <UnlinkOrphanDialog
         preview={orphan}

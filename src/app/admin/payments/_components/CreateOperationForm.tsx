@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Calculator, ChevronDown, ChevronRight, CircleAlert, Info, Plus } from 'lucide-react';
 import { toast } from 'sonner';
-import { DialogFooter } from '@/components/ui/dialog';
+import { SidePanelBody, SidePanelFooter } from '@/components/shared/SidePanel';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { Input } from '@/components/ui/input';
@@ -292,10 +292,10 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
   if (loadingData) {
     return (
       <>
-        <div className="flex-1 px-1 py-6">
+        <SidePanelBody className="justify-center">
           <LoadingState label="Cargando datos de la operación…" />
-        </div>
-        <DialogFooter className="gap-2 sm:justify-between">
+        </SidePanelBody>
+        <SidePanelFooter>
           <Button variant="ghost" onClick={onBack}>
             <ArrowLeft className="h-4 w-4" />
             Volver
@@ -304,14 +304,14 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
             <Plus className="h-4 w-4" />
             Crear operación
           </Button>
-        </DialogFooter>
+        </SidePanelFooter>
       </>
     );
   }
 
   return (
     <>
-      <div className="flex-1 space-y-4 overflow-y-auto px-1 py-1">
+      <SidePanelBody className="gap-0 space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="op-pair">Par</Label>
           <Select value={pairUuid} onValueChange={(v) => setPairUuid(v ?? '')}>
@@ -479,9 +479,9 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
             </div>
           ) : null}
         </div>
-      </div>
+      </SidePanelBody>
 
-      <DialogFooter className="gap-2 sm:justify-between">
+      <SidePanelFooter>
         <Button variant="ghost" onClick={onBack} disabled={creating}>
           <ArrowLeft className="h-4 w-4" />
           Volver
@@ -490,7 +490,7 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
           <Plus className="h-4 w-4" />
           {creating ? 'Creando…' : 'Crear operación'}
         </Button>
-      </DialogFooter>
+      </SidePanelFooter>
     </>
   );
 }

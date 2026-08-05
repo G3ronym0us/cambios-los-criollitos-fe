@@ -18,6 +18,7 @@ import { Label } from '@/components/ui/label';
 import {
   SidePanel,
   SidePanelBody,
+  SidePanelFooter,
   SidePanelHeader,
   SidePanelTitle,
 } from '@/components/shared/SidePanel';
@@ -28,7 +29,7 @@ import { canBeDefaultAccount } from '@/utils/paymentBlock';
 import type { PaymentData, PaymentSuggestion } from '@/types/payment';
 import { LinkOperationPanel } from './LinkOperationPanel';
 import { PaymentAllocationsPanel } from './PaymentAllocationsPanel';
-import { describePayment, describeSuggestion } from './paymentRowData';
+import { describeCoverage, describePayment, describeSuggestion } from './paymentRowData';
 
 interface IncomingPaymentDrawerProps {
   payment: PaymentData | null;
@@ -39,6 +40,27 @@ interface IncomingPaymentDrawerProps {
 }
 
 type Step = 'detail' | 'operation' | 'allocations' | 'balance';
+
+/**
+ * Título y subtítulo de cada paso. Viven en la CABECERA, no como un encabezado más dentro
+ * del cuerpo: así el paso se anuncia en el mismo sitio en los cuatro y el resumen del
+ * comprobante —contra el que se compara todo— nunca se va con el scroll.
+ */
+const STEP_META: Record<Exclude<Step, 'detail'>, { title: string; subtitle: string }> = {
+  operation: {
+    title: 'Vincular a operación',
+    subtitle: 'Elige la cotización a la que pertenece este comprobante.',
+  },
+  allocations: {
+    title: 'Repartir el pago',
+    subtitle:
+      'Qué parte de este comprobante respalda a cada operación. Lo que quede puede ir al saldo del cliente.',
+  },
+  balance: {
+    title: 'Acreditar como saldo a favor',
+    subtitle: 'Cada abono posterior se cotiza a la tasa del día y lo descuenta del saldo.',
+  },
+};
 
 // Métodos que liquidan en USD: los únicos que el backend acepta como crédito de saldo.
 const BALANCE_CURRENCIES = new Set(['USD', 'ZELLE', 'PAYPAL']);
@@ -201,21 +223,61 @@ export function IncomingPaymentDrawer({
   ].filter((f) => !!f.value);
 
   return (
-    <SidePanel open onOpenChange={(open) => !open && onClose()}>
+    <SidePanel
+      open
+      onOpenChange={(open) => !open && onClose()}
+      // El reparto lleva importes en columna: es el único paso que pide el ancho grande.
+      className={cn(step === 'allocations' && 'sm:w-[min(31rem,100vw)]')}
+    >
       <SidePanelHeader>
-        <div className="flex items-center gap-2">
-          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-primary">
-            Entrante
-          </span>
-          <span className="font-mono text-[11.5px] text-muted-foreground">#{p.id}</span>
-        </div>
-        <SidePanelTitle className="mt-2 text-2xl font-bold tabular-nums text-foreground">
-          {d.amount}{' '}
-          <span className="text-base font-semibold text-muted-foreground">{p.currency ?? ''}</span>
-        </SidePanelTitle>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {[p.provider, p.bank_from, `${d.day} ${d.time}`].filter(Boolean).join(' · ')}
-        </p>
+        {step === 'detail' ? (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-primary">
+                Entrante
+              </span>
+              <span className="font-mono text-[11.5px] text-muted-foreground">#{p.id}</span>
+            </div>
+            <SidePanelTitle className="mt-2 text-2xl font-bold tabular-nums text-foreground">
+              {d.amount}{' '}
+              <span className="text-base font-semibold text-muted-foreground">
+                {p.currency ?? ''}
+              </span>
+            </SidePanelTitle>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {[p.provider, p.bank_from, `${d.day} ${d.time}`].filter(Boolean).join(' · ')}
+            </p>
+          </>
+        ) : (
+          <>
+            <SidePanelTitle className="text-base font-bold text-foreground">
+              {STEP_META[step].title}
+            </SidePanelTitle>
+            <p className="mt-0.5 text-pretty text-xs text-muted-foreground">
+              {STEP_META[step].subtitle}
+            </p>
+            <div className="mt-3 flex items-center gap-2.5 rounded-lg border border-border bg-card px-3 py-2">
+              <span
+                aria-hidden
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-[10px] font-bold text-muted-foreground"
+              >
+                {initials(d.client) || '?'}
+              </span>
+              <div className="min-w-0">
+                <div className="truncate text-xs font-semibold tabular-nums text-foreground">
+                  {d.amount} {p.currency ?? ''}
+                  <span className="font-medium text-muted-foreground">
+                    {' · '}
+                    {[p.provider, `${d.day} ${d.time}`].filter(Boolean).join(' · ')}
+                  </span>
+                </div>
+                <div className="truncate text-[11px] text-muted-foreground">
+                  Comprobante #{p.id} · {d.client}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </SidePanelHeader>
 
       {step === 'detail' ? (
@@ -323,26 +385,25 @@ export function IncomingPaymentDrawer({
                   {suggestion.confident ? 'confianza alta' : 'hay otra candidata parecida'}
                 </span>
               </div>
-              <div className="flex items-start justify-between gap-3">
-                <p className="min-w-0 text-[13px] font-semibold text-foreground">
-                  {describeSuggestion(suggestion)}
-                </p>
-                {suggestion.delta != null ? (
-                  <span
-                    className={cn(
-                      'shrink-0 text-xs font-semibold tabular-nums',
-                      Math.abs(suggestion.delta) < 0.005
-                        ? 'text-emerald-600 dark:text-emerald-400'
+              <p className="text-[13px] font-semibold text-foreground">
+                {describeSuggestion(suggestion)}
+              </p>
+              {/* La cobertura en palabras, igual que en el buscador de operaciones: el
+                  delta con signo obligaba a recordar de qué lado se restaba. */}
+              {suggestion.delta != null && p.amount != null ? (
+                <p
+                  className={cn(
+                    'mt-1 text-xs font-medium tabular-nums',
+                    Math.abs(suggestion.delta) < 0.005
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : suggestion.delta < 0
+                        ? 'text-amber-700 dark:text-amber-400'
                         : 'text-muted-foreground',
-                    )}
-                    title="Diferencia entre lo que pide la operación y lo que llegó"
-                  >
-                    {Math.abs(suggestion.delta) < 0.005
-                      ? '±0'
-                      : `${suggestion.delta > 0 ? '+' : '-'}${formatNumber(Math.abs(suggestion.delta))}`}
-                  </span>
-                ) : null}
-              </div>
+                  )}
+                >
+                  {describeCoverage(suggestion.delta, p.amount, p.currency ?? '')}
+                </p>
+              ) : null}
               <div className="mt-3 flex gap-2">
                 <Button className="flex-1" onClick={linkSuggested} disabled={submitting}>
                   Vincular a esta operación
@@ -415,51 +476,26 @@ export function IncomingPaymentDrawer({
           </div>
         </SidePanelBody>
       ) : step === 'allocations' ? (
-        <SidePanelBody>
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">Repartir el pago</h3>
-            <p className="text-xs text-muted-foreground">
-              Qué parte de este comprobante respalda a cada operación. Lo que quede puede ir a otra
-              operación o al saldo del cliente.
-            </p>
-          </div>
-          <PaymentAllocationsPanel
-            payment={p}
-            onSaved={finish}
-            onCancel={() => setStep('detail')}
-            onCreditRest={(amount) => {
-              setBalanceAmount(String(amount));
-              setStep('balance');
-            }}
-          />
-        </SidePanelBody>
+        <PaymentAllocationsPanel
+          payment={p}
+          onSaved={finish}
+          onCancel={() => setStep('detail')}
+          onCreditRest={(amount) => {
+            setBalanceAmount(String(amount));
+            setStep('balance');
+          }}
+        />
       ) : step === 'operation' ? (
-        <SidePanelBody>
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">Vincular a operación</h3>
-            <p className="text-xs text-muted-foreground">
-              Elige la cotización a la que pertenece este pago. Busca por cliente, par, monto o ID.
-            </p>
-          </div>
-          <LinkOperationPanel
-            payment={p}
-            table="incoming"
-            onSuccess={finish}
-            onCancel={() => setStep('detail')}
-            cancelLabel="Volver"
-          />
-        </SidePanelBody>
+        <LinkOperationPanel
+          payment={p}
+          table="incoming"
+          onSuccess={finish}
+          onCancel={() => setStep('detail')}
+          cancelLabel="Volver"
+        />
       ) : (
-        <SidePanelBody>
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">Acreditar como saldo a favor</h3>
-            <p className="text-xs text-muted-foreground">
-              Suma el monto al saldo del cliente. Cada abono posterior se cotiza a la tasa del día y
-              lo descuenta.
-            </p>
-          </div>
-
-          <div className="space-y-3">
+        <>
+          <SidePanelBody>
             <div className="space-y-1.5">
               <Label htmlFor="balance-amount">Monto (USD)</Label>
               <Input
@@ -481,9 +517,9 @@ export function IncomingPaymentDrawer({
                 className="h-10"
               />
             </div>
-          </div>
+          </SidePanelBody>
 
-          <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-3">
+          <SidePanelFooter>
             <Button variant="ghost" onClick={() => setStep('detail')} disabled={submitting}>
               <ArrowLeft className="h-4 w-4" />
               Volver
@@ -492,8 +528,8 @@ export function IncomingPaymentDrawer({
               <Wallet className="h-4 w-4" />
               {submitting ? 'Guardando…' : 'Acreditar saldo'}
             </Button>
-          </div>
-        </SidePanelBody>
+          </SidePanelFooter>
+        </>
       )}
     </SidePanel>
   );

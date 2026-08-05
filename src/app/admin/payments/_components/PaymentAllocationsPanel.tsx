@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, Plus, Trash2, TriangleAlert, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
-import { DialogFooter } from '@/components/ui/dialog';
+import { SidePanelBody, SidePanelFooter } from '@/components/shared/SidePanel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -180,28 +180,22 @@ export function PaymentAllocationsPanel({
     );
   }
 
-  if (loading) return <LoadingState label="Cargando reparto..." />;
+  if (loading) {
+    return (
+      <SidePanelBody className="justify-center">
+        <LoadingState label="Cargando reparto..." />
+      </SidePanelBody>
+    );
+  }
 
   return (
     <>
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
+      <SidePanelBody className="gap-3">
         {/* Cuánto del comprobante respalda qué, como proporción. Una lista de importes
-            obliga a sumar de cabeza para ver si sobra; la barra lo dice sin leer cifras. */}
+            obliga a sumar de cabeza para ver si sobra; la barra lo dice sin leer cifras.
+            El total y el sobrante ya viven en la cabecera y en el pie: aquí solo la barra
+            con su leyenda, que es donde se ve el reparto y no solo la cifra. */}
         <div>
-          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-            <span className="text-lg font-bold tabular-nums text-foreground">
-              {formatNumber(total)}{' '}
-              <span className="text-xs font-semibold text-muted-foreground">
-                {summary?.currency ?? payment.currency ?? ''}
-              </span>
-            </span>
-            <span className="text-xs text-muted-foreground">
-              Asignado {formatNumber(assigned)}
-              {credited > 0 ? ` · saldo ${formatNumber(credited)}` : ''}
-              {unassigned > 0.01 ? ` · sin asignar ${formatNumber(unassigned)}` : ''}
-            </span>
-          </div>
-
           <div className="flex h-2.5 overflow-hidden rounded-full border border-border bg-muted">
             {segments.map((s) => (
               <span
@@ -239,6 +233,13 @@ export function PaymentAllocationsPanel({
             Este pago todavía no respalda ninguna operación.
           </p>
         ) : (
+          <>
+          {/* Qué es la columna de la derecha: sin rótulo, el importe editable se confunde
+              con el monto de la propia operación, que está a su izquierda. */}
+          <div className="flex items-center justify-between gap-2 pr-[3.25rem] text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+            <span>Operaciones respaldadas</span>
+            <span>Del comprobante</span>
+          </div>
           <ul className="space-y-2">
             {rows.map((row, index) => (
               <li key={row.operation_uuid} className="rounded-lg border border-border bg-card p-3">
@@ -270,16 +271,26 @@ export function PaymentAllocationsPanel({
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <Input
-                      inputMode="decimal"
-                      value={row.amount}
-                      onChange={(e) =>
-                        setRows((prev) =>
-                          prev.map((r, i) => (i === index ? { ...r, amount: e.target.value } : r)),
-                        )
-                      }
-                      className="h-9 w-24 text-right"
-                    />
+                    <div className="relative">
+                      <Input
+                        inputMode="decimal"
+                        value={row.amount}
+                        onChange={(e) =>
+                          setRows((prev) =>
+                            prev.map((r, i) => (i === index ? { ...r, amount: e.target.value } : r)),
+                          )
+                        }
+                        aria-label={`Parte del comprobante para ${row.pair_symbol ?? 'la operación'}`}
+                        // El hueco de la derecha tiene que caber el código más largo que
+                        // maneja el sistema ("ZELLE", "PAYPAL"), no solo "USD".
+                        className="h-9 w-36 pr-16 text-right tabular-nums"
+                      />
+                      {/* La moneda pegada al campo: el importe de la fila y el de la
+                          operación están en monedas distintas y se confundían. */}
+                      <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 max-w-14 truncate text-[10.5px] font-semibold text-muted-foreground">
+                        {summary?.currency ?? payment.currency ?? ''}
+                      </span>
+                    </div>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -294,48 +305,69 @@ export function PaymentAllocationsPanel({
               </li>
             ))}
           </ul>
+          </>
         )}
 
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" className="h-9" onClick={() => setPicking(true)}>
-            <Plus className="h-3.5 w-3.5" />
-            Añadir operación
-          </Button>
-          {unassigned > 0.01 && onCreditRest ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 border-amber-500/40 text-amber-700 dark:text-amber-400"
-              onClick={() => onCreditRest(unassigned)}
-            >
-              <Wallet className="h-3.5 w-3.5" />
-              Acreditar {formatNumber(unassigned)} al saldo
-            </Button>
-          ) : null}
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9 self-start border-dashed"
+          onClick={() => setPicking(true)}
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Añadir operación
+        </Button>
 
-        {/* Guardar con sobrante es válido, pero deja dinero sin respaldo: decirlo antes
-            de que pulse, no después. */}
+        {/* Guardar con sobrante es válido, pero deja dinero sin respaldo. El aviso y la
+            salida iban por separado —un texto ámbar aquí, un botón ámbar más arriba— y
+            había que unirlos de cabeza: ahora la salida está dentro del propio aviso. */}
         {unassigned > 0.01 ? (
-          <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5">
-            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
-            <p className="text-xs text-amber-700 dark:text-amber-400">
-              Si guardas así, el comprobante queda con {formatNumber(unassigned)}{' '}
-              {summary?.currency ?? payment.currency ?? ''} sin respaldo: ni operación ni saldo.
-            </p>
+          <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+            <div className="flex items-start gap-2.5">
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-amber-700 tabular-nums dark:text-amber-400">
+                  Quedan {formatNumber(unassigned)} {summary?.currency ?? payment.currency ?? ''} sin
+                  respaldo
+                </p>
+                <p className="mt-0.5 text-xs text-amber-700/80 dark:text-amber-400/80">
+                  Si guardas así, esa parte del comprobante no queda ni en una operación ni en el
+                  saldo del cliente.
+                </p>
+              </div>
+            </div>
+            {onCreditRest ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2.5 h-9 border-amber-500/40 text-amber-700 dark:text-amber-400"
+                onClick={() => onCreditRest(unassigned)}
+              >
+                <Wallet className="h-3.5 w-3.5" />
+                Acreditar {formatNumber(unassigned)} al saldo
+              </Button>
+            ) : null}
           </div>
         ) : null}
-      </div>
+      </SidePanelBody>
 
-      <DialogFooter className="gap-2 sm:justify-between">
+      <SidePanelFooter>
         <Button variant="ghost" onClick={onCancel} disabled={submitting}>
           <ArrowLeft className="h-4 w-4" />
           Volver
         </Button>
-        <Button onClick={save} disabled={submitting || rows.length === 0}>
-          {submitting ? 'Guardando…' : 'Guardar reparto'}
-        </Button>
-      </DialogFooter>
+        <div className="flex items-center gap-3">
+          {unassigned > 0.01 ? (
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 tabular-nums dark:text-amber-400">
+              <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+              {formatNumber(unassigned)} sin asignar
+            </span>
+          ) : null}
+          <Button onClick={save} disabled={submitting || rows.length === 0}>
+            {submitting ? 'Guardando…' : 'Guardar reparto'}
+          </Button>
+        </div>
+      </SidePanelFooter>
     </>
   );
 }

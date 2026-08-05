@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRightLeft, Ban, ChevronRight, HandCoins, Link2, RotateCcw, Tag, TriangleAlert, Wallet } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, Ban, ChevronRight, HandCoins, Info, Link2, RotateCcw, Tag, TriangleAlert, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   SidePanel,
   SidePanelBody,
+  SidePanelFooter,
   SidePanelHeader,
   SidePanelTitle,
 } from '@/components/shared/SidePanel';
@@ -36,6 +37,48 @@ interface OutgoingPaymentActionDialogProps {
   onClose: () => void;
   onDone: () => void;
   onConverted: (payment: PaymentData) => void;
+}
+
+/**
+ * Título y subtítulo de cada paso, en la CABECERA del cajón junto a la ficha del
+ * comprobante. Antes cada paso repetía su encabezado dentro del cuerpo y el resumen de a
+ * quién se pagó se perdía al bajar.
+ */
+const STEP_META: Record<
+  Exclude<Step, 'choose'>,
+  { title: (isLoan: boolean) => string; subtitle: (isLoan: boolean) => string }
+> = {
+  operation: {
+    title: () => 'Vincular a operación',
+    subtitle: () => 'Elige la cotización a la que pertenece este comprobante.',
+  },
+  loan: {
+    title: (isLoan) => (isLoan ? 'Préstamo registrado' : 'Registrar préstamo al cliente'),
+    subtitle: (isLoan) =>
+      isLoan
+        ? 'El pago ya está clasificado como préstamo. Su saldo se gestiona desde el perfil del cliente.'
+        : 'Se guardan el valor fiat, el USDT y —si la fiat es VES— el equivalente BCV.',
+  },
+  personal: {
+    title: () => 'Marcar como gasto personal',
+    subtitle: () => 'Queda fuera de las operaciones. Describe de qué fue para el historial.',
+  },
+  irrelevant: {
+    title: () => 'Marcar como irrelevante',
+    subtitle: () => 'Duplicado o ajeno a las operaciones. Deja constancia del motivo.',
+  },
+};
+
+/**
+ * Con qué unidad se indexa la deuda por defecto.
+ *
+ * Nunca la fiat: un préstamo en bolívares llevado en bolívares se cobra devaluado. Donde hay
+ * tasa oficial manda el BCV —que es lo que el cliente reconoce como "dólares"—, y el backend
+ * solo lo admite para VES; en cualquier otro par la referencia es USDT.
+ */
+function defaultLoanReference(paymentCurrency: string, fiatCurrency: string): LoanPreferredValue {
+  if (paymentCurrency === 'USDT') return 'USDT';
+  return fiatCurrency === 'VES' ? 'BCV' : 'USDT';
 }
 
 type Step = 'choose' | 'personal' | 'irrelevant' | 'operation' | 'loan';
@@ -68,12 +111,13 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
     setSuggestion(null);
     const paymentCurrency = (payment?.currency || '').toUpperCase();
     const normalizedCurrency = ['ZELLE', 'PAYPAL'].includes(paymentCurrency) ? 'USD' : paymentCurrency;
+    const nextFiat = normalizedCurrency && normalizedCurrency !== 'USDT' ? normalizedCurrency : 'VES';
     setPaymentCurrency(paymentCurrency || 'VES');
-    setFiatCurrency(normalizedCurrency && normalizedCurrency !== 'USDT' ? normalizedCurrency : 'VES');
+    setFiatCurrency(nextFiat);
     setFiatAmount(payment?.amount != null && paymentCurrency !== 'USDT' ? formatAmountForInput(payment.amount) : '');
     setUsdtAmount(payment?.amount != null && paymentCurrency === 'USDT' ? formatAmountForInput(payment.amount) : '');
     setBcvAmount('');
-    setPreferredValue(paymentCurrency === 'USDT' ? 'USDT' : 'FIAT');
+    setPreferredValue(defaultLoanReference(paymentCurrency, nextFiat));
     setLoanNotes('');
     setValuation(null);
     setValuationLoading(false);
@@ -107,7 +151,33 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
   const isPersonal = !!payment.is_personal_expense;
   const isIrrelevant = !!payment.is_irrelevant;
   const isLoan = !!payment.loan;
-  const current: Step = isLoan ? 'loan' : isPersonal ? 'personal' : isIrrelevant ? 'irrelevant' : 'operation';
+  /**
+   * Qué es YA este pago, o null si todavía no es nada.
+   *
+   * Antes caía en 'operation' por descarte, así que un saliente sin clasificar abría con el
+   * anillo puesto en "Pago de una operación" — la misma señal que marca lo que el pago ya
+   * es. Con la sugerencia del matcher en su propia insignia, el anillo tiene que decir la
+   * verdad o las dos señales vuelven a confundirse.
+   */
+  const current: Step | null = isLoan
+    ? 'loan'
+    : isPersonal
+      ? 'personal'
+      : isIrrelevant
+        ? 'irrelevant'
+        : payment.operation_uuid
+          ? 'operation'
+          : null;
+
+  /** A quién y por dónde salió: el mismo resumen en la portada y en la ficha de los pasos. */
+  const receiptLine = [
+    payment.bank_to || payment.bank_from || payment.provider,
+    payment.account_number || payment.phone_to,
+    payment.identification,
+    formatCaracasDateTime(payment.created_at),
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   const finish = () => {
     onDone();
@@ -302,12 +372,15 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
     title,
     description,
     active,
+    suggested = false,
     onClick,
   }: {
     icon: typeof Link2;
     title: string;
     description: string;
     active: boolean;
+    /** Lo que propone el matcher. Señal distinta de `active`: pueden no coincidir. */
+    suggested?: boolean;
     onClick: () => void;
   }) => (
     <button
@@ -330,7 +403,14 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
         <Icon className="h-4 w-4" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[13.5px] font-semibold text-foreground">{title}</span>
+        <span className="flex items-center gap-1.5">
+          <span className="text-[13.5px] font-semibold text-foreground">{title}</span>
+          {suggested ? (
+            <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+              Sugerida
+            </span>
+          ) : null}
+        </span>
         <span className="block truncate text-[11.5px] text-muted-foreground">{description}</span>
       </span>
       <ChevronRight
@@ -343,39 +423,62 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
     <SidePanel
       open
       onOpenChange={(open) => !open && onClose()}
-      // El préstamo pide tres columnas de importes: ahí el cajón se ensancha.
-      className={cn(step === 'loan' && 'sm:w-[min(40rem,100vw)]')}
+      // El préstamo pide tres importes en columna: ahí el cajón pasa al ancho grande.
+      className={cn(step === 'loan' && 'sm:w-[min(31rem,100vw)]')}
     >
       <SidePanelHeader>
-        <div className="flex items-center gap-2">
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-muted-foreground">
-            Saliente
-          </span>
-          <span className="font-mono text-[11.5px] text-muted-foreground">#{payment.id}</span>
-        </div>
-        <SidePanelTitle className="mt-2 text-2xl font-bold tabular-nums text-foreground">
-          {payment.amount != null ? formatNumber(payment.amount) : '—'}{' '}
-          <span className="text-base font-semibold text-muted-foreground">
-            {payment.currency ?? ''}
-          </span>
-        </SidePanelTitle>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {[
-            payment.bank_to || payment.bank_from || payment.provider,
-            payment.account_number || payment.phone_to,
-            payment.identification,
-            formatCaracasDateTime(payment.created_at),
-          ]
-            .filter(Boolean)
-            .join(' · ')}
-        </p>
+        {step === 'choose' ? (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-muted-foreground">
+                Saliente
+              </span>
+              <span className="font-mono text-[11.5px] text-muted-foreground">#{payment.id}</span>
+            </div>
+            <SidePanelTitle className="mt-2 text-2xl font-bold tabular-nums text-foreground">
+              {payment.amount != null ? formatNumber(payment.amount) : '—'}{' '}
+              <span className="text-base font-semibold text-muted-foreground">
+                {payment.currency ?? ''}
+              </span>
+            </SidePanelTitle>
+            <p className="mt-0.5 text-xs text-muted-foreground">{receiptLine}</p>
+          </>
+        ) : (
+          <>
+            <SidePanelTitle className="text-base font-bold text-foreground">
+              {STEP_META[step].title(isLoan)}
+            </SidePanelTitle>
+            <p className="mt-0.5 text-pretty text-xs text-muted-foreground">
+              {STEP_META[step].subtitle(isLoan)}
+            </p>
+            <div className="mt-3 rounded-lg border border-border bg-card px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-xs font-semibold tabular-nums text-foreground">
+                  {payment.amount != null ? formatNumber(payment.amount) : '—'}{' '}
+                  {payment.currency ?? ''}
+                </span>
+                <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                  Saliente
+                </span>
+              </div>
+              <p className="truncate text-[11px] text-muted-foreground">
+                Comprobante #{payment.id} · {receiptLine}
+              </p>
+            </div>
+          </>
+        )}
       </SidePanelHeader>
 
       {step === 'choose' ? (
+        <>
         <SidePanelBody>
-            <h3 className="text-sm font-semibold text-foreground">¿Qué es este pago saliente?</h3>
-
-            <div className="space-y-2">
+            {/* Cinco opciones planas se leían como cinco iguales, y no lo son: dos dejan el
+                pago ligado a un cliente, dos lo sacan de toda operación y la última no es
+                una clasificación sino un arreglo de la lectura del bot. */}
+            <div className="space-y-1.5">
+              <span className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                Queda ligado a un cliente
+              </span>
               <ChoiceButton
                 icon={Link2}
                 title="Pago de una operación"
@@ -383,12 +486,13 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                   suggestion
                     ? `Sugerida: ${[suggestion.from_currency, suggestion.to_currency]
                         .filter(Boolean)
-                        .join('→')}${
+                        .join('/')}${
                         suggestion.to_amount != null ? ` · ${formatNumber(suggestion.to_amount)}` : ''
                       }`
                     : 'Asociar el pago a una cotización del cliente.'
                 }
                 active={current === 'operation'}
+                suggested={suggestion != null}
                 onClick={goOperation}
               />
               <ChoiceButton
@@ -398,6 +502,12 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                 active={current === 'loan'}
                 onClick={openLoan}
               />
+            </div>
+
+            <div className="space-y-1.5">
+              <span className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                Sale de las operaciones
+              </span>
               <ChoiceButton
                 icon={Wallet}
                 title="Gasto personal"
@@ -418,52 +528,50 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                   setStep('irrelevant');
                 }}
               />
+              {/* La consecuencia, pegada a las dos opciones que la tienen. En el pie del
+                  cajón se leía como una nota general y no se relacionaba con ninguna. */}
+              <p className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
+                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span className="text-pretty">
+                  Ambas dejan el comprobante fuera de toda operación. Si ya estaba vinculado, la
+                  operación se queda sin este pago.
+                </span>
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <span className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                Corregir la lectura del bot
+              </span>
               <ChoiceButton
                 icon={ArrowRightLeft}
                 title="Convertir en entrante"
-                description="El bot lo clasificó al revés."
+                description="Es dinero que entró, no que salió."
                 active={false}
                 onClick={convertToIncoming}
               />
             </div>
-            <div className="mt-auto flex items-center justify-between gap-3 border-t border-border pt-3">
-              {/* La consecuencia, donde se decide: marcar personal o irrelevante desvincula. */}
-              <span className="text-xs text-muted-foreground">
-                Marcar como personal o irrelevante desvincula la operación.
-              </span>
-              <Button variant="outline" onClick={onClose} disabled={submitting}>
-                Cancelar
-              </Button>
-            </div>
         </SidePanelBody>
+
+        <SidePanelFooter>
+          <span className="text-xs text-muted-foreground">
+            Podrás cambiar la clasificación más adelante.
+          </span>
+          <Button variant="outline" onClick={onClose} disabled={submitting}>
+            Cancelar
+          </Button>
+        </SidePanelFooter>
+        </>
       ) : step === 'operation' ? (
-        <SidePanelBody>
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">Vincular a operación</h3>
-              <p className="text-xs text-muted-foreground">
-                Elige la cotización a la que pertenece este pago. Busca por cliente, par, monto o ID.
-              </p>
-            </div>
-            <LinkOperationPanel
-              payment={payment}
-              table="outgoing"
-              onSuccess={finish}
-              onCancel={() => setStep('choose')}
-              cancelLabel="Volver"
-            />
-        </SidePanelBody>
+        <LinkOperationPanel
+          payment={payment}
+          table="outgoing"
+          onSuccess={finish}
+          onCancel={() => setStep('choose')}
+          cancelLabel="Volver"
+        />
       ) : step === 'loan' ? (
         <SidePanelBody>
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">
-                {isLoan ? 'Préstamo registrado' : 'Registrar préstamo al cliente'}
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                {isLoan
-                  ? 'El pago ya está clasificado como préstamo. Su saldo se gestiona desde el perfil del cliente.'
-                  : 'Se guardarán el valor fiat, USDT y, cuando la fiat sea VES, el equivalente BCV.'}
-              </p>
-            </div>
 
             {isLoan && payment.loan ? (
               <div className="space-y-3 rounded-lg border border-border p-4">
@@ -483,21 +591,26 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                 </div>
               </div>
             ) : (
-              <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
-                <div className="grid gap-3 rounded-lg bg-muted/60 p-3 sm:grid-cols-[1fr_220px] sm:items-end">
-                  <div>
-                    <span className="text-sm text-muted-foreground">Valor detectado en el comprobante</span>
-                    <p className="mt-1 text-lg font-semibold text-foreground">
-                      {formatNumber(valuation?.detected_amount ?? payment.amount ?? 0)}
+              // Sin scroll propio: el cuerpo del cajón ya scrollea, y con dos barras el pie
+              // del formulario se quedaba a mitad de camino.
+              <div className="space-y-4">
+                <div className="grid gap-3 rounded-lg border border-border bg-card p-3 sm:grid-cols-[1fr_170px] sm:items-end">
+                  <div className="min-w-0">
+                    <span className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                      Detectado en el comprobante
+                    </span>
+                    <p className="mt-1 text-xl font-bold tabular-nums text-foreground">
+                      {formatNumber(valuation?.detected_amount ?? payment.amount ?? 0)}{' '}
+                      <span className="text-sm font-semibold text-muted-foreground">
+                        {paymentCurrency}
+                      </span>
                     </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {valuation
-                        ? `Conversiones según las tasas registradas al ${formatCaracasDateTime(valuation.valuation_at)}.`
-                        : 'Las conversiones se calculan usando la fecha y hora de este pago.'}
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      Comprobante #{payment.id} · {receiptLine}
                     </p>
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="loan-payment-currency">Moneda del monto detectado</Label>
+                    <Label htmlFor="loan-payment-currency">Moneda</Label>
                     <Select
                       value={paymentCurrency}
                       onValueChange={(value) => {
@@ -509,7 +622,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                         const nextFiat = isFiat ? value : fiatCurrency;
                         if (isFiat) {
                           setFiatCurrency(value);
-                          if (preferredValue === 'BCV' && value !== 'VES') setPreferredValue('FIAT');
+                          if (preferredValue === 'BCV' && value !== 'VES') setPreferredValue('USDT');
                           if (value !== 'VES') setBcvAmount('');
                         }
                         void loadLoanValuation(nextFiat, value);
@@ -549,97 +662,129 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                   <p key={warning} className="text-xs text-amber-700 dark:text-amber-400">{warning}</p>
                 ))}
 
-                {/* Tres botones y no un desplegable: es la decisión que fija en qué unidad
-                    queda la deuda, y determina cuánto acabará pagando el cliente. Escondida
-                    tras un select se elige sin mirarla. */}
+                {/* Elegir la referencia y escribir los tres importes eran dos controles
+                    separados que hablaban de lo mismo: había que mirar arriba para saber
+                    cuál de los tres campos de abajo mandaba. Ahora cada unidad es una
+                    tarjeta que se elige y donde se escribe, y la elegida se ve sola. */}
                 <div className="space-y-1.5">
-                  <Label>Referencia para llevar la deuda</Label>
-                  <div className="flex gap-2" role="group" aria-label="Referencia para llevar la deuda">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                    <Label>Referencia para llevar la deuda</Label>
+                    <span className="text-xs text-muted-foreground">
+                      la deuda se conserva en la unidad que elijas
+                    </span>
+                  </div>
+                  <div
+                    className="grid grid-cols-1 gap-2 sm:grid-cols-3"
+                    role="radiogroup"
+                    aria-label="Referencia para llevar la deuda"
+                  >
                     {(
                       [
-                        ['FIAT', `Moneda fiat${fiatCurrency ? ` (${fiatCurrency})` : ''}`],
-                        ['USDT', 'USDT'],
-                        ['BCV', 'USD a tasa BCV'],
+                        {
+                          value: 'FIAT',
+                          label: fiatCurrency || 'Fiat',
+                          hint: 'valor fiat',
+                          id: 'loan-fiat-amount',
+                          amount: fiatAmount,
+                          set: setFiatAmount,
+                          // Solo hay tasa oficial para el bolívar: el backend rechaza BCV
+                          // en cualquier otro par, así que la tarjeta se ve pero no se elige.
+                          disabled: false,
+                        },
+                        {
+                          value: 'USDT',
+                          label: 'USDT',
+                          hint: 'equivalente USDT',
+                          id: 'loan-usdt-amount',
+                          amount: usdtAmount,
+                          set: setUsdtAmount,
+                          disabled: false,
+                        },
+                        {
+                          value: 'BCV',
+                          label: 'USD BCV',
+                          hint: 'equivalente BCV',
+                          id: 'loan-bcv-amount',
+                          amount: bcvAmount,
+                          set: setBcvAmount,
+                          disabled: fiatCurrency.trim().toUpperCase() !== 'VES',
+                        },
                       ] as const
-                    )
-                      .filter(([value]) => value !== 'BCV' || fiatCurrency.trim().toUpperCase() === 'VES')
-                      .map(([value, label]) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => setPreferredValue(value as LoanPreferredValue)}
-                          aria-pressed={preferredValue === value}
+                    ).map((ref) => {
+                      const selected = preferredValue === ref.value;
+                      return (
+                        <div
+                          key={ref.value}
                           className={cn(
-                            'min-h-11 flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors',
-                            preferredValue === value
-                              ? 'border-primary bg-primary/10 text-primary'
-                              : 'border-border bg-card text-foreground hover:bg-muted/50',
+                            'rounded-lg border bg-card p-2.5 transition-colors',
+                            selected ? 'border-primary ring-3 ring-primary/10' : 'border-border',
+                            ref.disabled && 'opacity-60',
                           )}
                         >
-                          {label}
-                        </button>
-                      ))}
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            disabled={ref.disabled}
+                            onClick={() => setPreferredValue(ref.value as LoanPreferredValue)}
+                            className="flex min-h-10 w-full items-center justify-between gap-2 text-left"
+                          >
+                            <span
+                              className={cn(
+                                'truncate text-xs font-semibold',
+                                selected ? 'text-primary' : 'text-foreground',
+                              )}
+                            >
+                              {ref.label}
+                            </span>
+                            <span
+                              aria-hidden
+                              className={cn(
+                                'h-3.5 w-3.5 shrink-0 rounded-full border-2',
+                                selected ? 'border-[4px] border-primary' : 'border-border',
+                              )}
+                            />
+                          </button>
+                          <Input
+                            id={ref.id}
+                            inputMode="decimal"
+                            min="0"
+                            step="0.01"
+                            value={ref.amount}
+                            onChange={(event) => setAmountWithTwoDecimals(ref.set, event.target.value)}
+                            placeholder={ref.disabled ? 'No aplica' : '0.00'}
+                            disabled={ref.disabled}
+                            aria-label={`Valor en ${ref.label}`}
+                            className="h-9 tabular-nums"
+                          />
+                          <p
+                            className={cn(
+                              'mt-1 truncate text-[10.5px]',
+                              selected ? 'font-semibold text-primary' : 'text-muted-foreground',
+                            )}
+                          >
+                            {selected ? 'referencia de la deuda' : ref.hint}
+                          </p>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Esta referencia determina la unidad en la que se llevará el saldo pendiente.
-                  </p>
                 </div>
 
+                {/* Explicar en qué unidad queda la deuda no es una alerta: en ámbar y con
+                    triángulo se lee como un problema y acaba ignorándose. */}
                 {preferredValue !== 'FIAT' ? (
-                  <div
-                    role="alert"
-                    className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-amber-900 dark:text-amber-200"
-                  >
-                    <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                    <p className="text-sm">
-                      La deuda quedará indexada a {preferredValue === 'BCV' ? 'USD a tasa BCV' : 'USDT'}.
-                      El valor en {fiatCurrency || 'fiat'} a cobrar cambiará según la tasa del día de cada abono.
+                  <div className="flex items-start gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 p-3 text-sky-700 dark:text-sky-400">
+                    <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                    <p className="text-xs text-pretty">
+                      Con <span className="font-semibold">
+                        {preferredValue === 'BCV' ? 'USD a tasa BCV' : 'USDT'}
+                      </span>{' '}
+                      como referencia, lo que el cliente abone en {fiatCurrency || 'fiat'} se
+                      descontará a la tasa del día de cada abono.
                     </p>
                   </div>
                 ) : null}
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="loan-fiat-amount">Valor fiat ({fiatCurrency || '—'})</Label>
-                    <Input
-                      id="loan-fiat-amount"
-                      inputMode="decimal"
-                      min="0"
-                      step="0.01"
-                      value={fiatAmount}
-                      onChange={(event) => setAmountWithTwoDecimals(setFiatAmount, event.target.value)}
-                      placeholder="0.00"
-                      className={cn(preferredValue === 'FIAT' && 'border-primary ring-3 ring-primary/10')}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="loan-usdt-amount">Equivalente USDT</Label>
-                    <Input
-                      id="loan-usdt-amount"
-                      inputMode="decimal"
-                      min="0"
-                      step="0.01"
-                      value={usdtAmount}
-                      onChange={(event) => setAmountWithTwoDecimals(setUsdtAmount, event.target.value)}
-                      placeholder="0.00"
-                      className={cn(preferredValue === 'USDT' && 'border-primary ring-3 ring-primary/10')}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="loan-bcv-amount">Equivalente USD (BCV)</Label>
-                    <Input
-                      id="loan-bcv-amount"
-                      inputMode="decimal"
-                      min="0"
-                      step="0.01"
-                      value={bcvAmount}
-                      onChange={(event) => setAmountWithTwoDecimals(setBcvAmount, event.target.value)}
-                      placeholder={fiatCurrency === 'VES' ? '0.00' : 'No aplica'}
-                      className={cn(preferredValue === 'BCV' && 'border-primary ring-3 ring-primary/10')}
-                      disabled={fiatCurrency !== 'VES'}
-                    />
-                  </div>
-                </div>
 
                 {valuation?.usdt_rate != null || valuation?.bcv_rate != null ? (
                   <div className="space-y-1 text-xs text-muted-foreground">
@@ -666,7 +811,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                       onValueChange={(value) => {
                         if (!value) return;
                         setFiatCurrency(value);
-                        if (preferredValue === 'BCV' && value !== 'VES') setPreferredValue('FIAT');
+                        if (preferredValue === 'BCV' && value !== 'VES') setPreferredValue('USDT');
                         if (value !== 'VES') setBcvAmount('');
                         void loadLoanValuation(value);
                       }}
@@ -712,39 +857,34 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                 </div>
               </div>
             )}
-
-            <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-3">
-              <Button variant="ghost" onClick={() => setStep('choose')} disabled={submitting}>
-                <ArrowLeft className="h-4 w-4" />
-                Volver
-              </Button>
-              {isLoan && payment.client_uuid ? (
-                <Link
-                  href={`/admin/clients/${payment.client_uuid}`}
-                  className={cn(buttonVariants({ variant: 'default' }))}
-                >
-                  Ver préstamos del cliente
-                </Link>
-              ) : (
-                <Button onClick={saveLoan} disabled={submitting}>
-                  <HandCoins className="h-4 w-4" />
-                  {submitting ? 'Guardando…' : 'Registrar préstamo'}
-                </Button>
-              )}
-            </div>
         </SidePanelBody>
-      ) : (
-        <SidePanelBody>
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">
-                {step === 'personal' ? 'Gasto personal' : 'Marcar como irrelevante'}
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                {step === 'personal'
-                  ? 'Describe el gasto personal. La descripción es requerida.'
-                  : 'Puedes añadir una descripción opcional del motivo.'}
-              </p>
-            </div>
+      ) : null}
+
+      {step === 'loan' ? (
+        <SidePanelFooter>
+          <Button variant="ghost" onClick={() => setStep('choose')} disabled={submitting}>
+            <ArrowLeft className="h-4 w-4" />
+            Volver
+          </Button>
+          {isLoan && payment.client_uuid ? (
+            <Link
+              href={`/admin/clients/${payment.client_uuid}`}
+              className={cn(buttonVariants({ variant: 'default' }))}
+            >
+              Ver préstamos del cliente
+            </Link>
+          ) : (
+            <Button onClick={saveLoan} disabled={submitting}>
+              <HandCoins className="h-4 w-4" />
+              {submitting ? 'Guardando…' : 'Registrar préstamo'}
+            </Button>
+          )}
+        </SidePanelFooter>
+      ) : null}
+
+      {step === 'personal' || step === 'irrelevant' ? (
+        <>
+          <SidePanelBody>
             <div className="space-y-2">
               <Label htmlFor="payment-action-desc">
                 Descripción {step === 'irrelevant' ? '(opcional)' : ''}
@@ -762,21 +902,23 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                 autoFocus
               />
             </div>
-            <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-3">
-              <Button variant="ghost" onClick={() => setStep('choose')} disabled={submitting}>
-                <ArrowLeft className="h-4 w-4" />
-                Volver
-              </Button>
-              <Button
-                onClick={() => (step === 'personal' ? savePersonal() : saveIrrelevant())}
-                disabled={submitting || (step === 'personal' && desc.trim() === '')}
-              >
-                <Tag className="h-4 w-4" />
-                {submitting ? 'Guardando…' : 'Guardar'}
-              </Button>
-            </div>
-        </SidePanelBody>
-      )}
+          </SidePanelBody>
+
+          <SidePanelFooter>
+            <Button variant="ghost" onClick={() => setStep('choose')} disabled={submitting}>
+              <ArrowLeft className="h-4 w-4" />
+              Volver
+            </Button>
+            <Button
+              onClick={() => (step === 'personal' ? savePersonal() : saveIrrelevant())}
+              disabled={submitting || (step === 'personal' && desc.trim() === '')}
+            >
+              <Tag className="h-4 w-4" />
+              {submitting ? 'Guardando…' : 'Guardar'}
+            </Button>
+          </SidePanelFooter>
+        </>
+      ) : null}
 
       <UnlinkOrphanDialog
         preview={orphan}

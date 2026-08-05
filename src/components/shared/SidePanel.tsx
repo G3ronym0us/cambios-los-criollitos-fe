@@ -36,7 +36,9 @@ export function SidePanel({ open, onOpenChange, children, className }: SidePanel
             // Mobile: hoja inferior, alto acotado para que se siga viendo la lista detrás.
             'inset-x-0 bottom-0 max-h-[92vh] rounded-t-2xl ring-1 ring-foreground/10',
             'data-open:animate-in data-open:slide-in-from-bottom data-closed:animate-out data-closed:slide-out-to-bottom',
-            // ≥sm: cajón a la derecha, alto completo.
+            // ≥sm: cajón a la derecha, alto completo. Solo hay DOS anchos en toda la app:
+            // este y `sm:w-[min(31rem,100vw)]` para los pasos que llevan cifras en columnas
+            // (reparto, préstamo). Un tercer ancho no aporta y hace que el cajón "salte".
             'sm:inset-y-0 sm:left-auto sm:right-0 sm:max-h-none sm:w-[min(28rem,100vw)] sm:rounded-none sm:border-l sm:border-border sm:ring-0 sm:shadow-2xl',
             'sm:data-open:slide-in-from-right sm:data-closed:slide-out-to-right',
             className,
@@ -82,6 +84,27 @@ export function SidePanelBody({ className, ...props }: React.ComponentProps<'div
     <div
       className={cn(
         'flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-5',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+/**
+ * Pie fijo del cajón: secundario a la izquierda, primario a la derecha.
+ *
+ * Va FUERA del área que scrollea. Cuando el pie viajaba dentro del cuerpo, en una lista de
+ * cotizaciones larga el botón de confirmar quedaba al final del scroll y no se veía sin
+ * bajar hasta el fondo. El fondo hundido lo separa del contenido: es el borde de la
+ * decisión, no una fila más.
+ */
+export function SidePanelFooter({ className, ...props }: React.ComponentProps<'div'>) {
+  return (
+    <div
+      className={cn(
+        'flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border bg-muted/40 px-4 py-3 sm:px-5',
+        'pb-[max(0.75rem,env(safe-area-inset-bottom))]',
         className,
       )}
       {...props}
