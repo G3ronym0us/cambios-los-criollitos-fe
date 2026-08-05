@@ -50,7 +50,7 @@ export default function ClientProfilePage() {
   const { state, actions } = useClientProfile(uuid);
   const {
     client, loading, notFound, saving, operations, operationsLoading, pairs,
-    balance, balanceLoading, loans, loansLoading,
+    balance, balanceLoading, loans, loansLoading, loanTotals,
   } = state;
 
   if (loading) {
@@ -160,7 +160,14 @@ export default function ClientProfilePage() {
         </TabsContent>
 
         <TabsContent value="loans">
-          <ClientLoansTab loans={loans} loading={loansLoading} onRepayment={actions.addLoanRepayment} />
+          <ClientLoansTab
+            clientUuid={uuid}
+            loans={loans}
+            totals={loanTotals}
+            loading={loansLoading}
+            onRepayment={actions.addLoanRepayment}
+            onCreateLoan={actions.createLoan}
+          />
         </TabsContent>
       </Tabs>
     </div>

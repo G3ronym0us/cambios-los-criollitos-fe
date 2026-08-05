@@ -6,7 +6,15 @@ import { adminService } from '@/services/adminService';
 import { clientService } from '@/services/clientService';
 import { operationService } from '@/services/operationService';
 import { CurrencyPairData } from '@/types/admin';
-import { BalanceAdjust, BalanceSummary, ClientData, ClientUpdate, LoanData } from '@/types/client';
+import {
+  BalanceAdjust,
+  BalanceSummary,
+  ClientData,
+  ClientUpdate,
+  LoanData,
+  LoanTotals,
+  ManualLoanCreate,
+} from '@/types/client';
 import { OperationData } from '@/types/operation';
 
 export function useClientProfile(uuid: string) {
@@ -21,11 +29,13 @@ export function useClientProfile(uuid: string) {
   const [balanceLoading, setBalanceLoading] = useState(true);
   const [loans, setLoans] = useState<LoanData[]>([]);
   const [loansLoading, setLoansLoading] = useState(true);
+  const [loanTotals, setLoanTotals] = useState<LoanTotals | null>(null);
 
   const loadLoans = useCallback(async () => {
     setLoansLoading(true);
     const result = await clientService.getClientLoans(uuid);
     setLoans(result.success && result.data ? result.data.loans : []);
+    setLoanTotals(result.success && result.data ? result.data.totals : null);
     setLoansLoading(false);
   }, [uuid]);
 
@@ -125,11 +135,25 @@ export function useClientProfile(uuid: string) {
     [uuid, loadLoans],
   );
 
+  const createLoan = useCallback(
+    async (body: ManualLoanCreate): Promise<boolean> => {
+      const result = await clientService.createManualLoan(uuid, body);
+      if (!result.success) {
+        toast.error(result.error || 'No se pudo registrar el préstamo');
+        return false;
+      }
+      toast.success('Préstamo registrado');
+      loadLoans();
+      return true;
+    },
+    [uuid, loadLoans],
+  );
+
   return {
     state: {
       client, loading, notFound, saving, operations, operationsLoading, pairs,
-      balance, balanceLoading, loans, loansLoading,
+      balance, balanceLoading, loans, loansLoading, loanTotals,
     },
-    actions: { updateFields, reload: load, adjustBalance, addLoanRepayment },
+    actions: { updateFields, reload: load, adjustBalance, addLoanRepayment, createLoan },
   };
 }
