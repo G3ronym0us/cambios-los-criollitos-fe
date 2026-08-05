@@ -19,18 +19,19 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { paymentService } from '@/services/paymentService';
 import { adminService } from '@/services/adminService';
+import { clientService } from '@/services/clientService';
 import { cn } from '@/lib/utils';
-import { formatAmountForInput, formatCaracasDateTime, formatNumber, sanitizeAmountInput } from '@/utils/functions';
+import { formatAmountForInput, formatCaracasDateTime, formatNumber, isUnassignedClientPhone } from '@/utils/functions';
 import { CurrencyType, type CurrencyData } from '@/types/admin';
 import type { OrphanAction, UnlinkPreview } from '@/types/operation';
 import { UnlinkOrphanDialog } from './UnlinkOrphanDialog';
 import type { LoanPreferredValue, LoanValuation, PaymentData, PaymentSuggestion } from '@/types/payment';
 import { LinkOperationPanel } from './LinkOperationPanel';
+import { LoanReferenceFields } from '@/components/loans/LoanReferenceFields';
 
 interface OutgoingPaymentActionDialogProps {
   payment: PaymentData | null;
@@ -103,6 +104,10 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
   // Operación que el matcher propone: se muestra dentro de la opción "vincular", para que
   // clasificar no obligue a abrir el buscador solo para comprobar qué hay al otro lado.
   const [suggestion, setSuggestion] = useState<PaymentSuggestion | null>(null);
+  // A nombre de quién queda el préstamo cuando el comprobante se mandó a un grupo: el
+  // teléfono del pago no identifica al deudor y hay que elegirlo a mano.
+  const [borrowerUuid, setBorrowerUuid] = useState<string | null>(null);
+  const [borrowerOptions, setBorrowerOptions] = useState<{ uuid: string; label: string }[]>([]);
 
   useEffect(() => {
     setStep('choose');
@@ -122,6 +127,8 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
     setValuation(null);
     setValuationLoading(false);
     setValuationError(null);
+    setBorrowerUuid(null);
+    setBorrowerOptions([]);
 
     if (!payment || payment.operation_uuid || payment.amount == null) return;
     let active = true;
@@ -145,6 +152,26 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
       setAvailableCurrencies(Array.from(currencies.values()).sort((a, b) => a.symbol.localeCompare(b.symbol)));
     });
   }, []);
+
+  // Cuando el comprobante se mandó a un grupo, el teléfono no dice a quién se le prestó:
+  // hay que elegir el deudor. Se ofrecen los clientes con identidad conocida.
+  useEffect(() => {
+    if (step !== 'loan' || !valuation?.requires_borrower) return;
+    let cancelled = false;
+    void clientService.getClients({ limit: 500 }).then((result) => {
+      if (cancelled || !result.success || !result.data) return;
+      const items = result.data.items
+        .filter((item) => !isUnassignedClientPhone(item.phone))
+        .map((item) => ({
+          uuid: item.uuid,
+          label: item.display_name || item.phone,
+        }));
+      setBorrowerOptions(items);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [step, valuation?.requires_borrower]);
 
   if (!payment) return null;
 
@@ -208,6 +235,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
     setFiatAmount(formatAmountForInput(data.fiat_amount));
     setUsdtAmount(formatAmountForInput(data.usdt_amount));
     setBcvAmount(formatAmountForInput(data.bcv_amount));
+    if (data.suggested_client) setBorrowerUuid(data.suggested_client.uuid);
   };
 
   const loadLoanValuation = async (
@@ -233,14 +261,6 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
   const openLoan = () => {
     setStep('loan');
     if (!isLoan && !valuation) loadLoanValuation();
-  };
-
-  const setAmountWithTwoDecimals = (
-    setter: (value: string) => void,
-    value: string,
-  ) => {
-    const sanitized = sanitizeAmountInput(value);
-    if (sanitized != null) setter(sanitized);
   };
 
   const fiatCurrencies = availableCurrencies.filter(
@@ -343,6 +363,9 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
     if (fiatCurrency.trim().toUpperCase() === 'VES' && (bcv == null || !Number.isFinite(bcv) || bcv <= 0)) {
       return toast.error('Indica un valor BCV válido');
     }
+    if (valuation?.requires_borrower && !borrowerUuid) {
+      return toast.error('Elige a nombre de quién queda el préstamo');
+    }
 
     setSubmitting(true);
     const res = await paymentService.createLoan(payment.id, {
@@ -353,6 +376,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
       usdtAmount: usdt,
       bcvAmount: bcv,
       notes: loanNotes.trim() || null,
+      clientUuid: borrowerUuid,
     });
     setSubmitting(false);
     if (res.success) {
@@ -662,114 +686,44 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                   <p key={warning} className="text-xs text-amber-700 dark:text-amber-400">{warning}</p>
                 ))}
 
-                {/* Elegir la referencia y escribir los tres importes eran dos controles
-                    separados que hablaban de lo mismo: había que mirar arriba para saber
-                    cuál de los tres campos de abajo mandaba. Ahora cada unidad es una
-                    tarjeta que se elige y donde se escribe, y la elegida se ve sola. */}
-                <div className="space-y-1.5">
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                    <Label>Referencia para llevar la deuda</Label>
-                    <span className="text-xs text-muted-foreground">
-                      la deuda se conserva en la unidad que elijas
-                    </span>
+                {valuation?.requires_borrower ? (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="loan-borrower">¿A nombre de quién queda el préstamo?</Label>
+                    <Select
+                      value={borrowerUuid ?? ''}
+                      onValueChange={(value) => setBorrowerUuid(value || null)}
+                    >
+                      <SelectTrigger id="loan-borrower" className="h-10 w-full">
+                        <SelectValue placeholder="Selecciona el deudor" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {borrowerOptions.map((option) => (
+                          <SelectItem key={option.uuid} value={option.uuid}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      El comprobante se mandó a un grupo, así que el teléfono no identifica al
+                      deudor.
+                    </p>
                   </div>
-                  <div
-                    className="grid grid-cols-1 gap-2 sm:grid-cols-3"
-                    role="radiogroup"
-                    aria-label="Referencia para llevar la deuda"
-                  >
-                    {(
-                      [
-                        {
-                          value: 'FIAT',
-                          label: fiatCurrency || 'Fiat',
-                          hint: 'valor fiat',
-                          id: 'loan-fiat-amount',
-                          amount: fiatAmount,
-                          set: setFiatAmount,
-                          // Solo hay tasa oficial para el bolívar: el backend rechaza BCV
-                          // en cualquier otro par, así que la tarjeta se ve pero no se elige.
-                          disabled: false,
-                        },
-                        {
-                          value: 'USDT',
-                          label: 'USDT',
-                          hint: 'equivalente USDT',
-                          id: 'loan-usdt-amount',
-                          amount: usdtAmount,
-                          set: setUsdtAmount,
-                          disabled: false,
-                        },
-                        {
-                          value: 'BCV',
-                          label: 'USD BCV',
-                          hint: 'equivalente BCV',
-                          id: 'loan-bcv-amount',
-                          amount: bcvAmount,
-                          set: setBcvAmount,
-                          disabled: fiatCurrency.trim().toUpperCase() !== 'VES',
-                        },
-                      ] as const
-                    ).map((ref) => {
-                      const selected = preferredValue === ref.value;
-                      return (
-                        <div
-                          key={ref.value}
-                          className={cn(
-                            'rounded-lg border bg-card p-2.5 transition-colors',
-                            selected ? 'border-primary ring-3 ring-primary/10' : 'border-border',
-                            ref.disabled && 'opacity-60',
-                          )}
-                        >
-                          <button
-                            type="button"
-                            role="radio"
-                            aria-checked={selected}
-                            disabled={ref.disabled}
-                            onClick={() => setPreferredValue(ref.value as LoanPreferredValue)}
-                            className="flex min-h-10 w-full items-center justify-between gap-2 text-left"
-                          >
-                            <span
-                              className={cn(
-                                'truncate text-xs font-semibold',
-                                selected ? 'text-primary' : 'text-foreground',
-                              )}
-                            >
-                              {ref.label}
-                            </span>
-                            <span
-                              aria-hidden
-                              className={cn(
-                                'h-3.5 w-3.5 shrink-0 rounded-full border-2',
-                                selected ? 'border-[4px] border-primary' : 'border-border',
-                              )}
-                            />
-                          </button>
-                          <Input
-                            id={ref.id}
-                            inputMode="decimal"
-                            min="0"
-                            step="0.01"
-                            value={ref.amount}
-                            onChange={(event) => setAmountWithTwoDecimals(ref.set, event.target.value)}
-                            placeholder={ref.disabled ? 'No aplica' : '0.00'}
-                            disabled={ref.disabled}
-                            aria-label={`Valor en ${ref.label}`}
-                            className="h-9 tabular-nums"
-                          />
-                          <p
-                            className={cn(
-                              'mt-1 truncate text-[10.5px]',
-                              selected ? 'font-semibold text-primary' : 'text-muted-foreground',
-                            )}
-                          >
-                            {selected ? 'referencia de la deuda' : ref.hint}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                ) : null}
+
+                <LoanReferenceFields
+                  idPrefix="loan"
+                  fiatCurrencyLabel={fiatCurrency}
+                  bcvEnabled={fiatCurrency.trim().toUpperCase() === 'VES'}
+                  preferredValue={preferredValue}
+                  onPreferredValueChange={setPreferredValue}
+                  fiatAmount={fiatAmount}
+                  usdtAmount={usdtAmount}
+                  bcvAmount={bcvAmount}
+                  onFiatAmountChange={setFiatAmount}
+                  onUsdtAmountChange={setUsdtAmount}
+                  onBcvAmountChange={setBcvAmount}
+                />
 
                 {/* Explicar en qué unidad queda la deuda no es una alerta: en ámbar y con
                     triángulo se lee como un problema y acaba ignorándose. */}
