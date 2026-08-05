@@ -7,6 +7,7 @@ import {
   ArrowRightLeft,
   ChevronRight,
   IdCard,
+  ScanLine,
   Split,
   Sparkles,
   Wallet,
@@ -27,9 +28,10 @@ import { paymentService } from '@/services/paymentService';
 import { formatNumber } from '@/utils/functions';
 import { canBeDefaultAccount } from '@/utils/paymentBlock';
 import type { PaymentData, PaymentSuggestion } from '@/types/payment';
+import { CorrectReceiptDialog } from './CorrectReceiptDialog';
 import { LinkOperationPanel } from './LinkOperationPanel';
 import { PaymentAllocationsPanel } from './PaymentAllocationsPanel';
-import { describeCoverage, describePayment, describeSuggestion } from './paymentRowData';
+import { describeCorrection, describeCoverage, describePayment, describeSuggestion } from './paymentRowData';
 
 interface IncomingPaymentDrawerProps {
   payment: PaymentData | null;
@@ -140,11 +142,13 @@ export function IncomingPaymentDrawer({
   const [balanceNotes, setBalanceNotes] = useState('');
   const [suggestion, setSuggestion] = useState<PaymentSuggestion | null>(null);
   const [showRawText, setShowRawText] = useState(false);
+  const [correcting, setCorrecting] = useState(false);
 
   useEffect(() => {
     if (!payment) return;
     setStep('detail');
     setSubmitting(false);
+    setCorrecting(false);
     setBalanceAmount(payment.amount != null ? String(payment.amount) : '');
     setBalanceNotes('');
     setSuggestion(null);
@@ -163,6 +167,7 @@ export function IncomingPaymentDrawer({
 
   const p = payment;
   const d = describePayment(p);
+  const correction = describeCorrection(p);
   const unassigned = p.unassigned_amount ?? 0;
   const balanceEligible = BALANCE_CURRENCIES.has((p.currency || '').toUpperCase());
 
@@ -342,10 +347,9 @@ export function IncomingPaymentDrawer({
                   </div>
                 ))}
               </dl>
-              {p.correction_original ? (
+              {correction ? (
                 <p className="mt-1.5 rounded-lg bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
-                  El OCR leyó <span className="line-through">{p.correction_original}</span> → corregido
-                  a {d.amount}.
+                  El OCR había leído <span className="line-through">{correction}</span>.
                 </p>
               ) : null}
             </div>
@@ -467,6 +471,17 @@ export function IncomingPaymentDrawer({
             ) : null}
 
             <ActionRow
+              icon={ScanLine}
+              title="Corregir monto o referencia"
+              description={
+                p.corrected_at
+                  ? 'Ya se corrigió a mano; puedes volver a ajustarlo.'
+                  : 'El OCR leyó mal el comprobante.'
+              }
+              onClick={() => setCorrecting(true)}
+            />
+
+            <ActionRow
               icon={ArrowRightLeft}
               title="Convertir en pago saliente"
               description="Devuélvelo a Salientes si el bot lo clasificó como entrante por error."
@@ -531,6 +546,13 @@ export function IncomingPaymentDrawer({
           </SidePanelFooter>
         </>
       )}
+
+      <CorrectReceiptDialog
+        payment={correcting ? p : null}
+        table="incoming"
+        onCancel={() => setCorrecting(false)}
+        onSaved={finish}
+      />
     </SidePanel>
   );
 }

@@ -121,6 +121,17 @@ export class PaymentService {
     return { success: result.success, data: result.data, error: result.error };
   }
 
+  // Corrige a mano lo que el OCR leyó mal. Solo viajan los campos incluidos: el backend
+  // guarda el valor anterior en `correction_original` y marca el pago como corregido.
+  async updateFields(
+    table: PaymentTable,
+    paymentId: number,
+    fields: { amount?: number; currency?: string; reference?: string },
+  ): Promise<ApiResponse<PaymentData>> {
+    const result = await httpClient.patch<PaymentData>(`/payments/${table}/${paymentId}`, fields);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
   // Marca/desmarca un pago saliente como gasto personal (descripción requerida al marcar).
   async markPersonalExpense(
     paymentId: number,

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRightLeft, Ban, ChevronRight, HandCoins, Info, Link2, RotateCcw, Tag, TriangleAlert, Wallet } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, Ban, ChevronRight, HandCoins, Info, Link2, RotateCcw, ScanLine, Tag, TriangleAlert, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   SidePanel,
@@ -29,6 +29,8 @@ import { formatAmountForInput, formatCaracasDateTime, formatNumber, isUnassigned
 import { CurrencyType, type CurrencyData } from '@/types/admin';
 import type { OrphanAction, UnlinkPreview } from '@/types/operation';
 import { UnlinkOrphanDialog } from './UnlinkOrphanDialog';
+import { CorrectReceiptDialog } from './CorrectReceiptDialog';
+import { describeCorrection } from './paymentRowData';
 import type { LoanPreferredValue, LoanValuation, PaymentData, PaymentSuggestion } from '@/types/payment';
 import { LinkOperationPanel } from './LinkOperationPanel';
 import { LoanReferenceFields } from '@/components/loans/LoanReferenceFields';
@@ -86,6 +88,8 @@ type Step = 'choose' | 'personal' | 'irrelevant' | 'operation' | 'loan';
 
 export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConverted }: OutgoingPaymentActionDialogProps) {
   const [step, setStep] = useState<Step>('choose');
+  const [showRawText, setShowRawText] = useState(false);
+  const [correcting, setCorrecting] = useState(false);
   const [desc, setDesc] = useState('');
   const [submitting, setSubmitting] = useState(false);
   // Marcar personal/irrelevante desvincula: si deja la op sin comprobantes, este cuadro decide.
@@ -111,6 +115,8 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
 
   useEffect(() => {
     setStep('choose');
+    setShowRawText(false);
+    setCorrecting(false);
     setDesc('');
     setSubmitting(false);
     setSuggestion(null);
@@ -205,6 +211,8 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
   ]
     .filter(Boolean)
     .join(' · ');
+
+  const correction = describeCorrection(payment);
 
   const finish = () => {
     onDone();
@@ -488,6 +496,14 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
               <p className="truncate text-[11px] text-muted-foreground">
                 Comprobante #{payment.id} · {receiptLine}
               </p>
+              {/* Si el monto de arriba lo puso una persona y no el OCR, hay que decirlo:
+                  si no, un número corregido se lee como una lectura de la máquina. */}
+              {correction ? (
+                <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
+                  Corregido a mano · el OCR había leído{' '}
+                  <span className="line-through">{correction}</span>
+                </p>
+              ) : null}
             </div>
           </>
         )}
@@ -568,12 +584,47 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                 Corregir la lectura del bot
               </span>
               <ChoiceButton
+                icon={ScanLine}
+                title="Corregir monto o referencia"
+                description={
+                  payment.corrected_at
+                    ? 'Ya se corrigió a mano; puedes volver a ajustarlo.'
+                    : 'El OCR leyó mal el comprobante.'
+                }
+                active={false}
+                onClick={() => setCorrecting(true)}
+              />
+              <ChoiceButton
                 icon={ArrowRightLeft}
                 title="Convertir en entrante"
                 description="Es dinero que entró, no que salió."
                 active={false}
                 onClick={convertToIncoming}
               />
+              {/* Texto crudo del OCR: plegado, igual que en el cajón de entrantes. Cuando el
+                  monto o el banco salieron mal, es lo único que dice POR QUÉ salieron mal. */}
+              {payment.raw_text ? (
+                <div className="overflow-hidden rounded-lg border border-border">
+                  <button
+                    type="button"
+                    onClick={() => setShowRawText((v) => !v)}
+                    aria-expanded={showRawText}
+                    className="flex w-full items-center justify-between gap-2 bg-muted/60 px-3 py-2 text-left"
+                  >
+                    <span className="text-xs font-semibold text-foreground">
+                      Texto detectado por el bot
+                    </span>
+                    <span className="text-[11px] font-semibold text-primary">
+                      {showRawText ? 'Ocultar' : 'Ver'}
+                    </span>
+                  </button>
+                  {showRawText ? (
+                    <pre className="max-h-56 overflow-auto whitespace-pre-wrap bg-card px-3 py-2.5 font-mono text-[11px] leading-relaxed text-muted-foreground">
+                      {payment.raw_text}
+                    </pre>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
         </SidePanelBody>
 
@@ -883,6 +934,13 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
             ? savePersonal({ action, note })
             : saveIrrelevant({ action, note })
         }
+      />
+
+      <CorrectReceiptDialog
+        payment={correcting ? payment : null}
+        table="outgoing"
+        onCancel={() => setCorrecting(false)}
+        onSaved={finish}
       />
     </SidePanel>
   );

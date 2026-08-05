@@ -35,6 +35,41 @@ export function describeCoverage(delta: number, paid: number, currency: string):
   return `Cubre ${formatNumber(paid)} de ${formatNumber(paid + delta)}${unidad} · faltarían ${formatNumber(delta)}`;
 }
 
+// Etiquetas de los campos corregibles, para narrar la corrección en el idioma de la pantalla.
+const CORRECTED_FIELD_LABELS: Record<string, string> = {
+  amount: 'monto',
+  currency: 'moneda',
+  reference: 'referencia',
+  provider: 'método',
+  bank_from: 'banco origen',
+  bank_to: 'banco destino',
+  identification: 'identificación',
+  phone_to: 'teléfono',
+};
+
+/**
+ * Qué había leído el bot antes de que alguien lo corrigiera. `correction_original` viaja
+ * como JSON con el snapshot previo ({"amount": 4.0}); pintarlo crudo enseñaba las llaves
+ * y el nombre de la columna en inglés.
+ */
+export function describeCorrection(p: PaymentData): string | null {
+  if (!p.correction_original) return null;
+  let snapshot: Record<string, unknown>;
+  try {
+    snapshot = JSON.parse(p.correction_original) as Record<string, unknown>;
+  } catch {
+    return p.correction_original; // formato viejo o no-JSON: mejor mostrarlo tal cual
+  }
+  const parts = Object.entries(snapshot)
+    .filter(([, value]) => value != null && value !== '')
+    .map(([key, value]) => {
+      const label = CORRECTED_FIELD_LABELS[key] ?? key;
+      const shown = typeof value === 'number' ? formatNumber(value) : String(value);
+      return `${label} ${shown}`;
+    });
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
 function caracasDayKey(date: Date) {
   return date.toLocaleDateString('en-CA', { timeZone: 'America/Caracas' });
 }
