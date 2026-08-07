@@ -6,7 +6,47 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+type SelectOption = { value: unknown; label: React.ReactNode }
+
+/**
+ * Recorre los hijos buscando `<SelectItem>` para armar el mapa value → label.
+ *
+ * Base UI, a diferencia de Radix, hace que `<Select.Value>` pinte el **valor
+ * crudo** y no el texto del item: sin esto, un `<SelectItem value={uuid}>`
+ * muestra el UUID en el trigger. El mapa se le pasa como `items` al Root, que
+ * es la forma documentada de resolver la etiqueta.
+ */
+export function collectOptions(children: React.ReactNode, out: SelectOption[]): void {
+  React.Children.forEach(children, (child) => {
+    if (!React.isValidElement(child)) return
+    const props = child.props as { value?: unknown; children?: React.ReactNode }
+    if (child.type === SelectItem) {
+      out.push({ value: props.value, label: props.children })
+      return
+    }
+    // Fragmentos, SelectContent, SelectGroup y demás envoltorios.
+    if (props.children != null) collectOptions(props.children, out)
+  })
+}
+
+function Select<Value, Multiple extends boolean | undefined = false>({
+  children,
+  items,
+  ...props
+}: SelectPrimitive.Root.Props<Value, Multiple>) {
+  const derivedItems = React.useMemo(() => {
+    if (items) return items
+    const options: SelectOption[] = []
+    collectOptions(children, options)
+    return options.length > 0 ? (options as SelectPrimitive.Root.Props<Value, Multiple>["items"]) : undefined
+  }, [items, children])
+
+  return (
+    <SelectPrimitive.Root items={derivedItems} {...props}>
+      {children}
+    </SelectPrimitive.Root>
+  )
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (

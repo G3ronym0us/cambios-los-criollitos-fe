@@ -1,21 +1,24 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, DollarSign, SearchX } from 'lucide-react';
-import { buttonVariants } from '@/components/ui/button';
+import { ArrowLeft, DollarSign, History, SearchX } from 'lucide-react';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { StatusBadge } from '@/components/shared/StatusBadge';
 import { cn } from '@/lib/utils';
+import RateHistoryModal from '../RateHistoryModal';
 import { usePairDetail } from './_hooks/usePairDetail';
 import { PairDetailForm } from './_components/PairDetailForm';
+import { PairRateHeader } from './_components/PairRateHeader';
 
 export default function CurrencyPairDetailPage() {
   const params = useParams();
   const uuid = params.uuid as string;
   const { state, actions } = usePairDetail(uuid);
+  const [showHistory, setShowHistory] = useState(false);
 
   const backLink = (
     <Link
@@ -59,40 +62,46 @@ export default function CurrencyPairDetailPage() {
         title={pair.display_name}
         description={pair.description || pair.pair_symbol}
         actions={
-          <Link
-            href={`/admin/currency-pairs/${pair.uuid}/configs`}
-            className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'w-full sm:w-auto')}
-          >
-            <DollarSign className="h-4 w-4" />
-            Comisiones
-          </Link>
+          <div className="flex w-full gap-2 sm:w-auto">
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => setShowHistory(true)}
+              className="flex-1 sm:flex-none"
+            >
+              <History className="h-4 w-4" />
+              Historial
+            </Button>
+            <Link
+              href={`/admin/currency-pairs/${pair.uuid}/configs`}
+              className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'flex-1 sm:flex-none')}
+            >
+              <DollarSign className="h-4 w-4" />
+              Comisiones
+            </Link>
+          </div>
         }
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge tone="primary">{pair.pair_type.toUpperCase()}</StatusBadge>
-        <StatusBadge tone={pair.is_active ? 'success' : 'neutral'}>
-          {pair.is_active ? 'Activo' : 'Inactivo'}
-        </StatusBadge>
-        <StatusBadge tone={pair.is_monitored ? 'info' : 'neutral'}>
-          {pair.is_monitored ? 'Monitoreado' : 'Sin monitorear'}
-        </StatusBadge>
-        {pair.binance_tracked ? <StatusBadge tone="warning">Binance P2P</StatusBadge> : null}
-        {pair.rounding_mode ? (
-          <StatusBadge tone="primary">
-            Redondeo {pair.rounding_mode === 'RATE' ? 'de tasa' : 'de monto'}
-          </StatusBadge>
-        ) : null}
-      </div>
+      <PairRateHeader pair={pair} />
 
       <PairDetailForm
         key={pair.uuid}
         pair={pair}
         basePairs={state.basePairs}
+        derivedPairs={state.derivedPairs}
         fiatSymbol={state.fiatSymbol}
         error={state.error}
         onSave={actions.save}
       />
+
+      {showHistory ? (
+        <RateHistoryModal
+          isOpen={showHistory}
+          onClose={() => setShowHistory(false)}
+          selectedPair={pair}
+        />
+      ) : null}
     </div>
   );
 }

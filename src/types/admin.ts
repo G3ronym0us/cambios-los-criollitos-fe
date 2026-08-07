@@ -38,6 +38,20 @@ export interface CurrencyAdminResponse {
   pages: number;
 }
 
+/**
+ * Tasa vigente que el backend embebe en el listado y el detalle de pares
+ * (`CurrencyPairRateInfo`). Es `null` cuando el par nunca cotizó.
+ */
+export interface CurrencyPairRateInfo {
+  rate: number;
+  is_manual: boolean;
+  automatic_rate: number | null;
+  /** Cuándo se leyó la tasa: cada corrida del monitor inserta una fila nueva. */
+  read_at: string;
+  rate_24h_ago: number | null;
+  change_24h_percentage: number | null;
+}
+
 export interface CurrencyPairData {
   uuid: string;
   pair_symbol: string;
@@ -66,6 +80,8 @@ export interface CurrencyPairData {
   rounding_step?: number | null;
   rounding_direction?: 'UP' | 'DOWN' | null;
   rounding_amount_side?: 'FROM' | 'TO' | null;
+  /** Solo la llenan el listado y el detalle; en otros endpoints llega `null`. */
+  current_rate?: CurrencyPairRateInfo | null;
   created_at: string;
   updated_at?: string;
 }
@@ -173,6 +189,8 @@ export interface BasePairData {
   banks_to_track: string[] | null;
   amount_to_track: number | null;
   pair_type: PairType;
+  /** El endpoint de base-pairs la incluye para mostrar a cuánto cotiza el base. */
+  current_rate?: CurrencyPairRateInfo | null;
   created_at: string;
   updated_at?: string;
 }

@@ -16,24 +16,30 @@ export default function CurrencyPairsAdminPage() {
   const { state, actions } = useCurrencyPairs();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
-        title="Pares de Monedas"
-        description="Gestiona los pares de monedas, sus tasas y configuración de Binance P2P."
+        title="Pares de monedas"
+        description="Tasas vigentes, origen de cada tasa y configuración de Binance P2P."
         actions={
           <Button size="lg" onClick={actions.openCreate}>
             <Plus className="h-4 w-4" />
-            Nuevo Par
+            Nuevo par
           </Button>
         }
       />
 
-      <PairsStats stats={state.stats} />
+      <PairsStats
+        summary={state.summary}
+        onShowAlerts={() => actions.setFilters({ ...state.filters, segment: 'alert' })}
+      />
 
       <PairsFilters
         filters={state.filters}
         currencies={state.currencies}
         hasActiveFilters={state.hasActiveFilters}
+        shownCount={state.pairs.length}
+        totalCount={state.allPairs.length}
+        alertCount={state.summary.alerts}
         onChange={actions.setFilters}
         onReset={actions.resetFilters}
       />
@@ -48,9 +54,6 @@ export default function CurrencyPairsAdminPage() {
         onDelete={actions.handleDelete}
         onShowHistory={actions.openHistory}
         onManualRate={actions.openManualRate}
-        onToggleActive={actions.handleToggleActive}
-        onToggleMonitored={actions.handleToggleMonitored}
-        onToggleBinance={actions.handleToggleBinanceTracked}
       />
 
       <CreateCurrencyPairModal

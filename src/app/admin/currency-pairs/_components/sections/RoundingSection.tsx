@@ -1,6 +1,7 @@
 'use client';
 
 import { Controller } from 'react-hook-form';
+import { Check } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -10,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 import { NONE, type SectionProps } from './formShared';
 import { RoundingPreview } from './RoundingPreview';
 
@@ -145,9 +147,7 @@ export function RoundingSection({
 
           {watchRoundingMode === 'AMOUNT' ? (
             <div className="space-y-1.5">
-              <Label htmlFor="rounding-amount-side" className="text-xs font-medium text-muted-foreground">
-                Moneda a redondear
-              </Label>
+              <p className="text-xs font-medium text-muted-foreground">Moneda a redondear</p>
               <Controller
                 name="rounding_amount_side"
                 control={control}
@@ -156,26 +156,46 @@ export function RoundingSection({
                     watchRoundingMode !== 'AMOUNT' || !!v || 'Selecciona la moneda a redondear',
                 }}
                 render={({ field }) => (
-                  <Select
-                    value={field.value ?? ''}
-                    onValueChange={(v) => field.onChange(v as 'FROM' | 'TO')}
+                  <div
+                    role="radiogroup"
+                    aria-label="Moneda a redondear"
+                    className="grid gap-2 sm:grid-cols-2"
                   >
-                    <SelectTrigger id="rounding-amount-side" className="h-10 w-full">
-                      <SelectValue placeholder="Seleccionar moneda...">
-                        {(v) =>
-                          v === 'FROM'
-                            ? `${fromSymbol ?? 'Origen'} (origen)`
-                            : v === 'TO'
-                              ? `${toSymbol ?? 'Destino'} (destino)`
-                              : 'Seleccionar moneda...'
-                        }
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="FROM">{fromSymbol ?? 'Origen'} (origen)</SelectItem>
-                      <SelectItem value="TO">{toSymbol ?? 'Destino'} (destino)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    {(
+                      [
+                        { side: 'FROM', symbol: fromSymbol, hint: 'lo que el cliente entrega' },
+                        { side: 'TO', symbol: toSymbol, hint: 'lo que el cliente recibe' },
+                      ] as const
+                    ).map(({ side, symbol, hint }) => {
+                      const selected = field.value === side;
+                      return (
+                        <button
+                          key={side}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          onClick={() => field.onChange(side)}
+                          className={cn(
+                            'rounded-lg border p-3 text-left transition-colors',
+                            selected
+                              ? 'border-primary bg-primary/5 ring-3 ring-primary/10'
+                              : 'border-border bg-card hover:bg-muted/40'
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              'flex items-center gap-1.5 font-mono text-sm font-semibold',
+                              selected ? 'text-primary' : 'text-foreground'
+                            )}
+                          >
+                            {symbol ?? (side === 'FROM' ? 'Origen' : 'Destino')}
+                            {selected ? <Check className="h-3.5 w-3.5" aria-hidden /> : null}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-muted-foreground">{hint}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
               />
               {errors.rounding_amount_side ? (

@@ -4,8 +4,9 @@ import { ArrowLeftRight, Plus, RotateCcw, SlidersHorizontal } from 'lucide-react
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingState } from '@/components/shared/LoadingState';
+import { cn } from '@/lib/utils';
 import type { CurrencyPairData } from '@/types/admin';
-import { PairItem } from './PairItem';
+import { PAIR_GRID, PairRow } from './PairRow';
 
 interface PairsListProps {
   pairs: CurrencyPairData[];
@@ -17,9 +18,6 @@ interface PairsListProps {
   onDelete: (uuid: string) => void;
   onShowHistory: (pair: CurrencyPairData) => void;
   onManualRate: (pair: CurrencyPairData) => void;
-  onToggleActive: (pair: CurrencyPairData) => void;
-  onToggleMonitored: (pair: CurrencyPairData) => void;
-  onToggleBinance: (pair: CurrencyPairData) => void;
 }
 
 export function PairsList({
@@ -28,7 +26,7 @@ export function PairsList({
   hasActiveFilters,
   onResetFilters,
   onCreate,
-  ...itemHandlers
+  ...rowHandlers
 }: PairsListProps) {
   if (loading) {
     return <LoadingState label="Cargando pares de monedas..." />;
@@ -63,9 +61,23 @@ export function PairsList({
   }
 
   return (
-    <div className="grid gap-3 sm:gap-4">
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      {/* La cabecera solo existe cuando hay columnas que encabezar. */}
+      <div
+        className={cn(
+          PAIR_GRID,
+          'sticky top-0 z-10 hidden border-b border-border bg-muted/60 px-3 py-2 text-[0.65rem] font-bold tracking-wider text-muted-foreground uppercase backdrop-blur lg:grid'
+        )}
+      >
+        <span>Par</span>
+        <span>Tasa vigente</span>
+        <span>24 h</span>
+        <span>Origen</span>
+        <span className="sr-only">Acciones</span>
+      </div>
+
       {pairs.map((pair) => (
-        <PairItem key={pair.uuid} pair={pair} {...itemHandlers} />
+        <PairRow key={pair.uuid} pair={pair} {...rowHandlers} />
       ))}
     </div>
   );

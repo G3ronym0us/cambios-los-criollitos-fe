@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { AdminService } from '@/services/adminService';
-import { CurrencyPairData, UpdateCurrencyPairData } from '@/types/admin';
+import { CurrencyPairData, DerivedPairData, UpdateCurrencyPairData } from '@/types/admin';
 import type { CurrencyPairFormData } from '../../_components/sections/formShared';
 
 const adminService = new AdminService();
@@ -11,6 +11,7 @@ const adminService = new AdminService();
 export function usePairDetail(uuid: string) {
   const [pair, setPair] = useState<CurrencyPairData | null>(null);
   const [basePairs, setBasePairs] = useState<CurrencyPairData[]>([]);
+  const [derivedPairs, setDerivedPairs] = useState<DerivedPairData[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState('');
@@ -38,6 +39,15 @@ export function usePairDetail(uuid: string) {
     };
     loadBasePairs();
   }, []);
+
+  // Apagar un par base arrastra a sus derivados: hay que poder avisarlo antes.
+  useEffect(() => {
+    const loadDerived = async () => {
+      const result = await adminService.getDerivedPairs(uuid);
+      setDerivedPairs(result.success && result.data ? result.data : []);
+    };
+    loadDerived();
+  }, [uuid]);
 
   /** Símbolo de la moneda FIAT del par, o null si ninguna lo es (no aplica Binance). */
   const fiatSymbol = pair
@@ -109,7 +119,7 @@ export function usePairDetail(uuid: string) {
   );
 
   return {
-    state: { pair, basePairs, loading, notFound, error, fiatSymbol },
+    state: { pair, basePairs, derivedPairs, loading, notFound, error, fiatSymbol },
     actions: { setError, save, reload: loadPair },
   };
 }

@@ -167,8 +167,8 @@ export class AdminService {
     };
   }
 
-  async getDerivedPairs(basePairId: number): Promise<ApiResponse<DerivedPairData[]>> {
-    const result = await httpClient.get<DerivedPairData[]>(`/currency-pairs/${basePairId}/derived`);
+  async getDerivedPairs(basePairUuid: string): Promise<ApiResponse<DerivedPairData[]>> {
+    const result = await httpClient.get<DerivedPairData[]>(`/currency-pairs/${basePairUuid}/derived`);
     return {
       success: result.success,
       data: result.data,

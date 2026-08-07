@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { Save } from 'lucide-react';
-import { CurrencyPairData } from '@/types/admin';
+import { CurrencyPairData, DerivedPairData } from '@/types/admin';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -13,10 +13,12 @@ import {
 import { GeneralSection } from '../../_components/sections/GeneralSection';
 import { RateSourceSection } from '../../_components/sections/RateSourceSection';
 import { RoundingSection } from '../../_components/sections/RoundingSection';
+import { StatusSection } from '../../_components/sections/StatusSection';
 
 interface PairDetailFormProps {
   pair: CurrencyPairData;
   basePairs: CurrencyPairData[];
+  derivedPairs: DerivedPairData[];
   fiatSymbol: string | null;
   error: string;
   onSave: (data: CurrencyPairFormData) => Promise<boolean>;
@@ -25,6 +27,7 @@ interface PairDetailFormProps {
 export function PairDetailForm({
   pair,
   basePairs,
+  derivedPairs,
   fiatSymbol,
   error,
   onSave,
@@ -65,10 +68,12 @@ export function PairDetailForm({
 
         <TabsContent value="general" className="space-y-4 pt-4">
           <GeneralSection {...sectionProps} basePairs={basePairs} />
-          <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-3 text-xs text-sky-700 dark:text-sky-300">
-            <strong>Nota:</strong> usa los toggles en la lista principal para cambiar los estados de
-            Activo, Monitor y Binance.
-          </div>
+          <StatusSection
+            {...sectionProps}
+            fromType={pair.from_currency.currency_type}
+            toType={pair.to_currency.currency_type}
+            derivedPairs={derivedPairs}
+          />
         </TabsContent>
 
         <TabsContent value="rate" className="space-y-4 pt-4">
@@ -76,7 +81,9 @@ export function PairDetailForm({
             {...sectionProps}
             basePairs={basePairs}
             fiatForBinance={fiatSymbol}
-            showBinanceFields={pair.binance_tracked}
+            // Los campos de Binance siguen al switch de «Estado del par», no al
+            // valor guardado: al encenderlo hay que poder configurarlo ya.
+            showBinanceFields={watch('binance_tracked') ?? false}
             initialUsdtMethod={pair.usdt_pair_uuid ? 'dynamic' : 'manual'}
             noFiatMessage="Este par no tiene moneda FIAT válida para Binance"
           />

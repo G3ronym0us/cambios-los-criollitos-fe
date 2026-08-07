@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { AdminService } from '@/services/adminService';
@@ -8,18 +8,25 @@ import { ratesService } from '@/services/ratesService';
 import {
   CurrencyPairData,
   CreateCurrencyPairData,
-  UpdateCurrencyPairData,
   CurrencyData,
 } from '@/types/admin';
 import { useConfirm } from '@/hooks/useConfirm';
+import {
+  emptyPairFilters,
+  filterPairs,
+  hasActivePairFilters,
+  summarizePairs,
+  type PairFilters,
+} from '../_lib/pairFilters';
 
 const adminService = new AdminService();
 
-export interface CurrencyPairsFilters {
-  activeOnly: boolean;
-  monitoredOnly: boolean;
-  currency: string;
-}
+/**
+ * Con ~22 pares el listado cabe entero en una sola respuesta, así que se pide
+ * una vez y se filtra en el navegador: la búsqueda es instantánea y las cifras
+ * de la cabecera describen el sistema completo, no la página visible.
+ */
+const PAIRS_PAGE_SIZE = 200;
 
 export interface BinanceConfigDraft {
   banks_to_track: string[];
@@ -32,12 +39,6 @@ export interface PairRateInfo {
   automaticRate?: number;
 }
 
-const emptyFilters: CurrencyPairsFilters = {
-  activeOnly: false,
-  monitoredOnly: false,
-  currency: '',
-};
-
 const emptyBinanceConfig: BinanceConfigDraft = {
   banks_to_track: [],
   amount_to_track: null,
@@ -47,16 +48,11 @@ export function useCurrencyPairs() {
   const confirm = useConfirm();
   const router = useRouter();
 
-  const [pairs, setPairs] = useState<CurrencyPairData[]>([]);
+  const [allPairs, setAllPairs] = useState<CurrencyPairData[]>([]);
   const [currencies, setCurrencies] = useState<CurrencyData[]>([]);
   const [basePairs, setBasePairs] = useState<CurrencyPairData[]>([]);
-  const [stats, setStats] = useState<{
-    total_pairs: number;
-    active_pairs: number;
-    monitored_pairs: number;
-  } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<CurrencyPairsFilters>(emptyFilters);
+  const [filters, setFilters] = useState<PairFilters>(emptyPairFilters);
   const [error, setError] = useState<string>('');
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -71,19 +67,12 @@ export function useCurrencyPairs() {
   const [manualRateLoading, setManualRateLoading] = useState(false);
 
   const loadCurrencyPairs = useCallback(async () => {
-    setLoading(true);
-    const result = await adminService.getCurrencyPairs(
-      0,
-      100,
-      filters.activeOnly,
-      filters.monitoredOnly,
-      filters.currency || undefined
-    );
+    const result = await adminService.getCurrencyPairs(0, PAIRS_PAGE_SIZE);
     if (result.success && result.data) {
-      setPairs(result.data.pairs);
+      setAllPairs(result.data.pairs);
     }
     setLoading(false);
-  }, [filters.activeOnly, filters.monitoredOnly, filters.currency]);
+  }, []);
 
   const loadCurrencies = useCallback(async () => {
     const result = await adminService.getCurrencies();
@@ -99,30 +88,17 @@ export function useCurrencyPairs() {
     }
   }, []);
 
-  const loadStats = useCallback(async () => {
-    const result = await adminService.getCurrencyPairStats();
-    if (result.success && result.data) {
-      setStats({
-        total_pairs: result.data.total_pairs,
-        active_pairs: result.data.active_pairs,
-        monitored_pairs: result.data.monitored_pairs,
-      });
-    }
-  }, []);
-
   useEffect(() => {
-    Promise.all([loadCurrencyPairs(), loadCurrencies(), loadBasePairs(), loadStats()]);
-  }, [loadCurrencyPairs, loadCurrencies, loadBasePairs, loadStats]);
+    Promise.all([loadCurrencyPairs(), loadCurrencies(), loadBasePairs()]);
+  }, [loadCurrencyPairs, loadCurrencies, loadBasePairs]);
 
-  const refresh = useCallback(() => {
-    loadCurrencyPairs();
-    loadStats();
-  }, [loadCurrencyPairs, loadStats]);
+  const refresh = useCallback(() => loadCurrencyPairs(), [loadCurrencyPairs]);
 
-  const resetFilters = useCallback(() => setFilters(emptyFilters), []);
+  const resetFilters = useCallback(() => setFilters(emptyPairFilters), []);
 
-  const hasActiveFilters =
-    filters.activeOnly || filters.monitoredOnly || !!filters.currency;
+  const hasFilters = hasActivePairFilters(filters);
+  const pairs = useMemo(() => filterPairs(allPairs, filters), [allPairs, filters]);
+  const summary = useMemo(() => summarizePairs(allPairs), [allPairs]);
 
   const getFiatCurrencyFromPair = useCallback(
     (fromCurrencyUuid: string, toCurrencyUuid: string): string | null => {
@@ -159,20 +135,18 @@ export function useCurrencyPairs() {
   );
 
   const validateBinanceForm = useCallback(
-    async (formData: CreateCurrencyPairData | UpdateCurrencyPairData): Promise<boolean> => {
+    async (formData: CreateCurrencyPairData): Promise<boolean> => {
       setError('');
       if (!formData.binance_tracked) return true;
 
-      if ('from_currency_uuid' in formData && 'to_currency_uuid' in formData) {
-        const fromCurrency = currencies.find((c) => c.uuid === formData.from_currency_uuid);
-        const toCurrency = currencies.find((c) => c.uuid === formData.to_currency_uuid);
-        const validTypes =
-          (fromCurrency?.currency_type === 'FIAT' && toCurrency?.currency_type === 'CRYPTO') ||
-          (fromCurrency?.currency_type === 'CRYPTO' && toCurrency?.currency_type === 'FIAT');
-        if (!validTypes) {
-          setError('Los pares de Binance deben ser entre monedas FIAT y CRYPTO');
-          return false;
-        }
+      const fromCurrency = currencies.find((c) => c.uuid === formData.from_currency_uuid);
+      const toCurrency = currencies.find((c) => c.uuid === formData.to_currency_uuid);
+      const validTypes =
+        (fromCurrency?.currency_type === 'FIAT' && toCurrency?.currency_type === 'CRYPTO') ||
+        (fromCurrency?.currency_type === 'CRYPTO' && toCurrency?.currency_type === 'FIAT');
+      if (!validTypes) {
+        setError('Los pares de Binance deben ser entre monedas FIAT y CRYPTO');
+        return false;
       }
 
       if (!formData.banks_to_track?.length) {
@@ -185,13 +159,10 @@ export function useCurrencyPairs() {
         return false;
       }
 
-      let fiatCurrency: string | null = null;
-      if ('from_currency_uuid' in formData && 'to_currency_uuid' in formData) {
-        fiatCurrency = getFiatCurrencyFromPair(
-          formData.from_currency_uuid,
-          formData.to_currency_uuid
-        );
-      }
+      const fiatCurrency = getFiatCurrencyFromPair(
+        formData.from_currency_uuid,
+        formData.to_currency_uuid
+      );
 
       if (fiatCurrency) {
         const ok = await validateTradeMethodsWithBinance(fiatCurrency, formData.banks_to_track);
@@ -228,9 +199,9 @@ export function useCurrencyPairs() {
 
   const handleDelete = useCallback(
     async (uuid: string) => {
-      const pairToDelete = pairs.find((p) => p.uuid === uuid);
+      const pairToDelete = allPairs.find((p) => p.uuid === uuid);
       if (pairToDelete && !pairToDelete.base_pair_uuid) {
-        const derivedPairs = pairs.filter((p) => p.base_pair_uuid === uuid);
+        const derivedPairs = allPairs.filter((p) => p.base_pair_uuid === uuid);
         if (derivedPairs.length > 0) {
           toast.error(
             `No se puede eliminar este par base porque tiene ${derivedPairs.length} par(es) derivado(s): ${derivedPairs.map((p) => p.display_name).join(', ')}`
@@ -255,73 +226,7 @@ export function useCurrencyPairs() {
         toast.error(result.error || 'Error al eliminar el par');
       }
     },
-    [pairs, confirm, refresh]
-  );
-
-  const updateStatus = useCallback(
-    async (
-      pair: CurrencyPairData,
-      patch: Partial<{
-        is_active: boolean;
-        is_monitored: boolean;
-        binance_tracked: boolean;
-        banks_to_track: string[] | null;
-        amount_to_track: number | null;
-      }>
-    ) => {
-      const result = await adminService.updateCurrencyPairStatus(pair.uuid, {
-        is_active: pair.is_active,
-        is_monitored: pair.is_monitored,
-        binance_tracked: pair.binance_tracked,
-        banks_to_track: pair.banks_to_track,
-        amount_to_track: pair.amount_to_track,
-        ...patch,
-      });
-      if (result.success) {
-        refresh();
-      } else {
-        toast.error(result.error || 'Error al actualizar el par');
-      }
-    },
-    [refresh]
-  );
-
-  const handleToggleActive = useCallback(
-    (pair: CurrencyPairData) => updateStatus(pair, { is_active: !pair.is_active }),
-    [updateStatus]
-  );
-
-  const handleToggleMonitored = useCallback(
-    (pair: CurrencyPairData) => updateStatus(pair, { is_monitored: !pair.is_monitored }),
-    [updateStatus]
-  );
-
-  const handleToggleBinanceTracked = useCallback(
-    (pair: CurrencyPairData) => {
-      if (!pair.binance_tracked) {
-        const validTypes =
-          (pair.from_currency.currency_type === 'FIAT' &&
-            pair.to_currency.currency_type === 'CRYPTO') ||
-          (pair.from_currency.currency_type === 'CRYPTO' &&
-            pair.to_currency.currency_type === 'FIAT');
-        if (!validTypes) {
-          toast.error('Los pares de Binance deben ser entre monedas FIAT y CRYPTO');
-          return;
-        }
-        setBinanceTargetPair(pair);
-        setBinanceConfig({
-          banks_to_track: pair.banks_to_track || [],
-          amount_to_track: pair.amount_to_track || null,
-        });
-      } else {
-        updateStatus(pair, {
-          binance_tracked: false,
-          banks_to_track: null,
-          amount_to_track: null,
-        });
-      }
-    },
-    [updateStatus]
+    [allPairs, confirm, refresh]
   );
 
   const closeBinanceConfig = useCallback(() => {
@@ -354,35 +259,40 @@ export function useCurrencyPairs() {
     );
     if (!isValid) return;
 
-    await updateStatus(binanceTargetPair, {
+    const result = await adminService.updateCurrencyPairStatus(binanceTargetPair.uuid, {
+      is_active: binanceTargetPair.is_active,
+      is_monitored: binanceTargetPair.is_monitored,
       binance_tracked: true,
       banks_to_track: binanceConfig.banks_to_track,
       amount_to_track: binanceConfig.amount_to_track,
     });
+    if (!result.success) {
+      toast.error(result.error || 'Error al actualizar el par');
+      return;
+    }
+
+    refresh();
     closeBinanceConfig();
     toast.success('Configuración de Binance actualizada');
   }, [
     binanceTargetPair,
     binanceConfig,
     validateTradeMethodsWithBinance,
-    updateStatus,
+    refresh,
     closeBinanceConfig,
   ]);
 
   const openHistory = useCallback((pair: CurrencyPairData) => setHistoryPair(pair), []);
   const closeHistory = useCallback(() => setHistoryPair(null), []);
 
-  const openManualRate = useCallback(async (pair: CurrencyPairData) => {
+  const openManualRate = useCallback((pair: CurrencyPairData) => {
     setManualRatePair(pair);
-    setManualRateInfo({ isManual: false });
-    const result = await ratesService.getRateByPair(pair.uuid);
-    if (result.success && result.data) {
-      setManualRateInfo({
-        isManual: result.data.is_manual,
-        currentRate: result.data.manual_rate ?? result.data.rate,
-        automaticRate: result.data.automatic_rate ?? undefined,
-      });
-    }
+    // La tasa ya viene en el listado; no hace falta volver a pedirla.
+    setManualRateInfo({
+      isManual: pair.current_rate?.is_manual ?? false,
+      currentRate: pair.current_rate?.rate,
+      automaticRate: pair.current_rate?.automatic_rate ?? undefined,
+    });
   }, []);
 
   const closeManualRate = useCallback(() => {
@@ -417,9 +327,9 @@ export function useCurrencyPairs() {
     if (!manualRatePair) return;
 
     const ok = await confirm({
-      title: '¿Remover precio manual?',
-      description: 'El sistema volverá a usar el precio automático para este par.',
-      confirmText: 'Remover',
+      title: '¿Volver al precio automático?',
+      description: 'El sistema volverá a seguir la tasa automática para este par.',
+      confirmText: 'Volver al automático',
       variant: 'destructive',
     });
     if (!ok) return;
@@ -442,15 +352,28 @@ export function useCurrencyPairs() {
     }
   }, [manualRatePair, confirm, closeManualRate, refresh]);
 
+  /** Se usa como fallback cuando el par aún no tiene tasa en el listado. */
+  const fetchRate = useCallback(async (pair: CurrencyPairData) => {
+    const result = await ratesService.getRateByPair(pair.uuid);
+    if (result.success && result.data) {
+      setManualRateInfo({
+        isManual: result.data.is_manual,
+        currentRate: result.data.manual_rate ?? result.data.rate,
+        automaticRate: result.data.automatic_rate ?? undefined,
+      });
+    }
+  }, []);
+
   return {
     state: {
       pairs,
+      allPairs,
       currencies,
       basePairs,
-      stats,
+      summary,
       loading,
       filters,
-      hasActiveFilters,
+      hasActiveFilters: hasFilters,
       error,
       showCreateModal,
       binanceTargetPair,
@@ -464,14 +387,12 @@ export function useCurrencyPairs() {
       setFilters,
       resetFilters,
       setError,
+      refresh,
       openCreate: () => setShowCreateModal(true),
       closeCreate: () => setShowCreateModal(false),
       openEdit: (pair: CurrencyPairData) => router.push(`/admin/currency-pairs/${pair.uuid}`),
       handleCreate,
       handleDelete,
-      handleToggleActive,
-      handleToggleMonitored,
-      handleToggleBinanceTracked,
       setBinanceConfig,
       handleSaveBinanceConfig,
       closeBinanceConfig,
@@ -483,6 +404,7 @@ export function useCurrencyPairs() {
       handleRemoveManualRate,
       validateBinanceForm,
       getFiatCurrencyFromPair,
+      fetchRate,
     },
   };
 }
