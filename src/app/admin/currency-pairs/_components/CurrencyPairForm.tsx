@@ -2,40 +2,42 @@
 
 import { useEffect } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Plus } from 'lucide-react';
-import { CurrencyData, CurrencyPairData } from '@/types/admin';
+import { ArrowRight } from 'lucide-react';
+import { CurrencyData, CurrencyPairData, PairType } from '@/types/admin';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { DialogFooter } from '@/components/ui/dialog';
 import { defaultValues, type CurrencyPairFormData } from './sections/formShared';
-import { GeneralSection } from './sections/GeneralSection';
-import { RateSourceSection } from './sections/RateSourceSection';
+import { CurrencyPairField } from './CurrencyPairField';
+import { PairTypeCards } from './PairTypeCards';
 
 export type { CurrencyPairFormData };
 
 interface CurrencyPairFormProps {
   currencies: CurrencyData[];
-  basePairs: CurrencyPairData[];
+  /** Todos los pares que ya existen: apagan las combinaciones de moneda duplicadas. */
+  existingPairs: CurrencyPairData[];
   error: string;
   setError: (error: string) => void;
-  validateBinanceForm: (data: CurrencyPairFormData) => Promise<boolean>;
-  getFiatCurrencyFromPair: (from: string, to: string) => string | null;
   onSubmit: (data: CurrencyPairFormData) => Promise<void>;
   onCancel: () => void;
 }
 
 /**
- * Formulario de CREACIÓN de un par. Deliberadamente corto: monedas, tipo,
- * estados y Binance. La configuración fina (USDT, redondeo) se hace después en
- * `/admin/currency-pairs/[uuid]`, adonde se navega al crear.
+ * Formulario de CREACIÓN de un par: solo lo esencial.
+ *
+ * Las monedas, el tipo y para qué sirve — nada más. El par base, el porcentaje, el rastreo
+ * de Binance, la conversión a USDT y el redondeo se configuran después en
+ * `/admin/currency-pairs/[uuid]`, adonde lleva el propio botón de crear. Meter todo eso aquí
+ * obligaba a decidir de golpe cosas que dependen de que el par ya exista (por ejemplo, qué
+ * par base usar), y dejaba un diálogo largo para lo que son tres datos.
  */
 export function CurrencyPairForm({
   currencies,
-  basePairs,
+  existingPairs,
   error,
   setError,
-  validateBinanceForm,
-  getFiatCurrencyFromPair,
   onSubmit,
   onCancel,
 }: CurrencyPairFormProps) {
@@ -44,77 +46,89 @@ export function CurrencyPairForm({
     handleSubmit,
     watch,
     setValue,
-    formState: { errors, isSubmitting },
+    formState: { isSubmitting },
   } = useForm<CurrencyPairFormData>({ defaultValues });
 
-  const watchBinanceTracked = watch('binance_tracked');
-  const watchFromCurrency = watch('from_currency_uuid');
-  const watchToCurrency = watch('to_currency_uuid');
+  const fromUuid = watch('from_currency_uuid');
+  const toUuid = watch('to_currency_uuid');
+  const pairType = watch('pair_type') ?? PairType.BASE;
+  const description = watch('description');
 
   useEffect(() => {
     setError('');
   }, [setError]);
 
-  const fiatForBinance = getFiatCurrencyFromPair(watchFromCurrency, watchToCurrency);
+  /**
+   * Qué falta para poder crear, en una frase.
+   *
+   * Va junto al botón en vez de repartido en errores bajo cada campo: el operador que llega
+   * al pie quiere saber por qué no puede seguir, y el orden de las comprobaciones es el
+   * orden en que se rellena el formulario.
+   */
+  const missing = !fromUuid
+    ? 'Falta la moneda de origen'
+    : !toUuid
+      ? 'Falta la moneda de destino'
+      : fromUuid === toUuid
+        ? 'El origen y el destino deben ser monedas distintas'
+        : !description?.trim()
+          ? 'Falta la descripción'
+          : null;
 
   const submit = async (data: CurrencyPairFormData) => {
-    if (data.from_currency_uuid === data.to_currency_uuid) {
-      setError('Las monedas de origen y destino deben ser diferentes');
-      return;
-    }
-    const valid = await validateBinanceForm(data);
-    if (!valid) return;
+    if (missing) return;
     await onSubmit(data);
   };
 
-  const sectionProps = { control, watch, setValue, errors };
-
   return (
     <form onSubmit={handleSubmit(submit)} className="space-y-4">
-      <GeneralSection {...sectionProps} currencies={currencies} basePairs={basePairs} />
+      <CurrencyPairField
+        currencies={currencies}
+        existingPairs={existingPairs}
+        fromUuid={fromUuid}
+        toUuid={toUuid}
+        pairType={pairType}
+        onChange={({ from, to }) => {
+          setValue('from_currency_uuid', from, { shouldDirty: true });
+          setValue('to_currency_uuid', to, { shouldDirty: true });
+        }}
+      />
 
-      <div className="space-y-2">
-        <label className="flex min-h-11 items-center gap-3">
-          <Controller
-            name="is_active"
-            control={control}
-            render={({ field }) => (
-              <Switch checked={field.value ?? true} onCheckedChange={field.onChange} />
-            )}
-          />
-          <span className="text-sm font-medium">Par activo</span>
-        </label>
-        <label className="flex min-h-11 items-center gap-3">
-          <Controller
-            name="is_monitored"
-            control={control}
-            render={({ field }) => (
-              <Switch checked={field.value ?? true} onCheckedChange={field.onChange} />
-            )}
-          />
-          <span className="text-sm font-medium">Monitorear para scraping</span>
-        </label>
-        <label className="flex min-h-11 items-center gap-3">
-          <Controller
-            name="binance_tracked"
-            control={control}
-            render={({ field }) => (
-              <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
-            )}
-          />
-          <span className="text-sm font-medium">Rastreado en Binance P2P</span>
-        </label>
+      <div className="space-y-1.5">
+        <Label>Tipo de par</Label>
+        <Controller
+          name="pair_type"
+          control={control}
+          rules={{ required: 'Debe seleccionar un tipo de par' }}
+          render={({ field }) => (
+            <PairTypeCards
+              layout="stack"
+              value={field.value ?? PairType.BASE}
+              onChange={field.onChange}
+            />
+          )}
+        />
       </div>
 
-      <RateSourceSection
-        {...sectionProps}
-        basePairs={basePairs}
-        fiatForBinance={fiatForBinance}
-        showBinanceFields={!!watchBinanceTracked}
-        showUsdtConfig={false}
-        initialUsdtMethod="manual"
-        noFiatMessage="Seleccione las monedas de origen y destino primero"
-      />
+      <div className="space-y-1.5">
+        <Label htmlFor="description">
+          Descripción <span className="text-destructive">*</span>
+        </Label>
+        <Controller
+          name="description"
+          control={control}
+          rules={{ required: 'La descripción es requerida' }}
+          render={({ field }) => (
+            <Textarea
+              id="description"
+              rows={2}
+              placeholder="Para qué se usa este par y quién lo cotiza…"
+              {...field}
+              value={field.value ?? ''}
+            />
+          )}
+        />
+      </div>
 
       {error ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -123,12 +137,15 @@ export function CurrencyPairForm({
       ) : null}
 
       <DialogFooter>
+        {missing ? (
+          <span className="mr-auto text-xs text-muted-foreground">{missing}</span>
+        ) : null}
         <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
           Cancelar
         </Button>
-        <Button type="submit" disabled={isSubmitting}>
-          <Plus className="h-4 w-4" />
-          {isSubmitting ? 'Creando...' : 'Crear'}
+        <Button type="submit" disabled={isSubmitting || !!missing}>
+          {isSubmitting ? 'Creando…' : 'Crear y configurar'}
+          <ArrowRight className="h-4 w-4" />
         </Button>
       </DialogFooter>
     </form>

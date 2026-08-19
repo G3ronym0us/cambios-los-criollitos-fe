@@ -1,8 +1,7 @@
 'use client';
 
 import { Controller } from 'react-hook-form';
-import { Check } from 'lucide-react';
-import { CurrencyData, CurrencyPairData, PairType } from '@/types/admin';
+import { CurrencyPairData, PairType } from '@/types/admin';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -16,73 +15,17 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { formatRate } from '../../_lib/pairHealth';
+import { PairTypeCards } from '../PairTypeCards';
 import type { SectionProps } from './formShared';
 
 interface GeneralSectionProps extends SectionProps {
-  /** Solo al crear: permite elegir las monedas del par (en edición ya no se pueden cambiar). */
-  currencies?: CurrencyData[];
   basePairs: CurrencyPairData[];
-}
-
-const PAIR_TYPE_OPTIONS: { value: PairType; label: string; hint: string }[] = [
-  { value: PairType.BASE, label: 'Base', hint: 'Directo de Binance P2P (FIAT-CRYPTO)' },
-  { value: PairType.DERIVED, label: 'Derivado', hint: 'De un par base, con porcentaje' },
-  { value: PairType.CROSS, label: 'Cruzado', hint: 'Entre dos FIAT vía USDT' },
-];
-
-/**
- * El tipo de par decide toda la pantalla, así que se elige entre tres tarjetas
- * con su explicación a la vista y no dentro de un select que hay que abrir.
- */
-function PairTypeCards({
-  value,
-  onChange,
-}: {
-  value: PairType;
-  onChange: (value: PairType) => void;
-}) {
-  return (
-    <div role="radiogroup" aria-label="Tipo de par" className="grid gap-2 sm:grid-cols-3">
-      {PAIR_TYPE_OPTIONS.map((option) => {
-        const selected = value === option.value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            onClick={() => onChange(option.value)}
-            className={cn(
-              'rounded-lg border p-3 text-left transition-colors',
-              selected
-                ? 'border-primary bg-primary/5 ring-3 ring-primary/10'
-                : 'border-border bg-card hover:bg-muted/40'
-            )}
-          >
-            <span
-              className={cn(
-                'flex items-center gap-1.5 text-sm font-semibold',
-                selected ? 'text-primary' : 'text-foreground'
-              )}
-            >
-              {option.label}
-              {selected ? <Check className="h-3.5 w-3.5" aria-hidden /> : null}
-            </span>
-            <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
-              {option.hint}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
 }
 
 export function GeneralSection({
   control,
   watch,
   errors,
-  currencies,
   basePairs,
 }: GeneralSectionProps) {
   const watchPairType = watch('pair_type');
@@ -105,66 +48,6 @@ export function GeneralSection({
 
   return (
     <div className="space-y-4">
-      {currencies ? (
-        <>
-          <div className="space-y-1.5">
-            <Label htmlFor="from-currency">
-              Moneda de origen <span className="text-destructive">*</span>
-            </Label>
-            <Controller
-              name="from_currency_uuid"
-              control={control}
-              rules={{ validate: (value) => !!value || 'Debe seleccionar una moneda válida' }}
-              render={({ field }) => (
-                <Select value={field.value || ''} onValueChange={field.onChange}>
-                  <SelectTrigger id="from-currency" className="h-10 w-full">
-                    <SelectValue placeholder="Seleccionar moneda..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {currencies.map((currency) => (
-                      <SelectItem key={currency.uuid} value={currency.uuid}>
-                        {currency.name} ({currency.symbol}) — {currency.currency_type}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-            {errors.from_currency_uuid ? (
-              <p className="text-xs text-destructive">{errors.from_currency_uuid.message}</p>
-            ) : null}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="to-currency">
-              Moneda de destino <span className="text-destructive">*</span>
-            </Label>
-            <Controller
-              name="to_currency_uuid"
-              control={control}
-              rules={{ validate: (value) => !!value || 'Debe seleccionar una moneda válida' }}
-              render={({ field }) => (
-                <Select value={field.value || ''} onValueChange={field.onChange}>
-                  <SelectTrigger id="to-currency" className="h-10 w-full">
-                    <SelectValue placeholder="Seleccionar moneda..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {currencies.map((currency) => (
-                      <SelectItem key={currency.uuid} value={currency.uuid}>
-                        {currency.name} ({currency.symbol}) — {currency.currency_type}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-            {errors.to_currency_uuid ? (
-              <p className="text-xs text-destructive">{errors.to_currency_uuid.message}</p>
-            ) : null}
-          </div>
-        </>
-      ) : null}
-
       <div className="space-y-1.5">
         <Label>Tipo de par</Label>
         <Controller

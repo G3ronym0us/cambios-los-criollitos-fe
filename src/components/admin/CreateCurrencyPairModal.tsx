@@ -13,16 +13,17 @@ import {
 } from '@/app/admin/currency-pairs/_components/CurrencyPairForm';
 import type { CreateCurrencyPairData, CurrencyData, CurrencyPairData } from '@/types/admin';
 
+export type { CurrencyPairFormData };
+
 interface CreateCurrencyPairModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (formData: CreateCurrencyPairData) => Promise<void>;
   currencies: CurrencyData[];
-  basePairs: CurrencyPairData[];
+  /** Todos los pares existentes: apagan las combinaciones de moneda ya ocupadas. */
+  existingPairs: CurrencyPairData[];
   error: string;
   setError: (error: string) => void;
-  validateBinanceForm: (formData: CurrencyPairFormData) => Promise<boolean>;
-  getFiatCurrencyFromPair: (fromCurrencyUuid: string, toCurrencyUuid: string) => string | null;
 }
 
 export default function CreateCurrencyPairModal({
@@ -30,11 +31,9 @@ export default function CreateCurrencyPairModal({
   onClose,
   onSubmit,
   currencies,
-  basePairs,
+  existingPairs,
   error,
   setError,
-  validateBinanceForm,
-  getFiatCurrencyFromPair,
 }: CreateCurrencyPairModalProps) {
   return (
     <Dialog
@@ -45,21 +44,18 @@ export default function CreateCurrencyPairModal({
     >
       <DialogContent className="flex max-h-[90vh] flex-col gap-4 sm:max-w-lg">
         <DialogHeader className="pr-8">
-          <DialogTitle>Nuevo par de monedas</DialogTitle>
+          <DialogTitle>Nuevo par</DialogTitle>
           <DialogDescription>
-            Lo esencial para crear el par. Al guardarlo se abre su pantalla para ajustar USDT,
-            redondeo y comisiones.
+            Lo esencial ahora; USDT, redondeo y comisiones al terminar.
           </DialogDescription>
         </DialogHeader>
         <div className="-mx-4 flex-1 overflow-y-auto px-4">
           {isOpen ? (
             <CurrencyPairForm
               currencies={currencies}
-              basePairs={basePairs}
+              existingPairs={existingPairs}
               error={error}
               setError={setError}
-              validateBinanceForm={validateBinanceForm}
-              getFiatCurrencyFromPair={getFiatCurrencyFromPair}
               onSubmit={onSubmit}
               onCancel={onClose}
             />

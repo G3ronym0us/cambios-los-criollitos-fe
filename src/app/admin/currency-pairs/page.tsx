@@ -61,11 +61,9 @@ export default function CurrencyPairsAdminPage() {
         onClose={actions.closeCreate}
         onSubmit={actions.handleCreate}
         currencies={state.currencies}
-        basePairs={state.basePairs}
+        existingPairs={state.allPairs}
         error={state.error}
         setError={actions.setError}
-        validateBinanceForm={actions.validateBinanceForm}
-        getFiatCurrencyFromPair={actions.getFiatCurrencyFromPair}
       />
 
       <BinanceConfigDialog
