@@ -42,22 +42,10 @@ export function getPaymentStatusMeta(p: PaymentData, outgoing: boolean): Payment
   const deposit = p.deposit ?? null;
   const loan = p.loan ?? null;
 
-  // 1. El OCR no leyó el monto: sin eso no se puede hacer nada más con el comprobante.
-  if (p.amount == null) {
-    return { label: 'Revisar OCR', tone: 'destructive', icon: AlertTriangle, attention: true };
-  }
-
-  // 2. Llegó más dinero del que respalda: hay que repartirlo o acreditarlo.
-  if (!outgoing && unassigned > EPSILON) {
-    return {
-      label: `${formatNumber(unassigned)} sin asignar`,
-      tone: 'warning',
-      icon: Split,
-      attention: true,
-    };
-  }
-
-  // 3. Clasificaciones terminales del saliente.
+  // 1. Clasificaciones terminales del saliente: el operador ya dijo dónde acabó ese dinero.
+  //    Van antes que «Revisar OCR» porque un comprobante descartado no espera ningún monto —
+  //    si no, marcarlo irrelevante no lo sacaba nunca de «Por atender». Mismo orden que el
+  //    `_attention_condition` del backend, para que la insignia y el filtro no se contradigan.
   if (outgoing && p.is_personal_expense) {
     return { label: 'Personal', tone: 'warning', icon: Tag, attention: false };
   }
@@ -70,6 +58,21 @@ export function getPaymentStatusMeta(p: PaymentData, outgoing: boolean): Payment
       tone: loan.status === 'PAID' ? 'success' : 'warning',
       icon: HandCoins,
       attention: false,
+    };
+  }
+
+  // 2. El OCR no leyó el monto: sin eso no se puede hacer nada más con el comprobante.
+  if (p.amount == null) {
+    return { label: 'Revisar OCR', tone: 'destructive', icon: AlertTriangle, attention: true };
+  }
+
+  // 3. Llegó más dinero del que respalda: hay que repartirlo o acreditarlo.
+  if (!outgoing && unassigned > EPSILON) {
+    return {
+      label: `${formatNumber(unassigned)} sin asignar`,
+      tone: 'warning',
+      icon: Split,
+      attention: true,
     };
   }
 
@@ -128,10 +131,12 @@ export function getPaymentAction(
   p: PaymentData,
   outgoing: boolean,
 ): { label: string; variant: 'primary' | 'outline' | 'danger' } {
-  if (p.amount == null) return { label: 'Corregir', variant: 'danger' };
+  const meta = getPaymentStatusMeta(p, outgoing);
+  // Solo se ofrece corregir el OCR de lo que sigue esperando una decisión: un comprobante ya
+  // clasificado no necesita monto, y ofrecerle «Corregir» lo hacía parecer pendiente.
+  if (p.amount == null && meta.attention) return { label: 'Corregir', variant: 'danger' };
   if (!p.operation_uuid && !p.deposit && !p.loan && !p.is_personal_expense && !p.is_irrelevant) {
     return { label: 'Vincular', variant: 'outline' };
   }
-  const meta = getPaymentStatusMeta(p, outgoing);
   return { label: 'Gestionar', variant: meta.attention ? 'primary' : 'outline' };
 }
