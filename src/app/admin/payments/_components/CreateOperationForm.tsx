@@ -310,7 +310,13 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
   }
 
   return (
-    <>
+    <form
+      className="flex min-h-0 flex-1 flex-col"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!creating && pairUuid) submit();
+      }}
+    >
       <SidePanelBody className="gap-0 space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="op-pair">Par</Label>
@@ -486,11 +492,11 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
           <ArrowLeft className="h-4 w-4" />
           Volver
         </Button>
-        <Button onClick={submit} disabled={creating || !pairUuid}>
+        <Button type="submit" disabled={creating || !pairUuid}>
           <Plus className="h-4 w-4" />
           {creating ? 'Creando…' : 'Crear operación'}
         </Button>
       </SidePanelFooter>
-    </>
+    </form>
   );
 }

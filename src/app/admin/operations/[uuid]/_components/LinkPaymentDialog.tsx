@@ -141,6 +141,15 @@ export function LinkPaymentDialog({ operation, open, onClose, onLinked }: LinkPa
           </DialogDescription>
         </DialogHeader>
 
+        {/* Formulario de verdad: sin esto Enter en el buscador no confirmaba nada y había
+            que ir al ratón para pulsar "Vincular pago". */}
+        <form
+          className="flex min-h-0 flex-1 flex-col gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!submitting && selected != null) doLink();
+          }}
+        >
         <Tabs value={table} onValueChange={(v) => { setTable(v as PaymentTable); setSelected(null); }}>
           <TabsList className="w-full">
             <TabsTrigger value="outgoing" className="flex-1">
@@ -238,10 +247,11 @@ export function LinkPaymentDialog({ operation, open, onClose, onLinked }: LinkPa
           <Button variant="outline" onClick={onClose} disabled={submitting}>
             Cancelar
           </Button>
-          <Button onClick={doLink} disabled={submitting || selected == null}>
+          <Button type="submit" disabled={submitting || selected == null}>
             {submitting ? 'Guardando…' : 'Vincular pago'}
           </Button>
         </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

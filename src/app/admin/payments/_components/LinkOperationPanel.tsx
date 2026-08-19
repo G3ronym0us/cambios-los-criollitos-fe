@@ -396,10 +396,37 @@ export function LinkOperationPanel({
     );
   }
 
+  /**
+   * La acción principal del paso de selección, separada del botón que la dispara.
+   *
+   * El panel no era un `<form>`, así que Enter en el buscador no hacía nada: había que
+   * soltar el teclado e ir al ratón justo después de teclear. Ahora cada paso es un
+   * formulario y el mismo Enter confirma lo que confirma el botón del pie.
+   */
+  const submitPick = () => {
+    if (submitting || !selected) return;
+    if (onPick) {
+      const op = operations.find((o) => o.uuid === selected);
+      if (op) onPick(op);
+      return;
+    }
+    if (table === 'outgoing') {
+      setMode('coverage');
+      return;
+    }
+    doLink(selected);
+  };
+
   if (mode === 'coverage' && selectedOp) {
     const client = selectedOp.client_display_name || stripPhone(selectedOp.client_phone) || 'Cliente';
     return (
-      <>
+      <form
+        className="flex min-h-0 flex-1 flex-col"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!submitting) doLink(selectedOp.uuid);
+        }}
+      >
         <SidePanelBody>
           <div className="rounded-lg border border-border bg-muted/40 px-3 py-2">
             <div className="flex items-center justify-between gap-2">
@@ -424,16 +451,23 @@ export function LinkOperationPanel({
             <ArrowLeft className="h-4 w-4" />
             Volver
           </Button>
-          <Button onClick={() => doLink(selectedOp.uuid)} disabled={submitting}>
+          <Button type="submit" disabled={submitting}>
             {submitting ? 'Guardando…' : 'Vincular'}
           </Button>
         </SidePanelFooter>
-      </>
+      </form>
     );
   }
 
   return (
     <>
+      <form
+        className="flex min-h-0 flex-1 flex-col"
+        onSubmit={(e) => {
+          e.preventDefault();
+          submitPick();
+        }}
+      >
       {/* Contra qué se está eligiendo vive ahora en la cabecera del cajón, visible en todos
           los pasos. Aquí abajo solo va lo que se manipula. */}
       <SidePanelBody className="gap-0 overflow-hidden py-0">
@@ -709,22 +743,16 @@ export function LinkOperationPanel({
             {cancelLabel}
           </Button>
           {onPick ? (
-            <Button
-              onClick={() => {
-                const op = operations.find((o) => o.uuid === selected);
-                if (op) onPick(op);
-              }}
-              disabled={!selected}
-            >
+            <Button type="submit" disabled={!selected}>
               {pickLabel}
             </Button>
           ) : table === 'outgoing' ? (
-            <Button onClick={() => setMode('coverage')} disabled={submitting || !selected}>
+            <Button type="submit" disabled={submitting || !selected}>
               Continuar
               <ArrowRight className="h-4 w-4" />
             </Button>
           ) : (
-            <Button onClick={() => doLink(selected)} disabled={submitting || !selected}>
+            <Button type="submit" disabled={submitting || !selected}>
               {submitting
                 ? 'Guardando…'
                 : // El monto en el botón: lo que se confirma, no un verbo suelto.
@@ -735,6 +763,7 @@ export function LinkOperationPanel({
           )}
         </div>
       </SidePanelFooter>
+      </form>
 
       <UnlinkOrphanDialog
         preview={orphan}
