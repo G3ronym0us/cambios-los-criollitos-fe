@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { DialogFooter } from '@/components/ui/dialog';
+import { describeMissingField } from '../_lib/newPairForm';
 import { defaultValues, type CurrencyPairFormData } from './sections/formShared';
 import { CurrencyPairField } from './CurrencyPairField';
 import { PairTypeCards } from './PairTypeCards';
@@ -58,22 +59,9 @@ export function CurrencyPairForm({
     setError('');
   }, [setError]);
 
-  /**
-   * Qué falta para poder crear, en una frase.
-   *
-   * Va junto al botón en vez de repartido en errores bajo cada campo: el operador que llega
-   * al pie quiere saber por qué no puede seguir, y el orden de las comprobaciones es el
-   * orden en que se rellena el formulario.
-   */
-  const missing = !fromUuid
-    ? 'Falta la moneda de origen'
-    : !toUuid
-      ? 'Falta la moneda de destino'
-      : fromUuid === toUuid
-        ? 'El origen y el destino deben ser monedas distintas'
-        : !description?.trim()
-          ? 'Falta la descripción'
-          : null;
+  // Qué falta para poder crear, en una frase. Va junto al botón del pie, no repartido en
+  // errores bajo cada campo (ver `describeMissingField`).
+  const missing = describeMissingField({ fromUuid, toUuid, description });
 
   const submit = async (data: CurrencyPairFormData) => {
     if (missing) return;

@@ -1,10 +1,11 @@
 'use client';
 
 import { useMemo } from 'react';
-import { ArrowRight, ArrowLeftRight, CircleAlert } from 'lucide-react';
+import { ArrowRight, ArrowLeftRight, CircleAlert, Info } from 'lucide-react';
 import { CurrencyData, CurrencyPairData, CurrencyType, PairType } from '@/types/admin';
 import { Label } from '@/components/ui/label';
-import { CurrencySelect, takenCurrencies } from './CurrencySelect';
+import { takenCurrencies } from '../_lib/newPairForm';
+import { CurrencySelect } from './CurrencySelect';
 
 interface CurrencyPairFieldProps {
   currencies: CurrencyData[];
@@ -47,10 +48,17 @@ export function CurrencyPairField({
 
   const swap = () => onChange({ from: toUuid, to: fromUuid });
 
+  // La misma moneda a los dos lados es una paridad 1:1, y es deliberada: es lo que hace
+  // falta para colgar de ella un par de método de pago (ZELLE-USDT = USDT-USDT −7 %). Antes
+  // se rechazaba de plano, lo que dejaba esa configuración sin forma de crearse desde el
+  // panel. Se permite, pero se dice qué es para que nadie la cree sin querer.
+  const parity = !!fromUuid && fromUuid === toUuid;
+
   // Un par base es lo que Binance cotiza: FIAT contra CRYPTO. Al revés se guarda igual,
   // pero es casi siempre un descuido, así que se dice antes de guardar y con el arreglo
   // a un clic.
   const reversedBase =
+    !parity &&
     pairType === PairType.BASE &&
     from?.currency_type === CurrencyType.CRYPTO &&
     to?.currency_type === CurrencyType.FIAT;
@@ -98,6 +106,20 @@ export function CurrencyPairField({
           />
         </div>
       </div>
+
+      {parity && from ? (
+        <div className="flex items-start gap-2 rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs text-sky-700 dark:text-sky-400">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+          <p className="text-pretty">
+            Las dos monedas son la misma: esto crea una{' '}
+            <span className="font-semibold">paridad 1:1</span>{' '}
+            <span className="font-mono">
+              {from.symbol}/{from.symbol}
+            </span>
+            . No se cotiza — sirve de base para colgarle pares con un porcentaje.
+          </p>
+        </div>
+      ) : null}
 
       {reversedBase && from && to ? (
         <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">

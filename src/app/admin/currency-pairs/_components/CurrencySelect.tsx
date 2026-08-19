@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { Lock } from 'lucide-react';
-import { CurrencyData, CurrencyPairData, CurrencyType } from '@/types/admin';
+import { CurrencyData, CurrencyType } from '@/types/admin';
 import {
   Select,
   SelectContent,
@@ -14,30 +14,6 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { CurrencyTypeChip } from './CurrencyTypeChip';
-
-/**
- * Monedas que este lado del par NO puede tomar porque el par resultante ya existe.
- *
- * Devuelve `uuid de moneda → nombre del par que la ocupa`, para poder apagar la opción
- * diciendo cuál es ese par, en vez de dejar que el operador guarde y se lo rechace el
- * unique del backend con un error que no explica nada.
- */
-export function takenCurrencies(
-  pairs: CurrencyPairData[],
-  otherCurrencyUuid: string,
-  side: 'from' | 'to',
-): Map<string, string> {
-  const taken = new Map<string, string>();
-  if (!otherCurrencyUuid) return taken;
-  for (const pair of pairs) {
-    if (side === 'from' && pair.to_currency_uuid === otherCurrencyUuid) {
-      taken.set(pair.from_currency_uuid, pair.display_name);
-    } else if (side === 'to' && pair.from_currency_uuid === otherCurrencyUuid) {
-      taken.set(pair.to_currency_uuid, pair.display_name);
-    }
-  }
-  return taken;
-}
 
 interface CurrencySelectProps {
   id?: string;
