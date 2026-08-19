@@ -65,7 +65,10 @@ export function CurrencyPairField({
 
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-2">
+      {/* En móvil el par se lee de arriba abajo: dos selects lado a lado en 360px dejan
+          ~136px cada uno, que no alcanzan ni para el símbolo con su nombre. Desde `sm` se
+          ponen en fila, que es como se lee un par. */}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-end">
         <div className="space-y-1.5">
           <Label htmlFor="pair-from">
             Origen <span className="text-destructive">*</span>
@@ -87,10 +90,18 @@ export function CurrencyPairField({
           disabled={!fromUuid && !toUuid}
           title="Invertir origen y destino"
           aria-label="Invertir origen y destino"
-          className="group/swap flex h-10 w-10 items-center justify-center rounded-lg border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+          className="group/swap flex h-11 w-11 items-center justify-center justify-self-center rounded-lg border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40 sm:h-10 sm:w-10 sm:justify-self-auto"
         >
-          <ArrowRight className="h-4 w-4 group-hover/swap:hidden" aria-hidden />
-          <ArrowLeftRight className="hidden h-4 w-4 group-hover/swap:block" aria-hidden />
+          {/* Apilado el par va hacia abajo, en fila va hacia la derecha: el icono gira con
+              el layout en vez de mentir sobre la dirección. */}
+          <ArrowRight
+            className="h-4 w-4 rotate-90 group-hover/swap:hidden sm:rotate-0"
+            aria-hidden
+          />
+          <ArrowLeftRight
+            className="hidden h-4 w-4 rotate-90 group-hover/swap:block sm:rotate-0"
+            aria-hidden
+          />
         </button>
 
         <div className="space-y-1.5">

@@ -125,8 +125,12 @@ export function CurrencyPairForm({
       ) : null}
 
       <DialogFooter>
+        {/* El pie es `flex-col-reverse` en móvil, así que sin `order-last` este aviso caía
+            al fondo del todo, debajo de los botones y lejos de lo que explica. */}
         {missing ? (
-          <span className="mr-auto text-xs text-muted-foreground">{missing}</span>
+          <span className="order-last text-xs text-muted-foreground sm:order-none sm:mr-auto">
+            {missing}
+          </span>
         ) : null}
         <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
           Cancelar
