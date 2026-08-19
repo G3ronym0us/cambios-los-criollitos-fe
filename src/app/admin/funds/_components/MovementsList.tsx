@@ -9,7 +9,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { cn } from '@/lib/utils';
 import type { FundMovement } from '@/types/fund';
 import { formatPercentage, formatUSDT } from '../_lib/format';
-import { MOVEMENT_META } from './movementMeta';
+import { movementMeta } from './movementMeta';
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('es-ES', {
@@ -138,7 +138,7 @@ export function MovementsList({
 
         <ul className="divide-y divide-border">
           {movements.map((mv) => {
-            const meta = MOVEMENT_META[mv.movement_type];
+            const meta = movementMeta(mv.movement_type);
             const userName = getUserDisplayName(mv.user_uuid, mv.username);
             const canReverse =
               isRoot && !mv.is_reversal && !mv.is_reversed && !mv.transaction_uuid;

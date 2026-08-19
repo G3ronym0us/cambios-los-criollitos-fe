@@ -1,6 +1,9 @@
 export enum MovementType {
   DEPOSIT = 'DEPOSIT',
+  /** La pata que SALE del fondo: se le pagó al cliente. */
   EXCHANGE = 'EXCHANGE',
+  /** La pata que ENTRA al fondo: el cliente nos pagó. Suma posición, como un depósito. */
+  EXCHANGE_IN = 'EXCHANGE_IN',
   PERSONAL = 'PERSONAL',
   ADJUSTMENT = 'ADJUSTMENT',
 }
@@ -208,6 +211,8 @@ export interface PendingDeposit {
   // como pago del cliente). Confirmarlo exige override_duplicate.
   source_incoming_payment_id: number | null;
   source_incoming_payment_phone: string | null;
+  // Comprobante SALIENTE que el operador marcó como capital del fondo.
+  origin_outgoing_payment_id?: number | null;
   detected_user_uuid: string | null;
   detected_username: string | null;
   amount: number | null;

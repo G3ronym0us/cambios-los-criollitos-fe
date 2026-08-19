@@ -21,6 +21,7 @@ const DOT_BY_TONE: Record<string, string> = {
 // Orden del dropdown como en el diseño.
 const TYPE_ORDER: MovementType[] = [
   MovementType.EXCHANGE,
+  MovementType.EXCHANGE_IN,
   MovementType.DEPOSIT,
   MovementType.ADJUSTMENT,
   MovementType.PERSONAL,

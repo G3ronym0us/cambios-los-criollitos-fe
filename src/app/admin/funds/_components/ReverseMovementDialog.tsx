@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import type { FundMovement } from '@/types/fund';
 import { formatUSDT } from '../_lib/format';
+import { movementMeta } from './movementMeta';
 
 interface ReverseMovementDialogProps {
   open: boolean;
@@ -57,7 +58,7 @@ export function ReverseMovementDialog({
           </DialogTitle>
           <DialogDescription>
             {movement
-              ? `Se anulará el ${movement.movement_type.toLowerCase()} de ${formatUSDT(
+              ? `Se anulará el ${movementMeta(movement.movement_type).label.toLowerCase()} de ${formatUSDT(
                   movement.amount_usdt,
                 )} USDT con un movimiento opuesto.`
               : 'Se anulará el movimiento con uno opuesto.'}
