@@ -16,12 +16,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { PairPicker } from './PairPicker';
 import { adminService } from '@/services/adminService';
 import { clientService } from '@/services/clientService';
 import { fundService } from '@/services/fundService';
 import { paymentService } from '@/services/paymentService';
 import { useConfirm } from '@/hooks/useConfirm';
 import { ratesService } from '@/services/ratesService';
+import { operationService } from '@/services/operationService';
 import type { CurrencyPairData } from '@/types/admin';
 import type { ExchangeRateResponse } from '@/types/currency';
 import type { FundGroup } from '@/types/fund';
@@ -37,6 +39,14 @@ interface CreateOperationFormProps {
 
 export function CreateOperationForm({ payment, table, onSuccess, onBack }: CreateOperationFormProps) {
   const [pairs, setPairs] = useState<CurrencyPairData[]>([]);
+  // Cuántas operaciones lleva ESTE cliente en cada par, y la tasa vigente de todos. Las dos
+  // cosas se piden una sola vez al abrir: el selector las necesita para ordenar y para que
+  // el operador no tenga que ir a otra pantalla a comprobar la tasa.
+  const [pairUsage, setPairUsage] = useState<Map<string, { count: number }>>(new Map());
+  const [pairRates, setPairRates] = useState<Map<string, { rate: number; updatedAt: string | null }>>(new Map());
+  const [clientOps, setClientOps] = useState(0);
+  const [clientName, setClientName] = useState<string | null>(null);
+  const [preferredUuid, setPreferredUuid] = useState<string | null>(null);
   const [groups, setGroups] = useState<FundGroup[]>([]);
   const [pairUuid, setPairUuid] = useState('');
   const [direction, setDirection] = useState<'SEND' | 'RECEIVE'>('SEND');
@@ -78,8 +88,47 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
       if (preferred && pairsRes.success && pairsRes.data?.pairs.some((p) => p.uuid === preferred)) {
         setPairUuid((current) => current || preferred);
       }
+      setPreferredUuid(preferred ?? null);
+      setClientName(clientRes?.success ? (clientRes.data?.display_name ?? null) : null);
+
     }).finally(() => setLoadingData(false));
   }, [payment.client_uuid, payment.fund_group_uuid]);
+
+  // Lo que el selector necesita para ordenarse: la tasa vigente de cada par y cuántas
+  // operaciones lleva este cliente en cada uno. Va aparte del efecto de arriba porque no
+  // bloquea el formulario — si tarda o falla, el selector simplemente no muestra ni tasas
+  // ni conteos, y se puede elegir el par igual.
+  useEffect(() => {
+    ratesService.getAllActiveRates().then((res) => {
+      if (!res.success || !res.data) return;
+      setPairRates(
+        new Map(
+          res.data.map((r) => [
+            r.currency_pair_uuid,
+            { rate: r.rate, updatedAt: r.updated_at ?? r.created_at ?? null },
+          ]),
+        ),
+      );
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!payment.client_phone) return;
+    // El uso sale de las operaciones recientes del cliente y no de un endpoint nuevo: el
+    // selector sólo necesita ordenar, y para eso las últimas 100 sobran.
+    operationService.getOperations({ phone: payment.client_phone, limit: 100 }).then((res) => {
+      if (!res.success || !res.data) return;
+      const counts = new Map<string, { count: number }>();
+      for (const op of res.data.operations) {
+        if (!op.currency_pair_uuid) continue;
+        counts.set(op.currency_pair_uuid, {
+          count: (counts.get(op.currency_pair_uuid)?.count ?? 0) + 1,
+        });
+      }
+      setPairUsage(counts);
+      setClientOps(res.data.operations.length);
+    });
+  }, [payment.client_phone]);
 
   const pair = useMemo(() => pairs.find((p) => p.uuid === pairUuid), [pairs, pairUuid]);
   const fromCur = pair?.from_currency?.symbol ?? '';
@@ -319,17 +368,18 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
     >
       <SidePanelBody className="gap-0 space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="op-pair">Par</Label>
-          <Select value={pairUuid} onValueChange={(v) => setPairUuid(v ?? '')}>
-            <SelectTrigger id="op-pair" className="h-10 w-full">
-              <SelectValue>{pair?.pair_symbol ?? 'Selecciona el par'}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {pairs.map((p) => (
-                <SelectItem key={p.uuid} value={p.uuid}>{p.pair_symbol}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Label htmlFor="op-pair">Par de la cotización</Label>
+          <PairPicker
+            id="op-pair"
+            pairs={pairs}
+            value={pairUuid}
+            onChange={setPairUuid}
+            preferredUuid={preferredUuid}
+            clientName={clientName}
+            usage={pairUsage}
+            rates={pairRates}
+            totalOperations={clientOps}
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
