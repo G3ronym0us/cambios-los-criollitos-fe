@@ -23,6 +23,7 @@ import {
   LogOut,
   Bell,
   Calculator,
+  ScanSearch,
 } from 'lucide-react';
 import { Role } from '@/utils/enums';
 import NotificationBell from '@/components/admin/NotificationBell';
@@ -46,6 +47,7 @@ const navigation = [
   { name: 'Usuarios', href: '/admin/users', icon: UserCheck },
   { name: 'Clientes', href: '/admin/clients', icon: Contact },
   { name: 'Fondos', href: '/admin/funds', icon: Wallet },
+  { name: 'Análisis', href: '/admin/analyses', icon: ScanSearch },
   { name: 'Alertas', href: '/admin/alerts', icon: Bell },
 ];
 
