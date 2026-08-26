@@ -178,6 +178,34 @@ export interface PaymentAllocationSummary {
 }
 
 // Cuánto del valor de una operación cubriría un comprobante de salida.
+/** Una operación cubierta por un comprobante de salida, con su parte del valor. */
+export interface OutgoingSettlement {
+  uuid: string;
+  /** En la moneda del VALOR de la operación (80 ZELLE), no en la del comprobante. */
+  settled_amount: number;
+  settled_reference_rate: number | null;
+  operation_uuid: string | null;
+  operation_status: string | null;
+  pair_symbol: string | null;
+  operation_value?: number;
+  operation_value_currency?: string;
+  operation_delivered?: number;
+  operation_pending?: number;
+}
+
+/** Reparto de un comprobante de salida entre las operaciones que cubre. */
+export interface OutgoingSettlementSummary {
+  payment_id: number;
+  amount: number | null;
+  currency: string | null;
+  /** Suma de las partes, cada una en la moneda de su operación: NO comparable con `amount`. */
+  settled_total: number;
+  /** Lo mismo pasado por las tasas de referencia, que sí se compara con el comprobante. */
+  covered_in_payment_currency: number;
+  unassigned_in_payment_currency: number;
+  settlements: OutgoingSettlement[];
+}
+
 export interface OutgoingCoverage {
   payment: { id: number; amount: number | null; currency: string | null };
   operation_uuid: string;

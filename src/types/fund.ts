@@ -211,8 +211,6 @@ export interface PendingDeposit {
   // como pago del cliente). Confirmarlo exige override_duplicate.
   source_incoming_payment_id: number | null;
   source_incoming_payment_phone: string | null;
-  // Comprobante SALIENTE que el operador marcó como capital del fondo.
-  origin_outgoing_payment_id?: number | null;
   detected_user_uuid: string | null;
   detected_username: string | null;
   amount: number | null;
