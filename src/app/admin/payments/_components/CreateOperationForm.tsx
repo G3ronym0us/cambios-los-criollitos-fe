@@ -33,6 +33,8 @@ import {
   effectiveRate as toEffectiveRate,
   pairRoundingFrom,
   quotePair,
+  rateDecimals,
+  type AmountSide,
 } from '@/utils/rounding';
 import {
   buildValueDifference,
@@ -58,6 +60,39 @@ function quotedRateOf(rate: ExchangeRateResponse): number {
     rounding.direction,
   );
   return rounded > 0 ? rounded : rate.rate;
+}
+
+/**
+ * Sanea el campo de tasa. Admite más decimales que un monto porque una tasa puede vivir en
+ * el cuarto o el sexto (BRL→USDT cotiza a 0,193236): recortarla a dos céntimos movería el
+ * margen que el operador está fijando.
+ */
+function sanitizeRateInput(value: string): string | null {
+  const normalized = value.replace(',', '.');
+  return /^\d*(?:\.\d{0,8})?$/.test(normalized) ? normalized : null;
+}
+
+/** Sanea el campo de margen. Admite negativo: pagar por encima de la tasa es un caso real. */
+function sanitizeMarginInput(value: string): string | null {
+  const normalized = value.replace(',', '.');
+  return /^-?\d*(?:\.\d{0,4})?$/.test(normalized) ? normalized : null;
+}
+
+/** Quita el `-0` que deja redondear un número negativo minúsculo. */
+function normalizeZero(value: number): number {
+  return value === 0 ? 0 : value;
+}
+
+function formatRateForInput(rate: number): string {
+  if (!Number.isFinite(rate) || rate <= 0) return '';
+  // Dos decimales más que los de lectura: la tasa base rara vez es redonda, y mostrarla
+  // corta haría que el «sin margen» del botón se registrara como un 0,0001% cualquiera.
+  return String(Number(rate.toFixed(rateDecimals(rate) + 2)));
+}
+
+function formatMarginForInput(margin: number): string {
+  if (!Number.isFinite(margin)) return '';
+  return String(normalizeZero(Math.round(margin * 10000) / 10000));
 }
 
 interface CreateOperationFormProps {
@@ -97,6 +132,15 @@ export function CreateOperationForm({
   const [activeRate, setActiveRate] = useState<ExchangeRateResponse | null>(null);
   const [loadingRate, setLoadingRate] = useState(false);
   const [rateError, setRateError] = useState(false);
+  // La tasa propia de ESTA operación, en forma directa (`to` por 1 de `from`). `null` = la
+  // del par. Es el corazón del cajón: mientras no exista, el margen es el que el par cobra.
+  const [manualRate, setManualRate] = useState<number | null>(null);
+  const [rateInput, setRateInput] = useState('');
+  const [marginInput, setMarginInput] = useState('');
+  // El lado calculado, sin recortar al céntimo. `from_amount`/`to_amount` viajan así al
+  // backend porque de su cociente sale el margen: 172,07 en vez de 172,072948 convierte un
+  // 0% exacto en un −0,0001% que `implied_margin` ya no reconoce como margen y descarta.
+  const [derivedExact, setDerivedExact] = useState<number | null>(null);
   const [fundGroupUuid, setFundGroupUuid] = useState('');
   const [exchangeUserUuid, setExchangeUserUuid] = useState('');
   const [creating, setCreating] = useState(false);
@@ -207,6 +251,9 @@ export function CreateOperationForm({
     setLoadingRate(true);
     setRateError(false);
     setActiveRate(null);
+    // La tasa propia era de la cotización anterior: con otro par no significa nada.
+    setManualRate(null);
+    setDerivedExact(null);
     // La tasa del DÍA DEL COMPROBANTE, no la de hoy: al cliente se le cotizó cuando pagó, y
     // un pago de la mañana leído por la tarde cambiaba de trato solo porque la tasa se movió.
     // Si el comprobante es más viejo que el historial de tasas, se cae a la vigente.
@@ -248,11 +295,58 @@ export function CreateOperationForm({
     [activeRate, pairUuid],
   );
 
+  // La tasa del par tal cual se cotiza: con su margen y, en modo RATE, ya redondeada (que es
+  // la que se le cotizó al cliente). En modo AMOUNT la tasa no cambia — el redondeo cae
+  // sobre el monto calculado, no sobre ella.
+  const pairEffectiveRate = useMemo(() => {
+    if (!activeRate) return null;
+    const quoted = quotePair(1, activeRate.rate, activeRate.inverse_percentage, 'SEND', rounding);
+    return toEffectiveRate(quoted.rate, quoted.inverse);
+  }, [activeRate, rounding]);
+
+  /**
+   * La tasa base del par: la misma contra la que el backend deduce el margen
+   * (`implied_margin`). Pagarle al cliente a esta tasa es no cobrarle nada, y es a lo que
+   * apunta el botón «sin margen».
+   */
+  const baseEffectiveRate = useMemo(() => {
+    if (!activeRate) return null;
+    const base = activeRate.base_rate ?? activeRate.rate;
+    if (!base || base <= 0) return null;
+    const direct = activeRate.inverse_percentage ? 1 / base : base;
+    return Number.isFinite(direct) && direct > 0 ? direct : null;
+  }, [activeRate]);
+
+  /**
+   * La tasa que manda en el formulario: la propia si el operador la fijó, la del par si no.
+   * Todo cuelga de este número — los montos, el margen que se registrará y el paso de la
+   * diferencia, que sin esto compararía el comprobante contra una tasa que ya nadie aplica.
+   */
+  const effectiveRate = manualRate ?? pairEffectiveRate;
+
+  /**
+   * El lado que NO se recalcula al mover la tasa: el que trae el monto del comprobante. Ese
+   * dinero ya se movió y no lo cambia una tasa; lo que la tasa decide es cuánto vale el otro.
+   */
+  const anchorSide: AmountSide =
+    (payment.currency || '').toUpperCase() === toCur.toUpperCase() ? 'RECEIVE' : 'SEND';
+
   // Misma orientación de tasa que usa la calculadora principal. El monto detectado
   // en el comprobante queda fijo y se calcula el lado opuesto; ambos campos siguen
   // siendo editables para que el operador pueda corregir el resultado.
   useEffect(() => {
-    if (!pair || !activeRate || activeRate.currency_pair_uuid !== pairUuid || payment.amount == null) return;
+    if (!pair || !activeRate || activeRate.currency_pair_uuid !== pairUuid) return;
+
+    // Estrenar par (o su tasa) arranca el cajón en la tasa del par. El efecto no depende de
+    // `manualRate`, así que no vuelve a correr cuando el operador fija la suya.
+    if (pairEffectiveRate) {
+      setRateInput(formatRateForInput(pairEffectiveRate));
+      setMarginInput(
+        baseEffectiveRate ? formatMarginForInput((1 - pairEffectiveRate / baseEffectiveRate) * 100) : '',
+      );
+    }
+
+    if (payment.amount == null) return;
     const amount = Number(payment.amount);
     if (!Number.isFinite(amount) || amount <= 0 || activeRate.rate <= 0) return;
 
@@ -268,34 +362,44 @@ export function CreateOperationForm({
       setFromAmount(formatAmountForInput(quoted.fromAmount));
       setToAmount(formatAmountForInput(quoted.toAmount));
     }
-  }, [activeRate, pair, pairUuid, payment.amount, payment.currency, fromCur, toCur, rounding]);
-
-  // Tasa que se le está aplicando al cliente: ya redondeada en modo RATE, que es la que
-  // va a quedar registrada en la operación. En modo AMOUNT la tasa no cambia (el redondeo
-  // cae sobre el monto calculado, no sobre ella).
-  const effectiveRate = useMemo(() => {
-    if (!activeRate) return null;
-    const quoted = quotePair(1, activeRate.rate, activeRate.inverse_percentage, 'SEND', rounding);
-    return toEffectiveRate(quoted.rate, quoted.inverse);
-  }, [activeRate, rounding]);
+  }, [
+    activeRate,
+    pair,
+    pairUuid,
+    payment.amount,
+    payment.currency,
+    fromCur,
+    toCur,
+    rounding,
+    pairEffectiveRate,
+    baseEffectiveRate,
+  ]);
 
   /**
    * El margen que sale de lo escrito: la tasa a la que se le está pagando al cliente contra
    * la tasa base del par. Es el mismo cálculo que hace el backend al crear la operación
    * (`implied_margin`), así que lo que se ve aquí es lo que va a quedar registrado.
    */
-  const impliedMargin = (() => {
-    if (!activeRate) return null;
-    const from = Number(fromAmount);
-    const to = Number(toAmount);
+  const rawMargin = (() => {
+    if (!baseEffectiveRate) return null;
+    // Sobre los montos que se van a MANDAR, no sobre los que se ven: el lado calculado viaja
+    // sin recortar, y es su cociente el que el backend va a leer como margen.
+    const from = derivedExact != null && anchorSide === 'RECEIVE' ? derivedExact : Number(fromAmount);
+    const to = derivedExact != null && anchorSide === 'SEND' ? derivedExact : Number(toAmount);
     if (!Number.isFinite(from) || !Number.isFinite(to) || from <= 0 || to <= 0) return null;
-    const baseRate = activeRate.base_rate ?? activeRate.rate;
-    if (!baseRate || baseRate <= 0) return null;
-    const baseEffective = activeRate.inverse_percentage ? 1 / baseRate : baseRate;
-    if (!Number.isFinite(baseEffective) || baseEffective <= 0) return null;
-    const margin = (1 - to / from / baseEffective) * 100;
-    return Number.isFinite(margin) ? Math.round(margin * 100) / 100 : null;
+    const margin = (1 - to / from / baseEffectiveRate) * 100;
+    // Cuatro decimales, los mismos que redondea el backend: a dos, un −0,0007% se vería como
+    // un 0,00% que el backend en realidad va a descartar.
+    return Number.isFinite(margin) ? normalizeZero(Math.round(margin * 10000) / 10000) : null;
   })();
+
+  /**
+   * El margen que el backend va a registrar de verdad. `implied_margin` solo acepta lo que
+   * parece un margen comercial: el 0 exacto sí, pero un negativo o un ≥99% los descarta y la
+   * operación nace sin margen deducido. El cartel dice cuál de las dos cosas va a pasar.
+   */
+  const registeredMargin =
+    rawMargin == null ? null : rawMargin === 0 ? 0 : rawMargin > 0 && rawMargin < 99 ? rawMargin : null;
 
   const creationStatus = table === 'incoming'
     ? { label: 'Pendiente', detail: 'Se completará al vincular el pago saliente.' }
@@ -309,9 +413,23 @@ export function CreateOperationForm({
     return sanitized;
   };
 
+  /**
+   * Cotiza con la tasa que manda. Con tasa propia no se aplica el redondeo del par: el
+   * operador escribió el número exacto que quiere que quede registrado, y redondearlo por
+   * encima le movería el margen que acaba de fijar.
+   */
+  const quoteWithCurrentRate = (amount: number, side: AmountSide) => {
+    if (manualRate != null) return quotePair(amount, manualRate, false, side, null);
+    if (!activeRate) return null;
+    return quotePair(amount, activeRate.rate, activeRate.inverse_percentage, side, rounding);
+  };
+
   const updateFromAmount = (value: string) => {
     const sanitized = sanitizeAndSetAmount(value, setFromAmount);
     if (sanitized === null || !activeRate || !effectiveRate || !Number.isFinite(effectiveRate) || effectiveRate <= 0) return;
+
+    // Escribir un monto a mano es tomar el control de los dos lados: se manda lo escrito.
+    setDerivedExact(null);
 
     if (sanitized === '') {
       setToAmount('');
@@ -320,13 +438,15 @@ export function CreateOperationForm({
 
     const amount = Number(sanitized);
     if (!Number.isFinite(amount)) return;
-    const quoted = quotePair(amount, activeRate.rate, activeRate.inverse_percentage, 'SEND', rounding);
-    setToAmount(formatAmountForInput(quoted.toAmount));
+    const quoted = quoteWithCurrentRate(amount, 'SEND');
+    if (quoted) setToAmount(formatAmountForInput(quoted.toAmount));
   };
 
   const updateToAmount = (value: string) => {
     const sanitized = sanitizeAndSetAmount(value, setToAmount);
     if (sanitized === null || !activeRate || !effectiveRate || !Number.isFinite(effectiveRate) || effectiveRate <= 0) return;
+
+    setDerivedExact(null);
 
     if (sanitized === '') {
       setFromAmount('');
@@ -335,8 +455,74 @@ export function CreateOperationForm({
 
     const amount = Number(sanitized);
     if (!Number.isFinite(amount)) return;
-    const quoted = quotePair(amount, activeRate.rate, activeRate.inverse_percentage, 'RECEIVE', rounding);
+    const quoted = quoteWithCurrentRate(amount, 'RECEIVE');
+    if (quoted) setFromAmount(formatAmountForInput(quoted.fromAmount));
+  };
+
+  /**
+   * Re-cotiza los montos con una tasa nueva dejando quieto el lado del comprobante, y guarda
+   * el lado calculado sin recortar para que el margen llegue entero al backend.
+   */
+  const requote = (rate: number, fromPair = false) => {
+    const anchor = Number((anchorSide === 'SEND' ? fromAmount : toAmount).replace(',', '.'));
+    if (!Number.isFinite(anchor) || anchor <= 0) return;
+    const quoted =
+      fromPair && activeRate
+        ? quotePair(anchor, activeRate.rate, activeRate.inverse_percentage, anchorSide, rounding)
+        : Number.isFinite(rate) && rate > 0
+          ? quotePair(anchor, rate, false, anchorSide, null)
+          : null;
+    if (!quoted) return;
     setFromAmount(formatAmountForInput(quoted.fromAmount));
+    setToAmount(formatAmountForInput(quoted.toAmount));
+    setDerivedExact(anchorSide === 'SEND' ? quoted.toAmount : quoted.fromAmount);
+  };
+
+  const updateRate = (value: string) => {
+    const sanitized = sanitizeRateInput(value);
+    if (sanitized === null) return;
+    setRateInput(sanitized);
+
+    const rate = Number(sanitized);
+    if (sanitized === '' || !Number.isFinite(rate) || rate <= 0) return;
+    setManualRate(rate);
+    if (baseEffectiveRate) setMarginInput(formatMarginForInput((1 - rate / baseEffectiveRate) * 100));
+    requote(rate);
+  };
+
+  const updateMargin = (value: string) => {
+    const sanitized = sanitizeMarginInput(value);
+    if (sanitized === null) return;
+    setMarginInput(sanitized);
+
+    const margin = Number(sanitized);
+    if (sanitized === '' || sanitized === '-' || !baseEffectiveRate) return;
+    if (!Number.isFinite(margin) || margin >= 100) return;
+    const rate = baseEffectiveRate * (1 - margin / 100);
+    if (!Number.isFinite(rate) || rate <= 0) return;
+    setManualRate(rate);
+    setRateInput(formatRateForInput(rate));
+    requote(rate);
+  };
+
+  /** Devuelve la operación a la tasa del par: deja de tener tasa propia. */
+  const resetToPairRate = () => {
+    if (!pairEffectiveRate) return;
+    setManualRate(null);
+    setRateInput(formatRateForInput(pairEffectiveRate));
+    setMarginInput(
+      baseEffectiveRate ? formatMarginForInput((1 - pairEffectiveRate / baseEffectiveRate) * 100) : '',
+    );
+    requote(pairEffectiveRate, true);
+  };
+
+  /** Cotiza a la tasa base: sin margen, que es como se registra lo personal. */
+  const useBaseRate = () => {
+    if (!baseEffectiveRate) return;
+    setManualRate(baseEffectiveRate);
+    setRateInput(formatRateForInput(baseEffectiveRate));
+    setMarginInput('0');
+    requote(baseEffectiveRate);
   };
 
   const withFund = direction === 'SEND';
@@ -379,6 +565,20 @@ export function CreateOperationForm({
     return amount > 0 ? amount : null;
   };
 
+  /**
+   * Lo que queda escrito cuando la tasa no es la del par. Sin esto, dentro de un mes nadie
+   * distingue un 0% decidido —«esto es personal, no le cobro»— de un error de tecleo.
+   */
+  const manualRateNote = (): string | null => {
+    if (manualRate == null || !effectiveRate) return null;
+    const rate = effectiveRate.toLocaleString('es-VE', { maximumFractionDigits: 6 });
+    const margin =
+      registeredMargin != null
+        ? `${registeredMargin.toLocaleString('es-VE', { maximumFractionDigits: 2 })}%`
+        : 'sin margen deducible';
+    return `Tasa fijada a mano: 1 ${fromCur} = ${rate} ${toCur} (margen ${margin}).`;
+  };
+
   const createOperation = async (
     fa: number,
     ta: number,
@@ -386,6 +586,8 @@ export function CreateOperationForm({
     creditUsd: number | null,
   ) => {
     setCreating(true);
+    const rateNote = manualRateNote();
+    const finalNotes = [rateNote, notes].filter(Boolean).join(' ') || null;
     const res = await paymentService.createOperation(table, payment.id, {
       fromCurrency: fromCur,
       toCurrency: toCur,
@@ -394,7 +596,7 @@ export function CreateOperationForm({
       amountSide: direction,
       fundGroupUuid: withFund ? fundGroupUuid || null : null,
       exchangeUserUuid: withFund && fundGroupUuid ? exchangeUserUuid || null : null,
-      notes,
+      notes: finalNotes,
     });
     if (!res.success) {
       setCreating(false);
@@ -429,12 +631,16 @@ export function CreateOperationForm({
   };
 
   const submit = () => {
-    const fa = parseFloat(fromAmount.replace(',', '.'));
-    const ta = parseFloat(toAmount.replace(',', '.'));
+    const typedFrom = parseFloat(fromAmount.replace(',', '.'));
+    const typedTo = parseFloat(toAmount.replace(',', '.'));
     if (!pair) return toast.error('Selecciona un par');
-    if (!Number.isFinite(fa) || fa <= 0 || !Number.isFinite(ta) || ta <= 0) {
+    if (!Number.isFinite(typedFrom) || typedFrom <= 0 || !Number.isFinite(typedTo) || typedTo <= 0) {
       return toast.error('Ingresa montos válidos (> 0)');
     }
+    // El lado calculado va entero: el campo muestra 172,07 pero lo que cotizó la tasa son
+    // 172,072948, y de ese cociente sale el margen que el backend registra.
+    const fa = derivedExact != null && anchorSide === 'RECEIVE' ? derivedExact : typedFrom;
+    const ta = derivedExact != null && anchorSide === 'SEND' ? derivedExact : typedTo;
 
     // El valor no cuadra con el comprobante: puede ser a propósito (el cliente cambia solo una
     // parte, o este pago cubre menos de lo que vale el trato), pero nunca en silencio. En vez
@@ -449,7 +655,9 @@ export function CreateOperationForm({
             counterCurrency: toCur,
             rate: effectiveRate,
             typedValue: fa,
-            rounding,
+            // Con tasa propia el redondeo del par ya no se aplicó, así que su holgura
+            // tampoco: la única diferencia tolerable vuelve a ser el céntimo.
+            rounding: manualRate != null ? null : rounding,
             creditableUsd,
           })
         : null;
@@ -556,6 +764,65 @@ export function CreateOperationForm({
           />
         </div>
 
+        {pair && activeRate ? (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="op-rate">
+                  Tasa {fromCur && toCur ? `(1 ${fromCur} → ${toCur})` : ''}
+                </Label>
+                <Input
+                  id="op-rate"
+                  inputMode="decimal"
+                  value={rateInput}
+                  onChange={(e) => updateRate(e.target.value)}
+                  placeholder="0.00"
+                  className="h-10"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="op-margin">Margen %</Label>
+                <Input
+                  id="op-margin"
+                  inputMode="decimal"
+                  value={marginInput}
+                  onChange={(e) => updateMargin(e.target.value)}
+                  placeholder="0.00"
+                  className="h-10"
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={resetToPairRate}
+                disabled={manualRate == null || !pairEffectiveRate}
+              >
+                Tasa del par
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={useBaseRate}
+                disabled={!baseEffectiveRate}
+              >
+                Personal · sin margen
+              </Button>
+              {baseEffectiveRate ? (
+                <span className="text-xs text-muted-foreground">
+                  base {baseEffectiveRate.toLocaleString('es-VE', { maximumFractionDigits: 6 })}
+                  {activeRate.percentage != null ? ` · el par cobra ${activeRate.percentage}%` : ''}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="op-from">Valor {fromCur || 'origen'}</Label>
@@ -594,33 +861,41 @@ export function CreateOperationForm({
                   ? 'Calculando con la tasa del comprobante…'
                   : rateError
                     ? 'No hay una tasa activa para este par'
-                    : rateIsHistoric
-                      ? 'Monto calculado con la tasa del día del comprobante'
-                      : 'Monto calculado con la tasa actual'}
+                    : manualRate != null
+                      ? 'Monto calculado con la tasa que fijaste'
+                      : rateIsHistoric
+                        ? 'Monto calculado con la tasa del día del comprobante'
+                        : 'Monto calculado con la tasa actual'}
               </p>
               <p className="text-muted-foreground">
                 {effectiveRate && Number.isFinite(effectiveRate)
                   ? `1 ${fromCur} = ${effectiveRate.toLocaleString('es-VE', { maximumFractionDigits: 6 })} ${toCur}. Al modificar un monto, el otro se recalcula automáticamente.`
                   : 'Puedes indicar ambos montos manualmente.'}
               </p>
-              {impliedMargin !== null ? (
+              {rawMargin !== null ? (
                 <p className="pt-0.5 text-muted-foreground">
                   Margen que se registrará:{' '}
                   <span
                     className={cn(
                       'font-mono font-semibold tabular-nums',
-                      impliedMargin < 0
+                      registeredMargin === null
                         ? 'text-amber-600 dark:text-amber-400'
-                        : impliedMargin === 0
+                        : registeredMargin === 0
                           ? 'text-foreground'
                           : 'text-emerald-600 dark:text-emerald-400',
                     )}
                   >
-                    {impliedMargin.toLocaleString('es-VE', { maximumFractionDigits: 2 })}%
+                    {registeredMargin !== null
+                      ? `${registeredMargin.toLocaleString('es-VE', { maximumFractionDigits: 2 })}%`
+                      : 'ninguno'}
                   </span>
-                  {impliedMargin < 0
-                    ? ' — le estás pagando por encima de la tasa, la operación va a perder'
-                    : ''}
+                  {registeredMargin === null
+                    ? rawMargin < 0
+                      ? ` — le estás pagando por encima de la tasa (${rawMargin.toLocaleString('es-VE', { maximumFractionDigits: 2 })}%), la operación va a perder y no se registra margen`
+                      : ' — la tasa no se parece a la del par, la operación va a nacer sin margen'
+                    : registeredMargin === 0
+                      ? ' — sin ganancia, como una operación personal'
+                      : ''}
                 </p>
               ) : null}
             </div>
