@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRightLeft, Ban, ChevronRight, HandCoins, Info, Link2, RotateCcw, ScanLine, Tag, TriangleAlert, Wallet } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, Ban, ChevronRight, HandCoins, Info, Link2, RotateCcw, ScanLine, Split, Tag, TriangleAlert, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   SidePanel,
@@ -33,6 +33,7 @@ import { CorrectReceiptDialog } from './CorrectReceiptDialog';
 import { describeCorrection } from './paymentRowData';
 import type { LoanPreferredValue, LoanValuation, PaymentData, PaymentSuggestion } from '@/types/payment';
 import { LinkOperationPanel } from './LinkOperationPanel';
+import { OutgoingSettlementsPanel } from './OutgoingSettlementsPanel';
 import { LoanReferenceFields } from '@/components/loans/LoanReferenceFields';
 
 interface OutgoingPaymentActionDialogProps {
@@ -54,6 +55,11 @@ const STEP_META: Record<
   operation: {
     title: () => 'Vincular a operación',
     subtitle: () => 'Elige la cotización a la que pertenece este comprobante.',
+  },
+  settlements: {
+    title: () => 'Repartir entre operaciones',
+    subtitle: () =>
+      'Cuando un solo pago cubre varios tratos del cliente: qué parte del valor de cada uno paga este comprobante.',
   },
   loan: {
     title: (isLoan) => (isLoan ? 'Préstamo registrado' : 'Registrar préstamo al cliente'),
@@ -84,7 +90,7 @@ function defaultLoanReference(paymentCurrency: string, fiatCurrency: string): Lo
   return fiatCurrency === 'VES' ? 'BCV' : 'USDT';
 }
 
-type Step = 'choose' | 'personal' | 'irrelevant' | 'operation' | 'loan';
+type Step = 'choose' | 'personal' | 'irrelevant' | 'operation' | 'settlements' | 'loan';
 
 export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConverted }: OutgoingPaymentActionDialogProps) {
   const [step, setStep] = useState<Step>('choose');
@@ -555,6 +561,15 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                 onClick={goOperation}
               />
               <ChoiceButton
+                icon={Split}
+                title="Pago de varias operaciones"
+                description="El cliente mandó dos pagos y se le pagó en uno solo: reparte este comprobante."
+                // No lleva anillo de "es esto": el reparto no es una clasificación distinta
+                // del pago, es la misma —de una operación— con más de un destino.
+                active={false}
+                onClick={() => setStep('settlements')}
+              />
+              <ChoiceButton
                 icon={HandCoins}
                 title="Préstamo al cliente"
                 description={isLoan ? 'Este pago ya originó un préstamo.' : 'Dinero que el cliente devuelve; se indexa a una referencia.'}
@@ -664,6 +679,12 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
           onCancel={() => setStep('choose')}
           cancelLabel="Volver"
           onHeaderChange={setStepHeader}
+        />
+      ) : step === 'settlements' ? (
+        <OutgoingSettlementsPanel
+          payment={payment}
+          onSaved={finish}
+          onCancel={() => setStep('choose')}
         />
       ) : step === 'loan' ? (
         <SidePanelBody>

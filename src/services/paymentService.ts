@@ -5,6 +5,7 @@ import type {
   LoanPreferredValue,
   LoanValuation,
   OutgoingCoverage,
+  OutgoingSettlementSummary,
   PaymentAllocationSummary,
   PaymentData,
   PaymentPage,
@@ -74,6 +75,26 @@ export class PaymentService {
   async getAllocations(paymentId: number): Promise<ApiResponse<PaymentAllocationSummary>> {
     const result = await httpClient.get<PaymentAllocationSummary>(
       `/payments/incoming/${paymentId}/allocations`,
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  // Reparto de un comprobante de SALIENTE: qué operaciones cubre y con cuánto de cada valor.
+  async getSettlements(paymentId: number): Promise<ApiResponse<OutgoingSettlementSummary>> {
+    const result = await httpClient.get<OutgoingSettlementSummary>(
+      `/payments/outgoing/${paymentId}/settlements`,
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  // Reemplaza el reparto del saliente. Cada parte va en la moneda del valor de SU operación.
+  async setSettlements(
+    paymentId: number,
+    settlements: { operation_uuid: string; settled_amount: number }[],
+  ): Promise<ApiResponse<OutgoingSettlementSummary>> {
+    const result = await httpClient.put<OutgoingSettlementSummary>(
+      `/payments/outgoing/${paymentId}/settlements`,
+      { settlements },
     );
     return { success: result.success, data: result.data, error: result.error };
   }
