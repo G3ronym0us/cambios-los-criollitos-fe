@@ -13,8 +13,18 @@ export class RatesService {
     return { success: result.success, data: result.data, error: result.error };
   }
 
-  async getRateByPair(currencyPairUuid: string): Promise<ApiResponse<ExchangeRateResponse>> {
-    const result = await httpClient.get<ExchangeRateResponse>(`/rates/by-pair/${currencyPairUuid}`);
+  /**
+   * Tasa del par. Con `at` (ISO-8601) devuelve la que REGÍA entonces, no la de hoy: un
+   * comprobante de ayer se lee con la tasa de ayer, que es a la que se le cotizó al cliente.
+   */
+  async getRateByPair(
+    currencyPairUuid: string,
+    at?: string | null,
+  ): Promise<ApiResponse<ExchangeRateResponse>> {
+    const query = at ? `?at=${encodeURIComponent(at)}` : '';
+    const result = await httpClient.get<ExchangeRateResponse>(
+      `/rates/by-pair/${currencyPairUuid}${query}`,
+    );
     return { success: result.success, data: result.data, error: result.error };
   }
 

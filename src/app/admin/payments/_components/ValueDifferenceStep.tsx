@@ -10,7 +10,7 @@ import type { PairRounding } from '@/utils/rounding';
 import type { PaymentTable } from '@/types/payment';
 
 /** Qué se decidió hacer con la diferencia entre el comprobante y el valor de la operación. */
-export type DifferenceChoice = 'raise' | 'balance' | 'keep';
+export type DifferenceChoice = 'raise' | 'balance' | 'keep' | 'partial';
 
 export interface ValueDifference {
   /** `over`: el comprobante da más de lo que vale la operación. `short`: no la cubre. */
@@ -140,7 +140,14 @@ export function differenceTitle(d: ValueDifference): string {
 
 /** Las opciones que tiene el operador, en el orden en que se le ofrecen. */
 export function differenceChoices(d: ValueDifference): DifferenceChoice[] {
-  if (d.kind === 'short' || d.suspicious) return [];
+  if (d.suspicious) return [];
+  if (d.kind === 'short') {
+    // Pagar de menos en un SALIENTE no siempre es un pago a medias: muchas veces es que se
+    // redondeó hacia abajo y esa diferencia se quedó de ganancia. Las dos lecturas son
+    // legítimas, así que se ofrecen las dos. En un entrante el que pagó de menos es el
+    // cliente: ahí solo cabe esperar el resto.
+    return d.table === 'outgoing' && d.onCounterSide ? ['partial', 'keep'] : [];
+  }
   const choices: DifferenceChoice[] = ['raise'];
   if (d.creditableUsd != null) choices.push('balance');
   choices.push('keep');
@@ -153,6 +160,11 @@ export function differenceCta(d: ValueDifference, choice: DifferenceChoice): str
   if (choice === 'balance' && d.creditableUsd != null) {
     return `Crear y acreditar ${formatNumber(d.creditableUsd)} USD`;
   }
+  // Ajustar lo entregado a lo que se pagó mueve la tasa, y es la tasa lo que hay que ver
+  // antes de confirmar: el valor del trato no cambia.
+  if (choice === 'keep' && d.kind === 'short' && d.effectiveRate != null) {
+    return `Crear a ${formatNumber(d.effectiveRate)}`;
+  }
   return `Crear por ${formatNumber(d.typedValue)} ${d.valueCurrency}`;
 }
 
@@ -161,7 +173,7 @@ export function differenceCta(d: ValueDifference, choice: DifferenceChoice): str
  * esto, quién lo decidió y por qué se perdían con el diálogo que lo preguntó.
  */
 export function differenceNote(d: ValueDifference, choice: DifferenceChoice): string | null {
-  if (choice !== 'keep' || d.kind === 'short') return null;
+  if (choice !== 'keep') return null;
   const sobra = d.onCounterSide
     ? `${formatNumber(d.diffPayment)} ${d.paymentCurrency}`
     : `${formatNumber(d.diffValue)} ${d.valueCurrency}`;
@@ -171,10 +183,43 @@ export function differenceNote(d: ValueDifference, choice: DifferenceChoice): st
       : '';
   // De quién es la diferencia, que es lo que después hay que poder leer sin rehacer la cuenta.
   const destino =
-    d.table === 'incoming'
-      ? `sobran ${sobra}, que se quedan en la casa`
-      : `se le pagaron ${sobra} de más al cliente, a costa de la ganancia`;
+    d.kind === 'short'
+      ? `se le pagaron ${sobra} de menos al cliente, a favor de la ganancia`
+      : d.table === 'incoming'
+        ? `sobran ${sobra}, que se quedan en la casa`
+        : `se le pagaron ${sobra} de más al cliente, a costa de la ganancia`;
   return `Diferencia con el comprobante dejada a propósito: ${destino}.${rate}`;
+}
+
+/** Cómo se llama cada salida, con su monto o su tasa dentro: el operador elige leyendo esto. */
+function choiceTitle(d: ValueDifference, choice: DifferenceChoice, leftover: string): string {
+  if (choice === 'raise') return `Subir la operación a ${formatNumber(d.receiptValue)} ${d.valueCurrency}`;
+  if (choice === 'balance') return `Dejar ${formatNumber(d.creditableUsd ?? 0)} USD como saldo a favor`;
+  if (choice === 'partial') return `Dejarla parcial y esperar el resto`;
+  if (d.effectiveRate != null) return `Dejarlo así, a ${formatNumber(d.effectiveRate)}`;
+  return `Dejar ${leftover} sin asignar`;
+}
+
+/** Qué consecuencia tiene, que es lo que de verdad decide: adónde va el dinero. */
+function choiceDetail(d: ValueDifference, choice: DifferenceChoice, leftover: string): string {
+  if (choice === 'raise') {
+    return d.quotedRate != null
+      ? `Mantiene la tasa cotizada de ${formatNumber(d.quotedRate)} y el comprobante queda cubierto al céntimo.`
+      : 'El comprobante queda cubierto al céntimo, sin nada suelto que repartir.';
+  }
+  if (choice === 'balance') {
+    return `La operación se queda en ${formatNumber(d.typedValue)} ${d.valueCurrency} y el resto se le acredita al cliente para su próximo cambio.`;
+  }
+  if (choice === 'partial') {
+    return `La operación sigue pidiendo ${formatNumber(d.paymentAmount + d.diffPayment)} ${d.paymentCurrency} y queda esperando el comprobante que falta.`;
+  }
+  if (d.kind === 'short') {
+    return `Lo entregado baja a ${formatNumber(d.paymentAmount)} ${d.paymentCurrency}: el trato queda cubierto y los ${leftover} son ganancia. Queda anotado quién lo decidió.`;
+  }
+  if (!d.onCounterSide) return `Los ${leftover} quedan sin asignar en el comprobante, para repartirlos después.`;
+  return d.table === 'incoming'
+    ? `Los ${leftover} se quedan en la casa. Queda anotado en la operación quién lo decidió.`
+    : `Se le dieron ${leftover} de más al cliente y la operación gana eso de menos. Queda anotado quién lo decidió.`;
 }
 
 function Row({
@@ -232,6 +277,8 @@ export function ValueDifferenceStep({
   submitting,
 }: ValueDifferenceStepProps) {
   const choices = differenceChoices(d);
+  // La primera de la lista es la que el paso propone, y la que el Enter confirma sin tocar nada.
+  const suggested = choices[0];
   const paid = d.table === 'incoming' ? 'El cliente pagó' : 'Se le pagó al cliente';
   const leftover = d.onCounterSide
     ? `${formatNumber(d.diffPayment)} ${d.paymentCurrency}`
@@ -246,7 +293,13 @@ export function ValueDifferenceStep({
       : null;
 
   return (
-    <>
+    <form
+      className="flex min-h-0 flex-1 flex-col"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!submitting && !d.suspicious) onConfirm();
+      }}
+    >
       <SidePanelBody className="gap-3.5">
         <div className="divide-y divide-border rounded-xl border border-border bg-card">
           <Row label={paid} value={`${formatNumber(d.paymentAmount)} ${d.paymentCurrency}`} />
@@ -281,7 +334,7 @@ export function ValueDifferenceStep({
               . Vuelve y escribe el monto otra vez.
             </p>
           </div>
-        ) : d.kind === 'short' ? (
+        ) : d.kind === 'short' && choices.length === 0 ? (
           <div className="flex gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
             <p className="text-xs text-pretty text-muted-foreground">
@@ -319,7 +372,17 @@ export function ValueDifferenceStep({
             <span className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
               Qué hacemos con los {leftover}
             </span>
-            <RadioGroup value={choice} onValueChange={(v: string) => onChoice(v as DifferenceChoice)}>
+            <RadioGroup
+              value={choice}
+              onValueChange={(v: string) => onChoice(v as DifferenceChoice)}
+              // Las flechas ya las mueve el propio grupo; el Enter no llegaba a enviar porque
+              // cada opción es un <button type="button">, así que se confirma desde aquí.
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                if (!submitting && !d.suspicious) onConfirm();
+              }}
+            >
               {choices.map((c) => (
                 <label
                   key={c}
@@ -328,36 +391,22 @@ export function ValueDifferenceStep({
                     choice === c ? 'border-primary bg-primary/5' : 'border-border bg-card hover:bg-muted',
                   )}
                 >
-                  <RadioGroupItem value={c} className="mt-0.5" />
+                  {/* La opción marcada toma el foco al abrir el paso: así las flechas
+                      funcionan sin tener que tabular hasta la lista primero. */}
+                  <RadioGroupItem value={c} autoFocus={c === choice} className="mt-0.5" />
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center gap-1.5">
                       <span className="text-[13px] font-semibold text-foreground">
-                        {c === 'raise'
-                          ? `Subir la operación a ${formatNumber(d.receiptValue)} ${d.valueCurrency}`
-                          : c === 'balance'
-                            ? `Dejar ${formatNumber(d.creditableUsd ?? 0)} USD como saldo a favor`
-                            : d.effectiveRate != null
-                              ? `Dejarlo así, a ${formatNumber(d.effectiveRate)}`
-                              : `Dejar ${leftover} sin asignar`}
+                        {choiceTitle(d, c, leftover)}
                       </span>
-                      {c === 'raise' ? (
+                      {c === suggested ? (
                         <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
                           Sugerido
                         </span>
                       ) : null}
                     </span>
                     <span className="mt-0.5 block text-[11.5px] text-pretty text-muted-foreground">
-                      {c === 'raise'
-                        ? d.quotedRate != null
-                          ? `Mantiene la tasa cotizada de ${formatNumber(d.quotedRate)} y el comprobante queda cubierto al céntimo.`
-                          : 'El comprobante queda cubierto al céntimo, sin nada suelto que repartir.'
-                        : c === 'balance'
-                          ? `La operación se queda en ${formatNumber(d.typedValue)} ${d.valueCurrency} y el resto se le acredita al cliente para su próximo cambio.`
-                          : d.onCounterSide
-                            ? d.table === 'incoming'
-                              ? `Los ${leftover} se quedan en la casa. Queda anotado en la operación quién lo decidió.`
-                              : `Se le dieron ${leftover} de más al cliente y la operación gana eso de menos. Queda anotado quién lo decidió.`
-                            : `Los ${leftover} quedan sin asignar en el comprobante, para repartirlos después.`}
+                      {choiceDetail(d, c, leftover)}
                     </span>
                   </span>
                 </label>
@@ -368,16 +417,16 @@ export function ValueDifferenceStep({
       </SidePanelBody>
 
       <SidePanelFooter>
-        <Button variant="ghost" onClick={onBack} disabled={submitting}>
+        <Button type="button" variant="ghost" onClick={onBack} disabled={submitting}>
           <ChevronLeft className="h-4 w-4" />
           Volver al monto
         </Button>
         {d.suspicious ? null : (
-          <Button onClick={onConfirm} disabled={submitting}>
+          <Button type="submit" disabled={submitting}>
             {differenceCta(d, choice)}
           </Button>
         )}
       </SidePanelFooter>
-    </>
+    </form>
   );
 }

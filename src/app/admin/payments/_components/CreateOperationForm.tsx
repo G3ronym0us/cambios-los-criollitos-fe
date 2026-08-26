@@ -207,11 +207,17 @@ export function CreateOperationForm({
     setLoadingRate(true);
     setRateError(false);
     setActiveRate(null);
-    ratesService.getRateByPair(pairUuid).then((res) => {
+    // La tasa del DÍA DEL COMPROBANTE, no la de hoy: al cliente se le cotizó cuando pagó, y
+    // un pago de la mañana leído por la tarde cambiaba de trato solo porque la tasa se movió.
+    // Si el comprobante es más viejo que el historial de tasas, se cae a la vigente.
+    ratesService.getRateByPair(pairUuid, payment.created_at).then(async (res) => {
+      if (!active) return;
+      const fallback =
+        !res.success && payment.created_at ? await ratesService.getRateByPair(pairUuid) : res;
       if (!active) return;
       setLoadingRate(false);
-      if (res.success && res.data) {
-        setActiveRate(res.data);
+      if (fallback.success && fallback.data) {
+        setActiveRate(fallback.data);
       } else {
         setActiveRate(null);
         setRateError(true);
@@ -220,7 +226,7 @@ export function CreateOperationForm({
     return () => {
       active = false;
     };
-  }, [pairUuid]);
+  }, [pairUuid, payment.created_at]);
 
   // Prefill: el monto del pago va al lado cuya moneda coincide con la del pago.
   useEffect(() => {
@@ -229,6 +235,10 @@ export function CreateOperationForm({
     if (cur && cur === fromCur.toUpperCase()) setFromAmount(String(payment.amount));
     else if (cur && cur === toCur.toUpperCase()) setToAmount(String(payment.amount));
   }, [pair, payment.amount, payment.currency, fromCur, toCur]);
+
+  // La tasa que se pidió a fecha del comprobante ya no es la vigente: la desactivó la
+  // siguiente. Es la señal más directa de que se está cotizando con la de aquel día.
+  const rateIsHistoric = activeRate != null && activeRate.is_active === false;
 
   // El redondeo configurado en el par, el mismo que aplican el bot y la calculadora al
   // cotizar (USD-VES redondea la tasa a múltiplos de 5 hacia abajo: 919,005 → 915). Sin
@@ -471,6 +481,21 @@ export function CreateOperationForm({
     if (choice === 'balance') {
       return createOperation(typedFrom, typedTo, null, difference.creditableUsd);
     }
+    if (choice === 'partial') {
+      // Se crea como se escribió: la operación pide más de lo entregado y espera el resto.
+      return createOperation(typedFrom, typedTo, null, null);
+    }
+    if (difference.kind === 'short') {
+      // Se pagó de menos y la diferencia se deja de ganancia: lo ENTREGADO baja a lo que dice
+      // el comprobante, y el valor del trato no se toca. La tasa efectiva sube sola, y con
+      // ella el margen que el backend deduce de los montos.
+      return createOperation(
+        typedFrom,
+        difference.paymentAmount,
+        differenceNote(difference, 'keep'),
+        null,
+      );
+    }
     return createOperation(typedFrom, typedTo, differenceNote(difference, 'keep'), null);
   };
 
@@ -566,10 +591,12 @@ export function CreateOperationForm({
             <div className="space-y-0.5">
               <p className="font-medium text-foreground">
                 {loadingRate
-                  ? 'Calculando con la tasa actual…'
+                  ? 'Calculando con la tasa del comprobante…'
                   : rateError
                     ? 'No hay una tasa activa para este par'
-                    : 'Monto calculado con la tasa actual'}
+                    : rateIsHistoric
+                      ? 'Monto calculado con la tasa del día del comprobante'
+                      : 'Monto calculado con la tasa actual'}
               </p>
               <p className="text-muted-foreground">
                 {effectiveRate && Number.isFinite(effectiveRate)
