@@ -118,8 +118,18 @@ describe('textos de la decisión', () => {
   it('solo «dejarlo así» deja nota en la operación', () => {
     expect(differenceNote(d, 'raise')).toBeNull();
     expect(differenceNote(d, 'balance')).toBeNull();
-    expect(differenceNote(d, 'keep')).toContain(`sobran ${formatNumber(1000)} VES`);
     expect(differenceNote(d, 'keep')).toContain('925');
+  });
+
+  it('la nota dice DE QUIÉN es la diferencia, que depende de la bandeja', () => {
+    // Saliente: la casa pagó de más y el cliente ya se lo llevó, no queda nada en la casa.
+    expect(differenceNote(counterSide(100, 'outgoing')!, 'keep')).toContain(
+      `se le pagaron ${formatNumber(1000)} VES de más al cliente`,
+    );
+    // Entrante: el que pagó de más fue el cliente, y eso sí se queda en la casa.
+    expect(differenceNote(counterSide(100, 'incoming')!, 'keep')).toContain(
+      `sobran ${formatNumber(1000)} VES, que se quedan en la casa`,
+    );
   });
 
   it('un faltante no deja nota de diferencia dejada a propósito', () => {

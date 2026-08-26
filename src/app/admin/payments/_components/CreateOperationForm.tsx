@@ -478,7 +478,6 @@ export function CreateOperationForm({
     return (
       <ValueDifferenceStep
         difference={difference}
-        table={table}
         choice={choice}
         onChoice={setChoice}
         onBack={() => setDifference(null)}
