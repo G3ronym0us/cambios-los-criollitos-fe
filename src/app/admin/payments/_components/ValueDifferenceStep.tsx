@@ -16,6 +16,12 @@ export interface ValueDifference {
   /** `over`: el comprobante da más de lo que vale la operación. `short`: no la cubre. */
   kind: 'over' | 'short';
   /**
+   * De qué bandeja es el comprobante, que es lo que decide DE QUIÉN es la diferencia: en un
+   * entrante el cliente pagó de más y lo que sobra se queda en la casa; en un saliente la
+   * casa pagó de más y ya se lo llevó el cliente, a costa de la ganancia de la operación.
+   */
+  table: PaymentTable;
+  /**
    * El comprobante está en la moneda CALCULADA del par (un pago móvil en VES de un USD-VES).
    * Solo entonces la diferencia se lee como una tasa distinta a la cotizada; si el
    * comprobante está del lado del valor, lo que sobra es dinero sin asignar y nada más.
@@ -105,6 +111,7 @@ export function buildValueDifference(args: BuildArgs): ValueDifference | null {
   const ratio = typedValue / receiptValue;
   return {
     kind: diffPayment > 0 ? 'over' : 'short',
+    table: args.table,
     onCounterSide,
     suspicious: ratio <= 0.1 || ratio >= 10,
     paymentAmount,
@@ -162,7 +169,12 @@ export function differenceNote(d: ValueDifference, choice: DifferenceChoice): st
     d.effectiveRate != null && d.quotedRate != null
       ? ` La tasa efectiva del pago queda en ${formatNumber(d.effectiveRate)} en vez de ${formatNumber(d.quotedRate)}.`
       : '';
-  return `Diferencia con el comprobante dejada a propósito: sobran ${sobra}.${rate}`;
+  // De quién es la diferencia, que es lo que después hay que poder leer sin rehacer la cuenta.
+  const destino =
+    d.table === 'incoming'
+      ? `sobran ${sobra}, que se quedan en la casa`
+      : `se le pagaron ${sobra} de más al cliente, a costa de la ganancia`;
+  return `Diferencia con el comprobante dejada a propósito: ${destino}.${rate}`;
 }
 
 function Row({
@@ -196,7 +208,6 @@ function Row({
 
 interface ValueDifferenceStepProps {
   difference: ValueDifference;
-  table: PaymentTable;
   choice: DifferenceChoice;
   onChoice: (choice: DifferenceChoice) => void;
   onBack: () => void;
@@ -214,7 +225,6 @@ interface ValueDifferenceStepProps {
  */
 export function ValueDifferenceStep({
   difference: d,
-  table,
   choice,
   onChoice,
   onBack,
@@ -222,7 +232,7 @@ export function ValueDifferenceStep({
   submitting,
 }: ValueDifferenceStepProps) {
   const choices = differenceChoices(d);
-  const paid = table === 'incoming' ? 'El cliente pagó' : 'Se le pagó al cliente';
+  const paid = d.table === 'incoming' ? 'El cliente pagó' : 'Se le pagó al cliente';
   const leftover = d.onCounterSide
     ? `${formatNumber(d.diffPayment)} ${d.paymentCurrency}`
     : `${formatNumber(d.diffValue)} ${d.valueCurrency}`;
@@ -285,11 +295,11 @@ export function ValueDifferenceStep({
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
             <p className="text-xs text-pretty text-amber-800 dark:text-amber-200">
               Si lo dejas así, el cliente habrá{' '}
-              {table === 'incoming' ? 'pagado' : 'recibido'} a{' '}
+              {d.table === 'incoming' ? 'pagado' : 'recibido'} a{' '}
               <strong className="font-semibold">{formatNumber(d.effectiveRate ?? 0)}</strong> en vez
               de <strong className="font-semibold">{formatNumber(d.quotedRate ?? 0)}</strong> — un{' '}
               <strong className="font-semibold">{ratePct.toFixed(2)} %</strong>{' '}
-              {table === 'incoming'
+              {d.table === 'incoming'
                 ? 'peor para él. Es la clase de diferencia que vuelve como reclamo.'
                 : 'a su favor que pone la casa.'}
             </p>
@@ -344,7 +354,9 @@ export function ValueDifferenceStep({
                         : c === 'balance'
                           ? `La operación se queda en ${formatNumber(d.typedValue)} ${d.valueCurrency} y el resto se le acredita al cliente para su próximo cambio.`
                           : d.onCounterSide
-                            ? `Los ${leftover} se quedan en la casa. Queda anotado en la operación quién lo decidió.`
+                            ? d.table === 'incoming'
+                              ? `Los ${leftover} se quedan en la casa. Queda anotado en la operación quién lo decidió.`
+                              : `Se le dieron ${leftover} de más al cliente y la operación gana eso de menos. Queda anotado quién lo decidió.`
                             : `Los ${leftover} quedan sin asignar en el comprobante, para repartirlos después.`}
                     </span>
                   </span>
