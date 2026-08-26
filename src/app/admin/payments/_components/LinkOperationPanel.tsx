@@ -49,6 +49,8 @@ interface LinkOperationPanelProps {
    */
   onPick?: (operation: OperationData) => void;
   pickLabel?: string;
+  /** El alta de operación puede tomar la cabecera del cajón mientras revisa una diferencia. */
+  onHeaderChange?: (header: { title: string; eyebrow: string } | null) => void;
 }
 
 function stripPhone(phone: string | null) {
@@ -120,6 +122,7 @@ export function LinkOperationPanel({
   cancelLabel = 'Cancelar',
   onPick,
   pickLabel = 'Elegir',
+  onHeaderChange,
 }: LinkOperationPanelProps) {
   const [operations, setOperations] = useState<OperationData[]>([]);
   // Puntuación de las candidatas frente a este comprobante: la calcula el backend, con la
@@ -392,6 +395,7 @@ export function LinkOperationPanel({
         table={table}
         onSuccess={onSuccess}
         onBack={() => setMode('pick')}
+        onHeaderChange={onHeaderChange}
       />
     );
   }
