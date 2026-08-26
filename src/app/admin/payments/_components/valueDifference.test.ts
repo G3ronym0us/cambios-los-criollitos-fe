@@ -58,8 +58,38 @@ describe('buildValueDifference — comprobante del lado calculado', () => {
     const d = counterSide(110);
     expect(d!.kind).toBe('short');
     expect(d!.diffPayment).toBe(8150);
-    expect(differenceChoices(d!)).toEqual([]);
     expect(differenceTitle(d!)).toBe(`Faltan ${formatNumber(8150)} VES para esta operación`);
+  });
+
+  it('pagar de menos en un saliente deja elegir entre esperar el resto y quedarse la diferencia', () => {
+    // Caso real: se pagaron 46.250 de los 46.500 que pedía la operación de 50 USD a 930.
+    const d = buildValueDifference({
+      table: 'outgoing',
+      paymentAmount: 46_250,
+      paymentCurrency: 'VES',
+      valueCurrency: 'USD',
+      counterCurrency: 'VES',
+      rate: 930,
+      typedValue: 50,
+      rounding: USD_VES,
+      creditableUsd: () => null,
+    })!;
+    expect(d.kind).toBe('short');
+    expect(d.diffPayment).toBe(250);
+    expect(d.effectiveRate).toBe(925);
+    expect(differenceChoices(d)).toEqual(['partial', 'keep']);
+    // Esperar el resto no cambia el trato; quedarse la diferencia lo cierra a la tasa real.
+    expect(differenceCta(d, 'partial')).toBe('Crear por 50 USD');
+    expect(differenceCta(d, 'keep')).toBe('Crear a 925');
+    expect(differenceNote(d, 'partial')).toBeNull();
+    expect(differenceNote(d, 'keep')).toContain(
+      `se le pagaron ${formatNumber(250)} VES de menos al cliente, a favor de la ganancia`,
+    );
+  });
+
+  it('pagar de menos en un ENTRANTE no ofrece quedarse nada: el que debe es el cliente', () => {
+    const d = counterSide(110, 'incoming');
+    expect(differenceChoices(d!)).toEqual([]);
   });
 
   it('marca como sospechosa la diferencia de un orden de magnitud', () => {
@@ -132,7 +162,9 @@ describe('textos de la decisión', () => {
     );
   });
 
-  it('un faltante no deja nota de diferencia dejada a propósito', () => {
-    expect(differenceNote(counterSide(110)!, 'keep')).toBeNull();
+  it('esperar el resto no deja nota; quedarse la diferencia sí', () => {
+    const faltante = counterSide(110)!;
+    expect(differenceNote(faltante, 'partial')).toBeNull();
+    expect(differenceNote(faltante, 'keep')).toContain('a favor de la ganancia');
   });
 });
