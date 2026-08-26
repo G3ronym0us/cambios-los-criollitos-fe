@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Calculator, ChevronDown, ChevronRight, CircleAlert, Info, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { SidePanelBody, SidePanelFooter } from '@/components/shared/SidePanel';
@@ -21,23 +21,65 @@ import { adminService } from '@/services/adminService';
 import { clientService } from '@/services/clientService';
 import { fundService } from '@/services/fundService';
 import { paymentService } from '@/services/paymentService';
-import { useConfirm } from '@/hooks/useConfirm';
 import { ratesService } from '@/services/ratesService';
 import { operationService } from '@/services/operationService';
 import type { CurrencyPairData } from '@/types/admin';
 import type { ExchangeRateResponse } from '@/types/currency';
 import type { FundGroup } from '@/types/fund';
 import type { PaymentData, PaymentTable } from '@/types/payment';
-import { formatAmountForInput, formatNumber, sanitizeAmountInput } from '@/utils/functions';
+import { formatAmountForInput, sanitizeAmountInput } from '@/utils/functions';
+import {
+  applyRounding,
+  effectiveRate as toEffectiveRate,
+  pairRoundingFrom,
+  quotePair,
+} from '@/utils/rounding';
+import {
+  buildValueDifference,
+  differenceChoices,
+  differenceNote,
+  differenceTitle,
+  ValueDifferenceStep,
+  type DifferenceChoice,
+  type ValueDifference,
+} from './ValueDifferenceStep';
+
+/**
+ * La tasa que el selector muestra junto a cada par: la que el formulario va a aplicar.
+ * Si el par redondea la tasa (modo RATE) se muestra ya redondeada —USD-VES cotiza a 915,
+ * no a los 919,005 crudos del scraper—; en cualquier otro caso, la del par tal cual.
+ */
+function quotedRateOf(rate: ExchangeRateResponse): number {
+  const rounding = pairRoundingFrom(rate);
+  if (rounding?.mode !== 'RATE') return rate.rate;
+  const rounded = applyRounding(
+    toEffectiveRate(rate.rate, rate.inverse_percentage),
+    rounding.step,
+    rounding.direction,
+  );
+  return rounded > 0 ? rounded : rate.rate;
+}
 
 interface CreateOperationFormProps {
   payment: PaymentData;
   table: PaymentTable;
   onSuccess: () => void;
   onBack: () => void;
+  /**
+   * El paso de la diferencia manda en la cabecera del cajón mientras dura: el título pasa a
+   * ser el monto que sobra y el cajón deja de anunciar «vincular a operación». Los hosts que
+   * no la implementan simplemente mantienen su cabecera.
+   */
+  onHeaderChange?: (header: { title: string; eyebrow: string } | null) => void;
 }
 
-export function CreateOperationForm({ payment, table, onSuccess, onBack }: CreateOperationFormProps) {
+export function CreateOperationForm({
+  payment,
+  table,
+  onSuccess,
+  onBack,
+  onHeaderChange,
+}: CreateOperationFormProps) {
   const [pairs, setPairs] = useState<CurrencyPairData[]>([]);
   // Cuántas operaciones lleva ESTE cliente en cada par, y la tasa vigente de todos. Las dos
   // cosas se piden una sola vez al abrir: el selector las necesita para ordenar y para que
@@ -58,9 +100,29 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
   const [fundGroupUuid, setFundGroupUuid] = useState('');
   const [exchangeUserUuid, setExchangeUserUuid] = useState('');
   const [creating, setCreating] = useState(false);
-  const confirm = useConfirm();
+  // Mientras haya diferencia, el cuerpo del cajón es el paso de revisión y no el formulario.
+  const [difference, setDifference] = useState<ValueDifference | null>(null);
+  const [choice, setChoice] = useState<DifferenceChoice>('raise');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
+
+  // Por referencia: así el efecto de abajo depende SOLO del paso, y un host que pase una
+  // función nueva en cada render no lo vuelve a disparar.
+  const headerRef = useRef(onHeaderChange);
+  headerRef.current = onHeaderChange;
+
+  // La cabecera del cajón sigue al paso: mientras dura la revisión el título es el monto que
+  // sobra, y al volver —o al cerrar— el cajón recupera el suyo.
+  useEffect(() => {
+    const notify = headerRef.current;
+    if (!notify) return;
+    notify(
+      difference
+        ? { title: differenceTitle(difference), eyebrow: 'Nueva cotización · paso 2 de 2' }
+        : null,
+    );
+    return () => notify(null);
+  }, [difference]);
 
   useEffect(() => {
     setLoadingData(true);
@@ -105,7 +167,7 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
         new Map(
           res.data.map((r) => [
             r.currency_pair_uuid,
-            { rate: r.rate, updatedAt: r.updated_at ?? r.created_at ?? null },
+            { rate: quotedRateOf(r), updatedAt: r.updated_at ?? r.created_at ?? null },
           ]),
         ),
       );
@@ -168,6 +230,14 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
     else if (cur && cur === toCur.toUpperCase()) setToAmount(String(payment.amount));
   }, [pair, payment.amount, payment.currency, fromCur, toCur]);
 
+  // El redondeo configurado en el par, el mismo que aplican el bot y la calculadora al
+  // cotizar (USD-VES redondea la tasa a múltiplos de 5 hacia abajo: 919,005 → 915). Sin
+  // esto la operación nacía con la tasa cruda y no con la que se le cotizó al cliente.
+  const rounding = useMemo(
+    () => (activeRate && activeRate.currency_pair_uuid === pairUuid ? pairRoundingFrom(activeRate) : null),
+    [activeRate, pairUuid],
+  );
+
   // Misma orientación de tasa que usa la calculadora principal. El monto detectado
   // en el comprobante queda fijo y se calcula el lado opuesto; ambos campos siguen
   // siendo editables para que el operador pueda corregir el resultado.
@@ -177,20 +247,27 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
     if (!Number.isFinite(amount) || amount <= 0 || activeRate.rate <= 0) return;
 
     const cur = (payment.currency || '').toUpperCase();
+    // El lado que trae el comprobante es el input de la cotización: si el pago está en la
+    // moneda de origen se cotiza SEND, y si está en la de destino, RECEIVE.
     if (cur === fromCur.toUpperCase()) {
-      const calculated = activeRate.inverse_percentage ? amount / activeRate.rate : amount * activeRate.rate;
-      setFromAmount(formatAmountForInput(amount));
-      setToAmount(formatAmountForInput(calculated));
+      const quoted = quotePair(amount, activeRate.rate, activeRate.inverse_percentage, 'SEND', rounding);
+      setFromAmount(formatAmountForInput(quoted.fromAmount));
+      setToAmount(formatAmountForInput(quoted.toAmount));
     } else if (cur === toCur.toUpperCase()) {
-      const calculated = activeRate.inverse_percentage ? amount * activeRate.rate : amount / activeRate.rate;
-      setFromAmount(formatAmountForInput(calculated));
-      setToAmount(formatAmountForInput(amount));
+      const quoted = quotePair(amount, activeRate.rate, activeRate.inverse_percentage, 'RECEIVE', rounding);
+      setFromAmount(formatAmountForInput(quoted.fromAmount));
+      setToAmount(formatAmountForInput(quoted.toAmount));
     }
-  }, [activeRate, pair, pairUuid, payment.amount, payment.currency, fromCur, toCur]);
+  }, [activeRate, pair, pairUuid, payment.amount, payment.currency, fromCur, toCur, rounding]);
 
-  const effectiveRate = activeRate
-    ? activeRate.inverse_percentage ? 1 / activeRate.rate : activeRate.rate
-    : null;
+  // Tasa que se le está aplicando al cliente: ya redondeada en modo RATE, que es la que
+  // va a quedar registrada en la operación. En modo AMOUNT la tasa no cambia (el redondeo
+  // cae sobre el monto calculado, no sobre ella).
+  const effectiveRate = useMemo(() => {
+    if (!activeRate) return null;
+    const quoted = quotePair(1, activeRate.rate, activeRate.inverse_percentage, 'SEND', rounding);
+    return toEffectiveRate(quoted.rate, quoted.inverse);
+  }, [activeRate, rounding]);
 
   /**
    * El margen que sale de lo escrito: la tasa a la que se le está pagando al cliente contra
@@ -224,7 +301,7 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
 
   const updateFromAmount = (value: string) => {
     const sanitized = sanitizeAndSetAmount(value, setFromAmount);
-    if (sanitized === null || !effectiveRate || !Number.isFinite(effectiveRate) || effectiveRate <= 0) return;
+    if (sanitized === null || !activeRate || !effectiveRate || !Number.isFinite(effectiveRate) || effectiveRate <= 0) return;
 
     if (sanitized === '') {
       setToAmount('');
@@ -232,12 +309,14 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
     }
 
     const amount = Number(sanitized);
-    if (Number.isFinite(amount)) setToAmount(formatAmountForInput(amount * effectiveRate));
+    if (!Number.isFinite(amount)) return;
+    const quoted = quotePair(amount, activeRate.rate, activeRate.inverse_percentage, 'SEND', rounding);
+    setToAmount(formatAmountForInput(quoted.toAmount));
   };
 
   const updateToAmount = (value: string) => {
     const sanitized = sanitizeAndSetAmount(value, setToAmount);
-    if (sanitized === null || !effectiveRate || !Number.isFinite(effectiveRate) || effectiveRate <= 0) return;
+    if (sanitized === null || !activeRate || !effectiveRate || !Number.isFinite(effectiveRate) || effectiveRate <= 0) return;
 
     if (sanitized === '') {
       setFromAmount('');
@@ -245,7 +324,9 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
     }
 
     const amount = Number(sanitized);
-    if (Number.isFinite(amount)) setFromAmount(formatAmountForInput(amount / effectiveRate));
+    if (!Number.isFinite(amount)) return;
+    const quoted = quotePair(amount, activeRate.rate, activeRate.inverse_percentage, 'RECEIVE', rounding);
+    setFromAmount(formatAmountForInput(quoted.fromAmount));
   };
 
   const withFund = direction === 'SEND';
@@ -275,50 +356,25 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
     setExchangeUserUuid(mgr?.user_uuid ?? '');
   }, [selectedGroup]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Cuánto vale el comprobante en la moneda del valor de la operación: si el pago es del lado
-  // origen, él mismo; si es del lado destino (un Pix en BRL), lo que da la tasa.
-  const paymentValueEquivalent = (() => {
-    if (payment.amount == null) return null;
-    const cur = (payment.currency || '').toUpperCase();
-    if (cur && cur === fromCur.toUpperCase()) return Number(payment.amount);
-    if (cur && cur === toCur.toUpperCase() && effectiveRate && effectiveRate > 0) {
-      return Number(payment.amount) / effectiveRate;
-    }
-    return null;
-  })();
+  /**
+   * Cuánto del sobrante puede irse al saldo del cliente. Solo con comprobante ENTRANTE: ahí
+   * el que pagó de más es el cliente y el saldo queda a su favor. Si la casa pagó de más, lo
+   * que queda es una deuda, y eso no se abre desde aquí. El ledger es en USD, así que solo
+   * los métodos que liquidan en USD pueden alimentarlo.
+   */
+  const creditableUsd = (_diffValue: number, diffPayment: number) => {
+    if (table !== 'incoming') return null;
+    if (settle(payment.currency || '') !== 'USD') return null;
+    const amount = Math.round(diffPayment * 100) / 100;
+    return amount > 0 ? amount : null;
+  };
 
-  const submit = async () => {
-    const fa = parseFloat(fromAmount.replace(',', '.'));
-    const ta = parseFloat(toAmount.replace(',', '.'));
-    if (!pair) return toast.error('Selecciona un par');
-    if (!Number.isFinite(fa) || fa <= 0 || !Number.isFinite(ta) || ta <= 0) {
-      return toast.error('Ingresa montos válidos (> 0)');
-    }
-
-    // El valor no cuadra con el comprobante: puede ser a propósito (el cliente cambia solo una
-    // parte, o este pago cubre menos de lo que vale el trato), pero nunca en silencio.
-    if (paymentValueEquivalent != null && Math.abs(fa - paymentValueEquivalent) > 0.01) {
-      const diff = Math.round(Math.abs(fa - paymentValueEquivalent) * 100) / 100;
-      const above = fa > paymentValueEquivalent;
-      const isIncoming = table === 'incoming';
-      const ok = await confirm({
-        title: above ? 'El valor supera al comprobante' : 'El valor es menor que el comprobante',
-        description:
-          `El comprobante de ${formatNumber(payment.amount ?? 0)} ${payment.currency ?? ''} ` +
-          `equivale a ${formatNumber(paymentValueEquivalent)} ${fromCur} y estás creando la ` +
-          `operación por ${formatNumber(fa)} ${fromCur}. ` +
-          (above
-            ? isIncoming
-              ? `Faltarán ${formatNumber(diff)} ${fromCur} por cubrir con otro pago.`
-              : `La tasa efectiva de este pago quedará en ${formatNumber((Number(payment.amount) || 0) / fa)}.`
-            : isIncoming
-              ? `Quedarán ${formatNumber(diff)} ${fromCur} del comprobante sin asignar: podrás repartirlos a otra operación o acreditarlos al saldo del cliente.`
-              : `La tasa efectiva de este pago quedará en ${formatNumber((Number(payment.amount) || 0) / fa)}.`),
-        confirmText: 'Crear así',
-      });
-      if (!ok) return;
-    }
-
+  const createOperation = async (
+    fa: number,
+    ta: number,
+    notes: string | null,
+    creditUsd: number | null,
+  ) => {
     setCreating(true);
     const res = await paymentService.createOperation(table, payment.id, {
       fromCurrency: fromCur,
@@ -328,15 +384,109 @@ export function CreateOperationForm({ payment, table, onSuccess, onBack }: Creat
       amountSide: direction,
       fundGroupUuid: withFund ? fundGroupUuid || null : null,
       exchangeUserUuid: withFund && fundGroupUuid ? exchangeUserUuid || null : null,
+      notes,
     });
-    setCreating(false);
-    if (res.success) {
-      toast.success('Operación creada y vinculada al pago');
-      onSuccess();
-    } else {
-      toast.error(res.error || 'No se pudo crear la operación');
+    if (!res.success) {
+      setCreating(false);
+      return toast.error(res.error || 'No se pudo crear la operación');
     }
+
+    // El crédito va DESPUÉS de la operación y aparte: si falla, la operación ya existe y lo
+    // que queda es un sobrante sin asignar, que es justo lo que el operador ve y puede
+    // resolver a mano. Callarlo sería peor.
+    if (creditUsd != null) {
+      const credit = await paymentService.creditBalance(payment.id, {
+        amount: creditUsd,
+        notes: 'Sobrante del comprobante al crear la operación',
+      });
+      if (!credit.success) {
+        setCreating(false);
+        toast.error(
+          credit.error || 'La operación se creó, pero el sobrante no se pudo acreditar al saldo',
+        );
+        onSuccess();
+        return;
+      }
+    }
+
+    setCreating(false);
+    toast.success(
+      creditUsd != null
+        ? 'Operación creada y sobrante acreditado al saldo'
+        : 'Operación creada y vinculada al pago',
+    );
+    onSuccess();
   };
+
+  const submit = () => {
+    const fa = parseFloat(fromAmount.replace(',', '.'));
+    const ta = parseFloat(toAmount.replace(',', '.'));
+    if (!pair) return toast.error('Selecciona un par');
+    if (!Number.isFinite(fa) || fa <= 0 || !Number.isFinite(ta) || ta <= 0) {
+      return toast.error('Ingresa montos válidos (> 0)');
+    }
+
+    // El valor no cuadra con el comprobante: puede ser a propósito (el cliente cambia solo una
+    // parte, o este pago cubre menos de lo que vale el trato), pero nunca en silencio. En vez
+    // de un aviso encima del cajón, el cuerpo pasa al paso que plantea la decisión.
+    const diff =
+      effectiveRate && effectiveRate > 0 && payment.amount != null
+        ? buildValueDifference({
+            table,
+            paymentAmount: Number(payment.amount),
+            paymentCurrency: payment.currency || '',
+            valueCurrency: fromCur,
+            counterCurrency: toCur,
+            rate: effectiveRate,
+            typedValue: fa,
+            rounding,
+            creditableUsd,
+          })
+        : null;
+
+    if (diff) {
+      // Sin opciones que ofrecer (falta dinero, o la diferencia huele a tecleo) el paso solo
+      // informa: la única salida que crea algo lo hace con lo que el operador escribió.
+      setChoice(differenceChoices(diff)[0] ?? 'keep');
+      setDifference(diff);
+      return;
+    }
+
+    createOperation(fa, ta, null, null);
+  };
+
+  /** Aplica lo que el operador eligió en el paso de la diferencia y crea la operación. */
+  const confirmDifference = () => {
+    if (!difference) return;
+    const typedFrom = parseFloat(fromAmount.replace(',', '.'));
+    const typedTo = parseFloat(toAmount.replace(',', '.'));
+
+    if (choice === 'raise') {
+      // Subir la operación al comprobante entero. Se manda sin recortar decimales para que la
+      // tasa que quede grabada sea EXACTAMENTE la cotizada, no una aproximada al céntimo.
+      const fa = difference.receiptValue;
+      const ta = difference.onCounterSide ? difference.paymentAmount : fa * (effectiveRate || 0);
+      return createOperation(fa, ta, null, null);
+    }
+    if (choice === 'balance') {
+      return createOperation(typedFrom, typedTo, null, difference.creditableUsd);
+    }
+    return createOperation(typedFrom, typedTo, differenceNote(difference, 'keep'), null);
+  };
+
+  if (difference) {
+    return (
+      <ValueDifferenceStep
+        difference={difference}
+        table={table}
+        choice={choice}
+        onChoice={setChoice}
+        onBack={() => setDifference(null)}
+        onConfirm={confirmDifference}
+        submitting={creating}
+      />
+    );
+  }
 
   if (loadingData) {
     return (

@@ -137,6 +137,9 @@ export function IncomingPaymentDrawer({
   onSaveClientData,
 }: IncomingPaymentDrawerProps) {
   const [step, setStep] = useState<Step>('detail');
+  // Cabecera que un sub-paso hijo (la revisión de la diferencia al crear una operación)
+  // toma prestada mientras dura. `null` = la del paso actual.
+  const [stepHeader, setStepHeader] = useState<{ title: string; eyebrow: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [balanceAmount, setBalanceAmount] = useState('');
   const [balanceNotes, setBalanceNotes] = useState('');
@@ -147,6 +150,7 @@ export function IncomingPaymentDrawer({
   useEffect(() => {
     if (!payment) return;
     setStep('detail');
+    setStepHeader(null);
     setSubmitting(false);
     setCorrecting(false);
     setBalanceAmount(payment.amount != null ? String(payment.amount) : '');
@@ -255,12 +259,27 @@ export function IncomingPaymentDrawer({
           </>
         ) : (
           <>
-            <SidePanelTitle className="text-base font-bold text-foreground">
-              {STEP_META[step].title}
-            </SidePanelTitle>
-            <p className="mt-0.5 text-pretty text-xs text-muted-foreground">
-              {STEP_META[step].subtitle}
-            </p>
+            {stepHeader ? (
+              // Un sub-paso del alta de operación manda en la cabecera: el título es lo que
+              // hay que decidir, y el comprobante de abajo se queda para poder decidirlo.
+              <>
+                <p className="text-[11px] font-semibold text-muted-foreground">
+                  {stepHeader.eyebrow}
+                </p>
+                <SidePanelTitle className="mt-0.5 text-pretty text-base font-bold text-foreground">
+                  {stepHeader.title}
+                </SidePanelTitle>
+              </>
+            ) : (
+              <>
+                <SidePanelTitle className="text-base font-bold text-foreground">
+                  {STEP_META[step].title}
+                </SidePanelTitle>
+                <p className="mt-0.5 text-pretty text-xs text-muted-foreground">
+                  {STEP_META[step].subtitle}
+                </p>
+              </>
+            )}
             <div className="mt-3 flex items-center gap-2.5 rounded-lg border border-border bg-card px-3 py-2">
               <span
                 aria-hidden
@@ -507,6 +526,7 @@ export function IncomingPaymentDrawer({
           onSuccess={finish}
           onCancel={() => setStep('detail')}
           cancelLabel="Volver"
+          onHeaderChange={setStepHeader}
         />
       ) : (
         <>

@@ -224,6 +224,8 @@ export class PaymentService {
       amountSide: 'SEND' | 'RECEIVE';
       fundGroupUuid?: string | null;
       exchangeUserUuid?: string | null;
+      /** Por qué el valor no es el del comprobante, cuando el operador decide dejar la diferencia. */
+      notes?: string | null;
     },
   ): Promise<ApiResponse<unknown>> {
     const result = await httpClient.post<unknown>(
@@ -236,6 +238,7 @@ export class PaymentService {
         amount_side: body.amountSide,
         fund_group_uuid: body.fundGroupUuid ?? null,
         exchange_user_uuid: body.exchangeUserUuid ?? null,
+        notes: body.notes ?? null,
       },
     );
     return { success: result.success, data: result.data, error: result.error };

@@ -71,6 +71,12 @@ export interface ExchangeRateResponse {
   manual_rate: number | null;
   is_manual: boolean;
   automatic_rate: number | null;
+  // Config de redondeo del par: viaja con la tasa para que quien cotice del lado del
+  // cliente (calculadora, alta de operación) dé el mismo número que el bot.
+  rounding_mode?: string | null;
+  rounding_step?: number | null;
+  rounding_direction?: string | null;
+  rounding_amount_side?: string | null;
 }
 
 export interface CurrencyConfig {
