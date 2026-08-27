@@ -163,3 +163,45 @@ export interface ProfitAllocationInput {
   percentage: number;
   notes?: string | null;
 }
+
+/** Un comprobante de salida que podría cubrir la operación, con lo que aún tiene libre. */
+export interface CoverageCandidate {
+  payment_id: number;
+  amount: number | null;
+  free_amount: number;
+  currency: string | null;
+  provider: string | null;
+  reference: string | null;
+  created_at: string;
+}
+
+/** Una parte ya cubierta: qué comprobante, cuánto del valor y a qué tasa. */
+export interface CoverageSettlement {
+  payment_id: number;
+  settled_amount: number;
+  rate: number | null;
+  amount: number | null;
+  currency: string | null;
+}
+
+/**
+ * Cobertura de una operación: qué la cubre ya y con qué podría terminar de cubrirse.
+ * Es el espejo de `OutgoingSettlementSummary`, anclado en la operación en vez de en el pago.
+ */
+export interface OperationCoverage {
+  operation_uuid: string;
+  value: number;
+  value_currency: string;
+  delivered: number;
+  uncovered: number | null;
+  uncovered_reason: string | null;
+  pending: number;
+  reference_rate: number | null;
+  settlements: CoverageSettlement[];
+  candidates: CoverageCandidate[];
+  /** El subconjunto de candidatos que cuadra con lo que falta, o vacío si ninguno lo hace. */
+  suggestion: number[];
+}
+
+export type UncoveredReason = 'CASH' | 'OTHER_CHANNEL' | 'BALANCE' | 'ADJUSTMENT';
+

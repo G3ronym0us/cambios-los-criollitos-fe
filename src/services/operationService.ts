@@ -1,6 +1,8 @@
 import { ApiResponse } from '@/types/auth';
 import { httpClient } from '@/utils/httpInterceptor';
 import {
+  OperationCoverage,
+  UncoveredReason,
   OperationData,
   OperationFilters,
   OperationListResponse,
@@ -62,6 +64,32 @@ export class OperationService {
   // Pagos entrantes y salientes vinculados a la operación (para el detalle).
   async getOperationPayments(uuid: string): Promise<ApiResponse<OperationPayments>> {
     const result = await httpClient.get<OperationPayments>(`/operations/${uuid}/payments`);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  // Qué cubre ya la operación y con qué comprobantes del cliente podría terminar de cubrirse.
+  async getCoverage(uuid: string): Promise<ApiResponse<OperationCoverage>> {
+    const result = await httpClient.get<OperationCoverage>(`/operations/${uuid}/coverage`);
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  /**
+   * Fija con qué comprobantes se cubre la operación.
+   *
+   * El monto en la moneda de salida NO viaja: sale de sumar los comprobantes, y de ahí la
+   * tasa. `partial` distingue «guardo lo que llevo» de «esto ya está cuadrado»; sólo al
+   * cuadrar se deriva la tasa, porque a medias la suma está incompleta.
+   */
+  async setCoverage(
+    uuid: string,
+    data: {
+      payments: { payment_id: number; settled_amount?: number }[];
+      value_amount?: number;
+      uncovered?: { amount: number; reason?: UncoveredReason };
+      partial?: boolean;
+    },
+  ): Promise<ApiResponse<OperationCoverage>> {
+    const result = await httpClient.put<OperationCoverage>(`/operations/${uuid}/coverage`, data);
     return { success: result.success, data: result.data, error: result.error };
   }
 

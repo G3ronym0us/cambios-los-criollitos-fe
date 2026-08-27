@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { SidePanel, SidePanelHeader } from '@/components/shared/SidePanel';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -53,6 +54,7 @@ import type { PaymentData } from '@/types/payment';
 import type { OperationStatus, OrphanAction, UnlinkPreview } from '@/types/operation';
 import { UnlinkOrphanDialog } from '@/app/admin/payments/_components/UnlinkOrphanDialog';
 import { LinkPaymentDialog } from './_components/LinkPaymentDialog';
+import { OperationCoveragePanel } from '../_components/OperationCoveragePanel';
 import { OperationEditDrawer } from './_components/OperationEditDrawer';
 import { PaymentDetailDrawer } from './_components/PaymentDetailDrawer';
 import { useOperationDetail } from './_hooks/useOperationDetail';
@@ -204,6 +206,7 @@ export default function OperationDetailPage() {
   const isModeratorOrAbove = user?.role === Role.MODERATOR || user?.role === Role.ROOT;
   const [editOpen, setEditOpen] = useState(false);
   const [linkPaymentOpen, setLinkPaymentOpen] = useState(false);
+  const [coverageOpen, setCoverageOpen] = useState(false);
   const [editingFund, setEditingFund] = useState(false);
   const [selectedFundUuid, setSelectedFundUuid] = useState(NO_FUND_VALUE);
   const [savingFund, setSavingFund] = useState(false);
@@ -471,6 +474,25 @@ export default function OperationDetailPage() {
         onSave={saveDetails}
       />
 
+      <SidePanel open={coverageOpen} onOpenChange={setCoverageOpen}>
+        <SidePanelHeader>
+          <h2 className="text-base font-semibold text-foreground">Cuadrar la operación</h2>
+          <p className="text-xs text-muted-foreground">
+            Elige los comprobantes que la pagan. La tasa sale de la suma.
+          </p>
+        </SidePanelHeader>
+        {coverageOpen ? (
+          <OperationCoveragePanel
+            operationUuid={operation.uuid}
+            onSaved={() => {
+              setCoverageOpen(false);
+              void reloadPayments();
+            }}
+            onCancel={() => setCoverageOpen(false)}
+          />
+        ) : null}
+      </SidePanel>
+
       <LinkPaymentDialog
         operation={operation}
         open={linkPaymentOpen}
@@ -523,6 +545,17 @@ export default function OperationDetailPage() {
                   {' '}· pendiente {formatNumber(operation.pending_amount ?? 0)}{' '}
                   {operation.currency ?? operation.from_currency}
                 </span>
+                {/* La puerta natural del cuadre: el trato sabe lo que le falta, así que desde
+                    acá se eligen los comprobantes que lo completan en vez de ir a buscarlos
+                    de a uno desde Pagos. */}
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 pl-2 text-xs"
+                  onClick={() => setCoverageOpen(true)}
+                >
+                  Cuadrar con sus comprobantes
+                </Button>
               </p>
             ) : null}
             <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
