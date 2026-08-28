@@ -99,6 +99,18 @@ export interface PaymentData {
   allocated_to_operation?: number | null;
   // solo outgoing: préstamo al cliente originado en este pago.
   loan?: PaymentLoanSummary | null;
+  // los dos lados: el comprobante archivado como depósito al fondo. No vive en el pago sino en
+  // Fondos, pero viaja con la fila porque es lo que la sacó de «Por atender».
+  fund_deposit?: PaymentFundDeposit | null;
+}
+
+export interface PaymentFundDeposit {
+  uuid: string;
+  status: 'PENDING' | 'CONFIRMED' | 'REJECTED';
+  amount: number | null;
+  currency: string | null;
+  group_name: string | null;
+  username: string | null;
 }
 
 export type LoanPreferredValue = 'FIAT' | 'USDT' | 'BCV';

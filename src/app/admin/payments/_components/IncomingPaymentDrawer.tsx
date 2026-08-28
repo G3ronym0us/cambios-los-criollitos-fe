@@ -31,7 +31,7 @@ import { canBeDefaultAccount } from '@/utils/paymentBlock';
 import type { PaymentData, PaymentSuggestion } from '@/types/payment';
 import { CorrectReceiptDialog } from './CorrectReceiptDialog';
 import { LinkOperationPanel } from './LinkOperationPanel';
-import { FundDepositStep } from './FundDepositStep';
+import { FundDepositStep, fundDepositLabel } from './FundDepositStep';
 import { PaymentAllocationsPanel } from './PaymentAllocationsPanel';
 import { describeCorrection, describeCoverage, describePayment, describeSuggestion } from './paymentRowData';
 
@@ -490,7 +490,9 @@ export function IncomingPaymentDrawer({
             <ActionRow
               icon={PiggyBank}
               title="Depósito al fondo"
-              description="El dinero no se retira: queda en el fondo a nombre de un gestor."
+              // `highlight` es ámbar y aquí significa «esto te reclama algo» (lo usa el dinero
+              // sin asignar): un depósito ya hecho no es eso, así que lo dice el texto.
+              description={fundDepositLabel(p)}
               onClick={() => setStep('fundDeposit')}
             />
 

@@ -33,7 +33,7 @@ import { CorrectReceiptDialog } from './CorrectReceiptDialog';
 import { describeCorrection } from './paymentRowData';
 import type { LoanPreferredValue, LoanValuation, PaymentData, PaymentSuggestion } from '@/types/payment';
 import { LinkOperationPanel } from './LinkOperationPanel';
-import { FundDepositStep } from './FundDepositStep';
+import { FundDepositStep, fundDepositLabel } from './FundDepositStep';
 import { OutgoingSettlementsPanel } from './OutgoingSettlementsPanel';
 import { LoanReferenceFields } from '@/components/loans/LoanReferenceFields';
 
@@ -601,10 +601,10 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
               <ChoiceButton
                 icon={PiggyBank}
                 title="Depósito al fondo"
-                description="El dinero no se retira: queda en el fondo a nombre de un gestor."
-                // Sin anillo de "es esto": el depósito no se guarda en el pago sino que abre un
-                // pendiente en Fondos, así que nunca es la clasificación actual del comprobante.
-                active={false}
+                description={fundDepositLabel(payment)}
+                // Lleva anillo como las demás: el depósito entra al fondo en el acto, así que
+                // ES la clasificación del comprobante aunque se guarde en Fondos y no en el pago.
+                active={!!payment.fund_deposit}
                 onClick={() => setStep('fundDeposit')}
               />
               <ChoiceButton

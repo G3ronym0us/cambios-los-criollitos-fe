@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/select';
 import { paymentService } from '@/services/paymentService';
 import { formatNumber } from '@/utils/functions';
-import type { FundDepositSuggestion, PaymentTable } from '@/types/payment';
+import type { FundDepositSuggestion, PaymentTable, PaymentData } from '@/types/payment';
 
 interface FundDepositStepProps {
   table: PaymentTable;
@@ -37,6 +37,22 @@ interface FundDepositStepProps {
  * Monto, moneda y referencia no se editan: son del comprobante. Si el OCR los leyó mal se
  * corrigen en Pagos, donde queda el rastro.
  */
+/**
+ * Qué dice la opción «Depósito al fondo» en la rejilla de acciones. Vive aquí porque el paso ya
+ * es el único componente que comparten el cajón del entrante y el diálogo del saliente, y el
+ * rótulo tiene que decir lo mismo en los dos.
+ */
+export function fundDepositLabel(payment: PaymentData): string {
+  const dep = payment.fund_deposit;
+  if (!dep) return 'El dinero no se retira: queda en el fondo a nombre de un gestor.';
+  return [
+    'Ya está en el fondo',
+    dep.group_name ? ` ${dep.group_name}` : '',
+    dep.username ? ` a nombre de ${dep.username}` : '',
+    '.',
+  ].join('');
+}
+
 export function FundDepositStep({ table, paymentId, onDone, onCancel }: FundDepositStepProps) {
   const [sug, setSug] = useState<FundDepositSuggestion | null>(null);
   const [userUuid, setUserUuid] = useState<string>('');
@@ -71,7 +87,7 @@ export function FundDepositStep({ table, paymentId, onDone, onCancel }: FundDepo
       toast.error(res.error || 'No se pudo registrar el depósito');
       return;
     }
-    toast.success('Depósito registrado · confírmalo en Fondos → Depósitos pendientes');
+    toast.success('Depósito registrado en el fondo');
     onDone();
   };
 
@@ -150,8 +166,9 @@ export function FundDepositStep({ table, paymentId, onDone, onCancel }: FundDepo
           </div>
 
           <p className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
-            Queda <strong className="font-semibold text-foreground">pendiente de confirmar</strong>{' '}
-            en Fondos → Depósitos pendientes, con este comprobante enganchado como evidencia.
+            El dinero <strong className="font-semibold text-foreground">entra al fondo ahora</strong>,
+            con este comprobante enganchado como evidencia. No hay nada que confirmar después:
+            señalarlo aquí ya es decirlo.
           </p>
         </>
       )}
