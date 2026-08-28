@@ -7,6 +7,7 @@ import {
   ArrowRightLeft,
   ChevronRight,
   IdCard,
+  PiggyBank,
   ScanLine,
   Split,
   Sparkles,
@@ -30,6 +31,7 @@ import { canBeDefaultAccount } from '@/utils/paymentBlock';
 import type { PaymentData, PaymentSuggestion } from '@/types/payment';
 import { CorrectReceiptDialog } from './CorrectReceiptDialog';
 import { LinkOperationPanel } from './LinkOperationPanel';
+import { FundDepositStep } from './FundDepositStep';
 import { PaymentAllocationsPanel } from './PaymentAllocationsPanel';
 import { describeCorrection, describeCoverage, describePayment, describeSuggestion } from './paymentRowData';
 
@@ -41,7 +43,7 @@ interface IncomingPaymentDrawerProps {
   onSaveClientData: (payment: PaymentData) => void;
 }
 
-type Step = 'detail' | 'operation' | 'allocations' | 'balance';
+type Step = 'detail' | 'operation' | 'allocations' | 'balance' | 'fundDeposit';
 
 /**
  * Título y subtítulo de cada paso. Viven en la CABECERA, no como un encabezado más dentro
@@ -57,6 +59,11 @@ const STEP_META: Record<Exclude<Step, 'detail'>, { title: string; subtitle: stri
     title: 'Repartir el pago',
     subtitle:
       'Qué parte de este comprobante respalda a cada operación. Lo que quede puede ir al saldo del cliente.',
+  },
+  fundDeposit: {
+    title: 'Depósito al fondo',
+    subtitle:
+      'Alguien que te debe dinero te manda su comprobante y ese dinero no se retira: se queda en el fondo, a tu nombre.',
   },
   balance: {
     title: 'Acreditar como saldo a favor',
@@ -480,6 +487,13 @@ export function IncomingPaymentDrawer({
               />
             ) : null}
 
+            <ActionRow
+              icon={PiggyBank}
+              title="Depósito al fondo"
+              description="El dinero no se retira: queda en el fondo a nombre de un gestor."
+              onClick={() => setStep('fundDeposit')}
+            />
+
             {p.client_uuid && canBeDefaultAccount(p) ? (
               <ActionRow
                 icon={IdCard}
@@ -508,6 +522,15 @@ export function IncomingPaymentDrawer({
               disabled={submitting}
             />
           </div>
+        </SidePanelBody>
+      ) : step === 'fundDeposit' ? (
+        <SidePanelBody>
+          <FundDepositStep
+            table="incoming"
+            paymentId={p.id}
+            onDone={() => { setStep('detail'); onDone(); }}
+            onCancel={() => setStep('detail')}
+          />
         </SidePanelBody>
       ) : step === 'allocations' ? (
         <PaymentAllocationsPanel

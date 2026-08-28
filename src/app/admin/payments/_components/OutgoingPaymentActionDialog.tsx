@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRightLeft, Ban, ChevronRight, HandCoins, Info, Link2, RotateCcw, ScanLine, Split, Tag, TriangleAlert, Wallet } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, Ban, ChevronRight, HandCoins, Info, Link2, PiggyBank, RotateCcw, ScanLine, Split, Tag, TriangleAlert, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   SidePanel,
@@ -33,6 +33,7 @@ import { CorrectReceiptDialog } from './CorrectReceiptDialog';
 import { describeCorrection } from './paymentRowData';
 import type { LoanPreferredValue, LoanValuation, PaymentData, PaymentSuggestion } from '@/types/payment';
 import { LinkOperationPanel } from './LinkOperationPanel';
+import { FundDepositStep } from './FundDepositStep';
 import { OutgoingSettlementsPanel } from './OutgoingSettlementsPanel';
 import { LoanReferenceFields } from '@/components/loans/LoanReferenceFields';
 
@@ -72,6 +73,11 @@ const STEP_META: Record<
     title: () => 'Marcar como gasto personal',
     subtitle: () => 'Queda fuera de las operaciones. Describe de qué fue para el historial.',
   },
+  fundDeposit: {
+    title: () => 'Depósito al fondo',
+    subtitle: () =>
+      'Alguien que te debe dinero te manda su comprobante y ese dinero no se retira: se queda en el fondo, a tu nombre.',
+  },
   irrelevant: {
     title: () => 'Marcar como irrelevante',
     subtitle: () => 'Duplicado o ajeno a las operaciones. Deja constancia del motivo.',
@@ -90,7 +96,7 @@ function defaultLoanReference(paymentCurrency: string, fiatCurrency: string): Lo
   return fiatCurrency === 'VES' ? 'BCV' : 'USDT';
 }
 
-type Step = 'choose' | 'personal' | 'irrelevant' | 'operation' | 'settlements' | 'loan';
+type Step = 'choose' | 'personal' | 'irrelevant' | 'operation' | 'settlements' | 'loan' | 'fundDeposit';
 
 export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConverted }: OutgoingPaymentActionDialogProps) {
   const [step, setStep] = useState<Step>('choose');
@@ -593,6 +599,15 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                 }}
               />
               <ChoiceButton
+                icon={PiggyBank}
+                title="Depósito al fondo"
+                description="El dinero no se retira: queda en el fondo a nombre de un gestor."
+                // Sin anillo de "es esto": el depósito no se guarda en el pago sino que abre un
+                // pendiente en Fondos, así que nunca es la clasificación actual del comprobante.
+                active={false}
+                onClick={() => setStep('fundDeposit')}
+              />
+              <ChoiceButton
                 icon={Ban}
                 title="Irrelevante"
                 description="Duplicado o ajeno a la operación."
@@ -686,6 +701,15 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
           onSaved={finish}
           onCancel={() => setStep('choose')}
         />
+      ) : step === 'fundDeposit' ? (
+        <SidePanelBody>
+          <FundDepositStep
+            table="outgoing"
+            paymentId={payment.id}
+            onDone={finish}
+            onCancel={() => setStep('choose')}
+          />
+        </SidePanelBody>
       ) : step === 'loan' ? (
         <SidePanelBody>
 

@@ -221,3 +221,32 @@ export interface OutgoingCoverage {
   full_rate_difference: number | null;
   full_amount_difference: number | null;
 }
+
+/** Un gestor del fondo, para elegir a nombre de quién queda el depósito. */
+export interface FundDepositMember {
+  user_uuid: string;
+  username: string | null;
+}
+
+/**
+ * Lo que el backend propone para registrar un comprobante como depósito al fondo.
+ *
+ * Nada se teclea: monto, moneda y referencia salen del comprobante; el fondo, del canal por
+ * el que llegó; y el gestor, de quién lo mandó. Los dos últimos son propuestas — el pago 4928
+ * llegó por el chat de Dionis y su depósito es de Diohandres.
+ */
+export interface FundDepositSuggestion {
+  payment_id: number;
+  table: 'incoming' | 'outgoing';
+  amount: number | null;
+  currency: string | null;
+  provider: string | null;
+  reference: string | null;
+  fund_group_uuid: string | null;
+  fund_group_name: string | null;
+  fund_currency: string | null;
+  user_uuid: string | null;
+  username: string | null;
+  members: FundDepositMember[];
+}
+

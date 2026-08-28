@@ -13,6 +13,7 @@ import type {
   PaymentStats,
   PaymentSuggestion,
   PaymentTable,
+  FundDepositSuggestion,
 } from '@/types/payment';
 import type { OrphanAction, UnlinkPreview } from '@/types/operation';
 
@@ -80,6 +81,33 @@ export class PaymentService {
   }
 
   // Reparto de un comprobante de SALIENTE: qué operaciones cubre y con cuánto de cada valor.
+  // Qué fondo y qué gestor proponer para registrar este comprobante como depósito.
+  async fundDepositSuggestion(
+    table: 'incoming' | 'outgoing',
+    paymentId: number,
+  ): Promise<ApiResponse<FundDepositSuggestion>> {
+    const result = await httpClient.get<FundDepositSuggestion>(
+      `/payments/${table}/${paymentId}/fund-deposit`,
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  /**
+   * El comprobante ES el depósito. Monto, moneda y referencia no viajan: salen de él en el
+   * backend. Queda PENDING y se confirma en Fondos como cualquier otro.
+   */
+  async createFundDeposit(
+    table: 'incoming' | 'outgoing',
+    paymentId: number,
+    data: { group_uuid: string; user_uuid: string },
+  ): Promise<ApiResponse<unknown>> {
+    const result = await httpClient.post<unknown>(
+      `/payments/${table}/${paymentId}/fund-deposit`,
+      data,
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
   async getSettlements(paymentId: number): Promise<ApiResponse<OutgoingSettlementSummary>> {
     const result = await httpClient.get<OutgoingSettlementSummary>(
       `/payments/outgoing/${paymentId}/settlements`,
