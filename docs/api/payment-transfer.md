@@ -1,9 +1,11 @@
 # Transferir un pago a otro cliente — contrato de API
 
-El frontend de esta función ya está construido y llama a los dos endpoints de abajo
-(`src/services/paymentService.ts`: `transferClient` y `getTimeline`). **Todavía no existen en el
-backend**: hasta que se implementen, la acción responde error y la bitácora se muestra vacía con
-un aviso en línea. No hay mocks ni flags — en cuanto el backend responda, la pantalla funciona.
+**Implementado** en `cambios-los-criollitos-be`, rama `feat/payment-transfer-client`
+(`PATCH /payments/{table}/{id}/client` y `GET /payments/{table}/{id}/timeline`). Este documento
+se queda como la descripción del contrato que une los dos lados: lo de abajo es lo que el
+backend hace, no lo que debería hacer.
+
+El frontend lo consume desde `src/services/paymentService.ts` (`transferClient`, `getTimeline`).
 
 El caso que resuelve: el comprobante entra a nombre de quien lo mandó, pero el dinero es de otro
 (el esposo pagó por la esposa, la empresa por el empleado, el bot lo pegó al cliente equivocado).
@@ -36,9 +38,23 @@ lado donde el diseño abrió la puerta), pero el servicio ya está tipado para l
 El `PaymentData` completo y ya actualizado — el mismo shape que devuelve
 `PATCH /payments/{table}/{id}/operation`, incluido el bloque `transfer` nuevo (ver §3).
 
+### Cómo está implementado el cambio de dueño
+
+Los pagos **no tienen FK de cliente**: el cliente sale de `client_phone` con un join contra
+`whatsapp_clients`. Así que transferir no podía ser «cambiar el cliente», y reescribir el
+teléfono habría borrado lo que el OCR leyó.
+
+La solución es una columna nueva, `owner_client_id`, en las dos tablas de pagos: un **override**
+del dueño. `client_phone` no se toca nunca. De ahí salen tres propiedades de golpe:
+
+- El pago conserva su identidad — mismo `id`, misma fecha, mismo comprobante.
+- El origen **sigue indexado**: buscar por el nombre del que mandó el dinero lo encuentra igual,
+  porque su join sigue en pie. El listado busca por los dos nombres, origen y destino.
+- Revertir una transferencia es poner la columna a NULL.
+
 ### Qué tiene que hacer, en una sola transacción
 
-1. Reasignar `client_uuid` (y el `client_name` / `client_phone` derivados) al destino.
+1. Poner `owner_client_id` al destino. **`client_phone` no se toca** (ver arriba).
 2. **Conservar la fecha original del pago.** No se toca `created_at`: los reportes del día no
    se pueden mover hacia atrás por una corrección de titularidad.
 3. Si el pago tenía operación: **desvincularla**, dejándola esperando fondos. La operación
@@ -55,30 +71,32 @@ El `PaymentData` completo y ya actualizado — el mismo shape que devuelve
 |---|---|---|
 | `403` | El operador no puede transferir | La fila ya sale deshabilitada; el 403 es la red de seguridad |
 | `409` | El pago ya está conciliado / contado | Igual que arriba: la fila ya sale bloqueada |
-| `422` | `client_uuid` inexistente, o igual al actual | `toast.error` con el mensaje del backend |
+| `404` | `client_uuid` no existe | `toast.error` con el mensaje del backend |
+| `422` | El destino ya es el dueño, o el motivo no es uno de los tres | `toast.error` |
 
 El frontend pinta `error` tal cual en un toast, así que el texto del backend debe estar en
 español y ser legible por un operador.
 
 ### Bloqueos que el frontend ya aplica
 
-Están en `src/app/admin/payments/_components/paymentTransfer.ts` (`canTransferPayment`), con
-tests. **El backend tiene que validarlos igual** — el front solo evita el viaje:
+Están en `src/app/admin/payments/_components/paymentTransfer.ts` (`canTransferPayment`), y el
+backend los valida igual en `_assert_transferable` — el front solo evita el viaje. Los dos lados
+tienen tests:
 
 - `operation_status === 'COMPLETED'` — la operación se entregó y se cerró.
 - `fund_deposit.status === 'CONFIRMED'` — ya está contado en un fondo, a nombre de un gestor.
 - `credited_to_balance > 0.01` — ya se acreditó al saldo del cliente de origen.
 
-Los dos últimos no estaban en el diseño explícitamente; se derivan de «un pago conciliado ya
-movió caja» y se marcaron como decisión a revisar. Si el backend prefiere permitirlos
-(revirtiendo el depósito o el abono), quitar la condición de ese archivo es un cambio de dos
-líneas y los tests dicen exactamente qué se está aflojando.
+Los dos últimos no estaban en el diseño explícitamente: se derivan de «un pago conciliado ya
+movió caja». Si se decide permitirlos (revirtiendo el depósito o el abono), hay que quitar la
+condición **en los dos sitios**, y los tests de cada lado dicen exactamente qué se afloja.
 
 ### Búsqueda
 
-El origen debe **seguir indexado** después de la transferencia: buscar «Yeimar» en la bandeja
-tiene que seguir encontrando el pago aunque ahora sea de Marielys, para que nadie lo dé por
-perdido. La fila la manda el destino; el origen solo tiene que ser encontrable.
+El origen **sigue indexado** después de la transferencia: buscar «Yeimar» en la bandeja
+encuentra el pago aunque ahora sea de Marielys, para que nadie lo dé por perdido. La fila la
+manda el destino; el origen solo tiene que ser encontrable. Sale gratis: `client_phone` sigue
+donde estaba, así que su join no se rompe. El listado busca por los dos nombres.
 
 ---
 
@@ -110,6 +128,13 @@ perdido. La fila la manda el destino; el origen solo tiene que ser encontrable.
 
 La bitácora va plegada en el cajón y solo se pide al abrirla, así que este endpoint no se llama
 en el camino normal — no necesita ser especialmente rápido.
+
+**Limitación conocida:** solo las transferencias son historia de verdad (una fila por salto en
+`whatsapp_payment_transfers`). El resto de las líneas se **derivan del estado actual** — hay una
+de corrección si `corrected_at` está puesto, una de vínculo si hoy tiene operación, una de
+depósito o de saldo si acabó ahí. O sea: se ve QUÉ pasó, no cuántas veces ni en qué orden se
+deshizo. El pago no lleva un log de auditoría general; cuando exista, se sustituye por dentro sin
+tocar el frontend, que ya recibe `title` y `detail` redactados.
 
 ---
 
