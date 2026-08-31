@@ -95,6 +95,7 @@ export function PairDetailForm({
             pairUuid={pair.uuid}
             fromSymbol={pair.from_currency.symbol}
             toSymbol={pair.to_currency.symbol}
+            currentRate={pair.current_rate?.rate ?? null}
           />
         </TabsContent>
       </Tabs>
