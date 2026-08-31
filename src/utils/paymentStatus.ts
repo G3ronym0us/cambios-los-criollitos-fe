@@ -7,6 +7,7 @@
 
 import {
   AlertTriangle,
+  ArrowRight,
   Forward,
   HandCoins,
   Link2Off,
@@ -118,10 +119,20 @@ export function getPaymentStatusMeta(p: PaymentData, outgoing: boolean): Payment
   return { label: 'Sin vincular', tone: 'neutral', icon: Link2Off, attention: true, dashed: true };
 }
 
-/** Insignia secundaria: solo el reenvío, que no compite con ninguna de las de arriba. */
+/**
+ * Insignia secundaria: la que dice de dónde VIENE el comprobante, no qué falta hacerle. Por
+ * eso no compite con ninguna de las de arriba y puede convivir con cualquiera de ellas.
+ *
+ * En el listado la fila la manda el cliente DESTINO —es de quien es el dinero ahora— y esta
+ * insignia es lo único que avisa de que ese pago llegó mudado. Sin ella, un pago transferido
+ * es indistinguible de uno normal y el origen solo se descubre abriendo el cajón.
+ */
 export function getPaymentTag(p: PaymentData, outgoing: boolean) {
   if (outgoing && p.source_payment_id) {
     return { label: 'Reenvío', tone: 'info' as PaymentTone, icon: Forward };
+  }
+  if (p.transfer) {
+    return { label: 'Transferido', tone: 'primary' as PaymentTone, icon: ArrowRight };
   }
   return null;
 }
