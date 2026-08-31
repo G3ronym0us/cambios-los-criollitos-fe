@@ -80,6 +80,15 @@ export interface CurrencyPairData {
   rounding_step?: number | null;
   rounding_direction?: 'UP' | 'DOWN' | null;
   rounding_amount_side?: 'FROM' | 'TO' | null;
+  /**
+   * En qué cifras se habla con el cliente en este par. NO lo aplica nadie
+   * automáticamente —a diferencia de `rounding_step`, que el bot aplica en cada
+   * cotización—: solo alimenta las sugerencias de monto redondo al crear una
+   * cotización a mano. Por eso pueden ser distintos.
+   */
+  negotiation_step?: number | null;
+  /** En qué moneda del par está expresado `negotiation_step`. */
+  negotiation_step_side?: 'FROM' | 'TO' | null;
   /** Solo la llenan el listado y el detalle; en otros endpoints llega `null`. */
   current_rate?: CurrencyPairRateInfo | null;
   created_at: string;
@@ -107,6 +116,8 @@ export interface CreateCurrencyPairData {
   rounding_step?: number | null;
   rounding_direction?: 'UP' | 'DOWN' | null;
   rounding_amount_side?: 'FROM' | 'TO' | null;
+  negotiation_step?: number | null;
+  negotiation_step_side?: 'FROM' | 'TO' | null;
 }
 
 export interface UpdateCurrencyPairData {
@@ -128,6 +139,8 @@ export interface UpdateCurrencyPairData {
   rounding_step?: number | null;
   rounding_direction?: 'UP' | 'DOWN' | null;
   rounding_amount_side?: 'FROM' | 'TO' | null;
+  negotiation_step?: number | null;
+  negotiation_step_side?: 'FROM' | 'TO' | null;
 }
 
 export interface CurrencyPairStatusData {

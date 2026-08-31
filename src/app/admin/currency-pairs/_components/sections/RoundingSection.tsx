@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { NONE, type SectionProps } from './formShared';
+import { NegotiationStepField } from './NegotiationStepField';
 import { RoundingPreview } from './RoundingPreview';
 
 interface RoundingSectionProps extends SectionProps {
@@ -21,6 +22,8 @@ interface RoundingSectionProps extends SectionProps {
   toSymbol: string | null;
   /** Con el uuid del par se previsualiza el efecto usando su tasa actual. */
   pairUuid?: string;
+  /** Tasa vigente, para proponer atajos de múltiplo de negociación con la magnitud correcta. */
+  currentRate?: number | null;
 }
 
 export function RoundingSection({
@@ -31,6 +34,7 @@ export function RoundingSection({
   fromSymbol,
   toSymbol,
   pairUuid,
+  currentRate,
 }: RoundingSectionProps) {
   const watchRoundingMode = watch('rounding_mode');
   const watchRoundingStep = watch('rounding_step');
@@ -226,6 +230,19 @@ export function RoundingSection({
           ) : null}
         </>
       ) : null}
+
+      {/*
+        Fuera del bloque de arriba: el múltiplo de negociación no lo aplica el
+        bot, así que un par sin redondeo configurado también puede tenerlo.
+      */}
+      <NegotiationStepField
+        control={control}
+        watch={watch}
+        setValue={setValue}
+        fromSymbol={fromSymbol}
+        toSymbol={toSymbol}
+        currentRate={currentRate}
+      />
     </div>
   );
 }

@@ -32,6 +32,8 @@ export const defaultValues: CurrencyPairFormData = {
   rounding_step: null,
   rounding_direction: null,
   rounding_amount_side: null,
+  negotiation_step: null,
+  negotiation_step_side: null,
 };
 
 /** El backend serializa los Numeric como string ("3000.0"); los inputs quieren number. */
@@ -64,6 +66,8 @@ export function buildEditDefaults(pair: CurrencyPairData): CurrencyPairFormData 
     rounding_step: toNumber(pair.rounding_step),
     rounding_direction: pair.rounding_direction ?? null,
     rounding_amount_side: pair.rounding_amount_side ?? null,
+    negotiation_step: toNumber(pair.negotiation_step),
+    negotiation_step_side: pair.negotiation_step_side ?? null,
   };
 }
 
