@@ -51,7 +51,11 @@ from app.models.whatsapp_operation import (  # noqa: E402
     WhatsAppOperation,
     WhatsAppOperationStatus,
 )
-from app.models.whatsapp_payment import WhatsAppIncomingPayment  # noqa: E402
+from app.models.whatsapp_payment import (  # noqa: E402
+    WhatsAppIncomingPayment,
+    WhatsAppOutgoingPayment,
+    WhatsAppOutgoingSettlement,
+)
 
 ADMIN_USER = "admin"
 ADMIN_EMAIL = "admin@local.test"
@@ -85,8 +89,15 @@ def client(phone, name, **flags):
 
 
 def operation(owner, pair, amount, currency, to_amount, days_ago,
-              beneficiary="Yelitza Ramírez", paid_days_ago=None):
-    """Una operación sin cubrir. `paid_days_ago` le cuelga un comprobante entrante."""
+              beneficiary="Yelitza Ramírez", paid_days_ago=None, delivered_days_ago=None):
+    """
+    Una operación sin cubrir.
+
+    `paid_days_ago` le cuelga el comprobante ENTRANTE — sin él no es una deuda, sólo un
+    trato apuntado, y ni la lista ni la cuenta deben contarlo. `delivered_days_ago` le
+    cuelga uno SALIENTE que la cubre entera: así queda entregada y con fecha de pago
+    propia, que es por la que ordena el listado de Operaciones.
+    """
     op = WhatsAppOperation(
         client_id=owner.id, currency_pair_id=pair.id,
         amount=amount, currency=currency,
@@ -103,6 +114,18 @@ def operation(owner, pair, amount, currency, to_amount, days_ago,
             client_phone=owner.phone, amount=amount, currency=currency,
             whatsapp_operation_id=op.id, created_at=NOW - timedelta(days=paid_days_ago),
         ))
+    if delivered_days_ago is not None:
+        out = WhatsAppOutgoingPayment(
+            client_phone=owner.phone, amount=to_amount, currency=pair.pair_symbol.split("-")[1],
+            whatsapp_operation_id=op.id, settled_amount=amount,
+            created_at=NOW - timedelta(days=delivered_days_ago),
+        )
+        db.add(out)
+        db.flush()
+        db.add(WhatsAppOutgoingSettlement(
+            outgoing_payment_id=out.id, whatsapp_operation_id=op.id, settled_amount=amount,
+        ))
+        op.status = WhatsAppOperationStatus.COMPLETED
     return op
 
 
@@ -118,16 +141,23 @@ def main():
     # Creada ayer, pero el dinero entró hace 29 días: el caso que separa la
     # fecha del pago de la de la operación.
     operation(katiuska, usdt_ves, 500, "USDT", 142_700, 1, paid_days_ago=29)
-    operation(katiuska, usdt_ves, 300, "USDT", 85_620, 5)
-    operation(katiuska, usdt_ves, 713.33, "USDT", 203_585, 3, beneficiary=None)  # sin beneficiario: no entregable
+    operation(katiuska, usdt_ves, 300, "USDT", 85_620, 5, paid_days_ago=5)
+    # Sin beneficiario: se le debe, pero no se puede dar por entregada.
+    operation(katiuska, usdt_ves, 713.33, "USDT", 203_585, 3, beneficiary=None, paid_days_ago=3)
+    # Registrada hace mucho y pagada anteayer: en Operaciones tiene que salir arriba por la
+    # fecha del comprobante de salida, no hundida por su `created_at`.
+    operation(katiuska, usdt_ves, 120, "USDT", 34_248, 20, paid_days_ago=20, delivered_days_ago=2)
 
     marielys = client("+584125510388@c.us", "Marielys C. Rondón", is_tracked=True)
-    operation(marielys, usdt_ves, 520, "USDT", 148_320, 4)
+    operation(marielys, usdt_ves, 520, "USDT", 148_320, 4, paid_days_ago=4)
 
     bodegon = client("120363@g.us", "Bodegón El Ávila")
-    operation(bodegon, usdt_ves, 315, "USDT", 89_891, 2)
-    operation(bodegon, ves_cop, 89_891, "VES", 21_000, 1)  # dos monedas a la vez
+    operation(bodegon, usdt_ves, 315, "USDT", 89_891, 2, paid_days_ago=2)
+    operation(bodegon, ves_cop, 89_891, "VES", 21_000, 1, paid_days_ago=1)  # dos monedas a la vez
 
+    # Yeimar NO ha pagado: el trato está apuntado y su dinero no ha entrado, así que no se le
+    # debe nada. Tiene que salir sin deuda en la lista y sin fila en su cuenta. Es el caso que
+    # se contaba mal — la pantalla pedía pagar algo que nadie había pagado.
     yeimar = client("+584148829041@c.us", "Yeimar A. Rondón")
     operation(yeimar, zelle_ves, 350, "ZELLE", 292_652, 6)
 

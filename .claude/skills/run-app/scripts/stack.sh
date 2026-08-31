@@ -142,7 +142,13 @@ case "${1:-up}" in
     ;;
   reset)
     start_pg
-    "$PGBIN/psql" -h "$PGSOCK" -p "$PGPORT" -U postgres -c "DROP DATABASE IF EXISTS $DB" >/dev/null
+    # La API mantiene conexiones abiertas y `DROP DATABASE` con una sola conexión viva
+    # falla — y falla en silencio si nadie mira stderr, dejando la base intacta y el
+    # sembrado encima del anterior. Se echan a todos antes de soltar.
+    "$PGBIN/psql" -h "$PGSOCK" -p "$PGPORT" -U postgres -c \
+      "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$DB'" >/dev/null
+    "$PGBIN/psql" -h "$PGSOCK" -p "$PGPORT" -U postgres -c "DROP DATABASE IF EXISTS $DB" \
+      >/dev/null || die "no se pudo borrar la base; para la API con 'stack.sh down' y reintenta"
     ensure_db
     (cd "$BE" && alembic upgrade head >/tmp/alembic.log 2>&1) || { tail -15 /tmp/alembic.log; die "alembic falló"; }
     say "base recreada y migrada"

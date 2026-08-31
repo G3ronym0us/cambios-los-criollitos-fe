@@ -45,6 +45,12 @@ Están resueltas en los scripts; esto es para cuando algo se salga del guion.
 usuario sin privilegios y hacen todo vía `su`. El servidor escucha sólo por
 socket unix en `/tmp/pgsock:5599` — sin TCP, para no chocar con otro Postgres.
 
+**`reset` no borra si la API está viva.** `DROP DATABASE` falla con una sola
+conexión abierta, y falla en silencio: el sembrado siguiente se apila sobre el
+anterior y aparecen operaciones duplicadas que no explica nadie. El script echa
+las conexiones antes de soltar la base y aborta con un mensaje si aun así no
+puede.
+
 **Postgres se muere entre sesiones.** El contenedor recicla procesos pero
 `/tmp/pgdata` sobrevive. Volver a lanzar `stack.sh up` lo relevanta sin perder
 datos; por eso el script es idempotente en vez de fallar si algo ya está vivo.
@@ -74,11 +80,15 @@ Los datos no son de relleno: cada uno existe para que una regla se vea o se caig
 - **Inversiones Katiuska** tiene una operación creada *ayer* cuyo comprobante
   entró hace *29 días*. La antigüedad se mide desde que llegó el dinero, no desde
   que se registró la operación — las que el bot no reconoce se crean a mano días
-  después. En la pestaña «Cuenta» del perfil eso debe leerse 29 d; si dice 1 d,
-  está roto. En el **listado** dice otra cosa a propósito: ahí la deuda se agrega
-  en el navegador por fecha de operación, hasta que consuma el `oldest_at` que ya
-  devuelve el backend. Sin este cliente, mirar la fecha equivocada parece
-  correcto en las dos pantallas.
+  después. Tanto la franja del listado como la pestaña «Cuenta» del perfil deben
+  leer 29 d; si alguna dice 1 d, está mirando la fecha de la operación.
+- Katiuska tiene además una operación **registrada hace 20 días y pagada
+  anteayer**. En Operaciones tiene que salir por su fecha de salida, no hundida
+  al fondo por su `created_at`; en la cuenta del cliente, arriba del todo.
+- **Yeimar A. Rondón** tiene una operación sin cubrir y **sin comprobante
+  entrante**: su dinero no ha llegado, así que no se le debe nada. Tiene que
+  salir sin deuda en la lista y con la cuenta vacía. Si aparece debiendo 350, la
+  pantalla volvió a contar las dos patas del cambio como una.
 - **Bodegón El Ávila** debe en dos monedas a la vez, para ver el desglose
   (`89.891,00 VES + 315,00 USDT`). Una sola cifra ahí sería una suma de monedas
   distintas, que es mentira.
