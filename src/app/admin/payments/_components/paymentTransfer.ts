@@ -76,6 +76,14 @@ export function canTransferPayment(p: PaymentData): TransferBlock {
       reason: 'Parte del pago ya se acreditó al saldo a favor del cliente.',
     };
   }
+  // 4. Solo salientes: el préstamo es una deuda a nombre del cliente de origen, con su
+  //    valuación y sus abonos. Mudar el comprobante dejaría la deuda con quien no la tiene.
+  if (p.loan) {
+    return {
+      allowed: false,
+      reason: 'El pago está registrado como préstamo al cliente de origen.',
+    };
+  }
   return { allowed: true };
 }
 
