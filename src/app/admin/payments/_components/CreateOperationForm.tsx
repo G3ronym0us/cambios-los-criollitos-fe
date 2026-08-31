@@ -298,11 +298,17 @@ export function CreateOperationForm({
   const rateIsHistoric = activeRate != null && activeRate.is_active === false;
 
   /**
-   * Lo que se pliega es el caso normal. Las excepciones se ganan su espacio y salen
-   * abiertas —y se quedan abiertas mientras duren—: si el operador vuelve a entrar, ve
-   * por qué el número no es el del par.
+   * Solo abre solo el caso que obliga a escribir: sin tasa activa no hay nada que cotizar
+   * y el operador tiene que poner los dos montos a mano.
+   *
+   * La tasa histórica y la fijada a mano NO lo abren, aunque el diseño lo pedía: las dos
+   * ya se anuncian en la línea (en ámbar, con su motivo y su salida). Abrirlas dejaba el
+   * bloque desplegado casi siempre —el cajón pide la tasa a fecha del comprobante, así
+   * que `is_active === false` es la norma en cuanto el pago no es de la última corrida— y
+   * eso devolvía los ~230 px que este turno venía a quitar. Fijar la tasa desde un chip
+   * de monto redondo tampoco debe desplegar nada.
    */
-  const rateEditorOpen = showRateEditor || manualRate != null || rateIsHistoric || rateError;
+  const rateEditorOpen = showRateEditor || rateError;
 
   // El redondeo configurado en el par, el mismo que aplican el bot y la calculadora al
   // cotizar (USD-VES redondea la tasa a múltiplos de 5 hacia abajo: 919,005 → 915). Sin
@@ -913,7 +919,8 @@ export function CreateOperationForm({
                     Ajustar
                     <ChevronDown className="h-3 w-3" />
                   </Button>
-                ) : manualRate == null && !rateIsHistoric && !rateError ? (
+                ) : !rateError ? (
+                  // Sin tasa activa el editor no se puede cerrar: es el único camino.
                   <Button
                     type="button"
                     variant="ghost"
