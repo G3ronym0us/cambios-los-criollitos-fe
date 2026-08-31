@@ -2,11 +2,10 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, Check, HandCoins, PartyPopper, RotateCcw } from 'lucide-react';
+import { Check, HandCoins, PartyPopper, RotateCcw } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { LoadingState } from '@/components/shared/LoadingState';
 import { SidePanel, SidePanelHeader } from '@/components/shared/SidePanel';
 import { cn } from '@/lib/utils';
 import { formatCaracasShortDateTime } from '@/utils/functions';
@@ -20,15 +19,16 @@ import {
   pendingTone,
   valueCurrency,
   waitedFor,
+  type PaymentDates,
 } from '../../_lib/pending';
 import { blockedReason, useClientPending } from '../_hooks/useClientPending';
 import { DistributeAmountPanel } from './DistributeAmountPanel';
 
-interface ClientPendingTabProps {
+interface PendingWorkListProps {
+  /** Operaciones del cliente ya acotadas al par elegido en Cuenta. */
   operations: OperationData[];
-  loading: boolean;
-  /** Saldo a favor del cliente, para la nota que separa una cosa de la otra. */
-  hasOpenLoan: boolean;
+  /** Fechas de pago ya resueltas en Cuenta, comunes al hilo y a esta cola. */
+  paymentDates: PaymentDates;
   onChanged: () => void;
 }
 
@@ -198,101 +198,42 @@ function PendingRow({
 }
 
 /**
- * La pestaña «Por entregar»: lo que le debemos al cliente, operación por operación, con
- * las dos maneras de saldarlo.
+ * El filtro «Por entregar» de Cuenta, que no es un histórico sino una cola de trabajo:
+ * pocas filas, todas accionables, de la más vieja a la más nueva.
  *
  * «Cubrir» abre el panel de cobertura de siempre —el que ata comprobantes de verdad—; las
  * casillas y el reparto son el otro camino, el de la entrega en efectivo sin comprobante.
  */
-export function ClientPendingTab({
-  operations,
-  loading,
-  hasOpenLoan,
-  onChanged,
-}: ClientPendingTabProps) {
-  const { state, actions } = useClientPending(operations, onChanged);
+export function PendingWorkList({ operations, paymentDates, onChanged }: PendingWorkListProps) {
+  const { state, actions } = useClientPending(operations, paymentDates, onChanged);
   const [covering, setCovering] = useState<string | null>(null);
-
-  if (loading) return <LoadingState label="Cargando lo que le debemos..." />;
 
   if (state.rows.length === 0) {
     return (
       <EmptyState
         icon={PartyPopper}
         title="No le debemos nada"
-        description="Todas sus operaciones están cubiertas."
+        description="Todas sus operaciones de este par están cubiertas."
       />
     );
   }
 
-  const waited = waitedFor(state.totals.oldest_at);
   const undoableIds = new Set(state.undoable.map((item) => item.operationUuid));
 
   return (
     <div className="space-y-4">
-      <Card className="border-amber-500/30 bg-amber-500/10">
-        <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
-              Le debemos
-            </p>
-            <p className="text-2xl font-bold tabular-nums text-foreground">
-              {formatPendingBreakdown(state.entries)}
-            </p>
-            <p className="text-xs text-muted-foreground tabular-nums">
-              {state.totals.currency != null &&
-              state.totals.payout_amount != null &&
-              state.totals.payout_currency ? (
-                <>≈ {formatPending(state.totals.payout_amount, state.totals.payout_currency)} · </>
-              ) : null}
-              {state.totals.operations}{' '}
-              {state.totals.operations === 1 ? 'operación' : 'operaciones'}
-              {waited ? <> · desde hace {waited}</> : null}
-            </p>
-          </div>
-          <Button
-            variant={state.mode === 'distribute' ? 'default' : 'outline'}
-            onClick={() => actions.setMode(state.mode === 'distribute' ? 'select' : 'distribute')}
-          >
-            <HandCoins className="h-4 w-4" />
-            {state.mode === 'distribute' ? 'Volver a la lista' : 'Repartir un monto'}
-          </Button>
-        </CardContent>
-      </Card>
-
-      {state.pairs.length > 1 ? (
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            aria-pressed={state.pair === ''}
-            onClick={() => actions.setPair('')}
-            className={cn(
-              'min-h-9 rounded-full border px-3 text-xs font-semibold transition-colors',
-              state.pair === ''
-                ? 'border-primary bg-primary text-primary-foreground'
-                : 'border-border bg-card text-muted-foreground hover:bg-muted',
-            )}
-          >
-            Todos los pares
-          </button>
-          {state.pairs.map((pair) => (
-            <button
-              key={pair}
-              type="button"
-              aria-pressed={state.pair === pair}
-              onClick={() => actions.setPair(pair)}
-              className={cn(
-                'min-h-9 rounded-full border px-3 text-xs font-semibold transition-colors',
-                state.pair === pair
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-border bg-card text-muted-foreground hover:bg-muted',
-              )}
-            >
-              {pair}
-            </button>
-          ))}
-        </div>
-      ) : null}
+      {/* Barra de la cola: sólo la acción que cambia de modo. Cuánto se debe y el selector
+          de par están arriba, en la cabecera de Cuenta, comunes a todos los filtros. */}
+      <div className="flex justify-end">
+        <Button
+          variant={state.mode === 'distribute' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => actions.setMode(state.mode === 'distribute' ? 'select' : 'distribute')}
+        >
+          <HandCoins className="h-4 w-4" />
+          {state.mode === 'distribute' ? 'Volver a la lista' : 'Repartir un monto'}
+        </Button>
+      </div>
 
       {state.mode === 'distribute' ? (
         <DistributeAmountPanel state={state} actions={actions} />
@@ -370,19 +311,6 @@ export function ClientPendingTab({
             <RotateCcw className="h-3.5 w-3.5" />
             Deshacer todo lo de esta sesión
           </Button>
-        </div>
-      ) : null}
-
-      {hasOpenLoan ? (
-        <div className="flex items-start gap-2 rounded-lg border border-border bg-card p-3">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden />
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Este cliente además tiene un{' '}
-            <strong className="font-semibold text-foreground">préstamo abierto</strong>. Son cosas
-            distintas: el préstamo es plata que él nos debe, esto es plata que le debemos. No se
-            compensan solas — si quieres cruzarlas, se hace desde la pestaña Préstamos y queda
-            registrado.
-          </p>
         </div>
       ) : null}
 

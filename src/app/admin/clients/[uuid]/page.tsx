@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, Ban, Coins, Eye, HandCoins, Receipt, Truck, Users, UserX, Wallet } from 'lucide-react';
+import { ArrowLeft, Ban, Coins, Eye, HandCoins, Truck, Users, UserX, Wallet } from 'lucide-react';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -11,9 +11,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { cn } from '@/lib/utils';
-import { OperationItem } from '../../operations/_components/OperationItem';
-import { ClientBalanceTab } from './_components/ClientBalanceTab';
-import { ClientPendingTab } from './_components/ClientPendingTab';
+import { ClientAccountTab } from './_components/ClientAccountTab';
 import { ClientSettingsTab } from './_components/ClientSettingsTab';
 import { ClientLoansTab } from './_components/ClientLoansTab';
 import { useClientProfile } from './_hooks/useClientProfile';
@@ -121,22 +119,20 @@ export default function ClientProfilePage() {
         ) : null}
       </div>
 
+      {/* Tres pestañas, no cinco: Transacciones, Por entregar y Saldo eran el mismo hilo
+          contado tres veces y ahora son filtros dentro de Cuenta. Préstamos se queda aparte
+          —vive en tres monedas, se revalúa a diario y tiene abonos anidados—, y
+          Configuración no se toca. */}
       <Tabs defaultValue="settings">
         <TabsList className="h-auto w-full flex-wrap sm:w-auto">
           <TabsTrigger value="settings">Configuración</TabsTrigger>
-          <TabsTrigger value="transactions">
-            Transacciones{!operationsLoading ? ` (${operations.length})` : ''}
-          </TabsTrigger>
-          <TabsTrigger value="pending" className="gap-1.5">
-            Por entregar
+          <TabsTrigger value="account" className="gap-1.5">
+            Cuenta
             {!operationsLoading && pendingTotal.operations > 0 ? (
               <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-bold text-white">
                 {pendingTotal.operations}
               </span>
             ) : null}
-          </TabsTrigger>
-          <TabsTrigger value="balance">
-            Saldo{!balanceLoading && balance ? ` ($${balance.balance.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : ''}
           </TabsTrigger>
           <TabsTrigger value="loans">
             Préstamos{!loansLoading ? ` (${loans.length})` : ''}
@@ -160,37 +156,19 @@ export default function ClientProfilePage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="transactions" className="space-y-3">
-          {operationsLoading ? (
-            <LoadingState label="Cargando transacciones..." />
-          ) : operations.length === 0 ? (
-            <EmptyState
-              icon={Receipt}
-              title="Sin transacciones"
-              description="Este cliente todavía no tiene operaciones registradas."
-            />
-          ) : (
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-              {operations.map((op) => (
-                <OperationItem key={op.uuid} operation={op} />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
         {/* `keepMounted`: el deshacer de la sesión vive en el estado de la pestaña, y sin
             esto cambiar de pestaña y volver lo borraría sin avisar. */}
-        <TabsContent value="pending" keepMounted>
-          <ClientPendingTab
+        <TabsContent value="account" keepMounted>
+          <ClientAccountTab
             operations={operations}
-            loading={operationsLoading}
+            operationsLoading={operationsLoading}
+            balance={balance}
+            balanceLoading={balanceLoading}
+            loanTotals={loanTotals}
             hasOpenLoan={hasOpenLoan}
+            onAdjustBalance={actions.adjustBalance}
             onChanged={actions.reload}
           />
-        </TabsContent>
-
-        <TabsContent value="balance">
-          <ClientBalanceTab balance={balance} loading={balanceLoading} onAdjust={actions.adjustBalance} />
         </TabsContent>
 
         <TabsContent value="loans">
