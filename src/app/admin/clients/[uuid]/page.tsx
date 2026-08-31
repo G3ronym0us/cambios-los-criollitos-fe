@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, Ban, Coins, Eye, HandCoins, Receipt, Users, UserX, Wallet } from 'lucide-react';
+import { ArrowLeft, Ban, Coins, Eye, HandCoins, Receipt, Truck, Users, UserX, Wallet } from 'lucide-react';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -13,9 +13,11 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { cn } from '@/lib/utils';
 import { OperationItem } from '../../operations/_components/OperationItem';
 import { ClientBalanceTab } from './_components/ClientBalanceTab';
+import { ClientPendingTab } from './_components/ClientPendingTab';
 import { ClientSettingsTab } from './_components/ClientSettingsTab';
 import { ClientLoansTab } from './_components/ClientLoansTab';
 import { useClientProfile } from './_hooks/useClientProfile';
+import { formatPendingBreakdown, isPendingOperation, pendingByPair, pendingTotals } from '../_lib/pending';
 
 function isGroup(phone: string) {
   return phone.includes('@g.us');
@@ -79,6 +81,14 @@ export default function ClientProfilePage() {
   const group = isGroup(client.phone);
   const title = client.display_name || formatPhone(client.phone);
 
+  // Lo que le debemos: el trozo sin cubrir de sus operaciones. Se calcula aquí para el
+  // contador de la pestaña y el chip de la cabecera; la pestaña lo recalcula sobre las
+  // mismas operaciones, sin volver a pedirlas.
+  const pendingOperations = operations.filter(isPendingOperation);
+  const pendingEntries = pendingByPair(pendingOperations);
+  const pendingTotal = pendingTotals(pendingEntries);
+  const hasOpenLoan = loans.some((loan) => loan.status === 'OPEN' || loan.status === 'PARTIAL');
+
   return (
     <div className="space-y-6">
       <Link
@@ -101,8 +111,13 @@ export default function ClientProfilePage() {
             ${client.balance.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} a favor
           </StatusBadge>
         ) : null}
-        {loans.some((loan) => loan.status === 'OPEN' || loan.status === 'PARTIAL') ? (
+        {hasOpenLoan ? (
           <StatusBadge tone="warning" icon={HandCoins}>Préstamo pendiente</StatusBadge>
+        ) : null}
+        {pendingTotal.operations > 0 ? (
+          <StatusBadge tone="destructive" icon={Truck}>
+            {formatPendingBreakdown(pendingEntries)} por entregar
+          </StatusBadge>
         ) : null}
       </div>
 
@@ -111,6 +126,14 @@ export default function ClientProfilePage() {
           <TabsTrigger value="settings">Configuración</TabsTrigger>
           <TabsTrigger value="transactions">
             Transacciones{!operationsLoading ? ` (${operations.length})` : ''}
+          </TabsTrigger>
+          <TabsTrigger value="pending" className="gap-1.5">
+            Por entregar
+            {!operationsLoading && pendingTotal.operations > 0 ? (
+              <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-bold text-white">
+                {pendingTotal.operations}
+              </span>
+            ) : null}
           </TabsTrigger>
           <TabsTrigger value="balance">
             Saldo{!balanceLoading && balance ? ` ($${balance.balance.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : ''}
@@ -153,6 +176,17 @@ export default function ClientProfilePage() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        {/* `keepMounted`: el deshacer de la sesión vive en el estado de la pestaña, y sin
+            esto cambiar de pestaña y volver lo borraría sin avisar. */}
+        <TabsContent value="pending" keepMounted>
+          <ClientPendingTab
+            operations={operations}
+            loading={operationsLoading}
+            hasOpenLoan={hasOpenLoan}
+            onChanged={actions.reload}
+          />
         </TabsContent>
 
         <TabsContent value="balance">

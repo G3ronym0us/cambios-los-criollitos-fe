@@ -5,11 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
-import type { ClientData } from '@/types/client';
+import type { ClientRow } from '../_hooks/useClients';
 import { ClientItem } from './ClientItem';
 
 interface ClientsListProps {
-  clients: ClientData[];
+  clients: ClientRow[];
   loading: boolean;
   error: string | null;
   hasActiveFilters: boolean;
@@ -93,8 +93,8 @@ export function ClientsList({
   return (
     <div className="space-y-3">
       <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
-        {clients.map((client) => (
-          <ClientItem key={client.uuid} client={client} />
+        {clients.map(({ client, totals }) => (
+          <ClientItem key={client.uuid} client={client} pending={totals} />
         ))}
       </div>
       {hiddenCount > 0 ? (
