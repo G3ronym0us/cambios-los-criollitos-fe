@@ -13,6 +13,8 @@ import type {
   PaymentStats,
   PaymentSuggestion,
   PaymentTable,
+  PaymentTimelineEntry,
+  PaymentTransferReason,
   FundDepositSuggestion,
 } from '@/types/payment';
 import type { OrphanAction, UnlinkPreview } from '@/types/operation';
@@ -166,6 +168,39 @@ export class PaymentService {
         orphan_note: orphan?.note ?? null,
         settled_amount: settledAmount ?? null,
       },
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  /**
+   * Muda el comprobante a otro cliente. El pago NO se duplica ni se anula: es el mismo `id`
+   * con otro dueño, y conserva su fecha original para que los reportes del día no se muevan.
+   *
+   * El backend, en la misma transacción: reasigna el cliente, desvincula la operación que
+   * tuviera —que queda esperando fondos, nunca se muda con el pago— y escribe la línea de la
+   * bitácora. Responde 409 si el pago ya está conciliado y 403 sin permiso para transferir.
+   */
+  async transferClient(
+    table: PaymentTable,
+    paymentId: number,
+    data: { client_uuid: string; reason: PaymentTransferReason; note?: string | null },
+  ): Promise<ApiResponse<PaymentData>> {
+    const result = await httpClient.patch<PaymentData>(`/payments/${table}/${paymentId}/client`, {
+      client_uuid: data.client_uuid,
+      reason: data.reason,
+      note: data.note?.trim() || null,
+    });
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  // Bitácora del pago, de lo más reciente a lo más viejo. El backend redacta cada línea;
+  // aquí solo se pintan en orden (ver `PaymentTimelineEntry`).
+  async getTimeline(
+    table: PaymentTable,
+    paymentId: number,
+  ): Promise<ApiResponse<{ items: PaymentTimelineEntry[] }>> {
+    const result = await httpClient.get<{ items: PaymentTimelineEntry[] }>(
+      `/payments/${table}/${paymentId}/timeline`,
     );
     return { success: result.success, data: result.data, error: result.error };
   }

@@ -102,6 +102,60 @@ export interface PaymentData {
   // los dos lados: el comprobante archivado como depósito al fondo. No vive en el pago sino en
   // Fondos, pero viaja con la fila porque es lo que la sacó de «Por atender».
   fund_deposit?: PaymentFundDeposit | null;
+  // El pago cambió de dueño en algún momento. Viaja con la fila (y no en una llamada aparte)
+  // porque la insignia del listado y el chip de la cabecera lo necesitan siempre.
+  transfer?: PaymentTransfer | null;
+}
+
+/** Por qué se mudó un pago de cliente. Las etiquetas viven en `_components/paymentTransfer`. */
+export type PaymentTransferReason = 'THIRD_PARTY' | 'BOT_MISMATCH' | 'DUPLICATE_CLIENT';
+
+/**
+ * De dónde salió un pago que se transfirió a otro cliente.
+ *
+ * Es el PRIMER origen, no el anterior: un pago se puede transferir varias veces y lo que
+ * importa en la cabecera es de qué perfil salió realmente. La cadena completa está en la
+ * bitácora (`PaymentTimelineEntry`), que es donde se apilan los saltos intermedios.
+ */
+export interface PaymentTransfer {
+  from_client_uuid: string | null;
+  from_client_name: string | null;
+  from_client_phone: string | null;
+  reason: PaymentTransferReason | null;
+  note: string | null;
+  transferred_at: string | null;
+  /** Operador que la hizo (username), para el chip de la cabecera. */
+  transferred_by: string | null;
+  /** Cuántas transferencias acumula el pago. 1 en el caso normal. */
+  count: number;
+}
+
+/**
+ * Una línea de la bitácora del pago.
+ *
+ * Deliberadamente genérica: el backend redacta `title` y `detail`, y el front solo los pinta
+ * en orden. Así una clase de evento nueva sale en la bitácora sin tocar esta pantalla —
+ * `kind` únicamente elige el color del punto.
+ */
+export type PaymentTimelineKind =
+  | 'TRANSFER'
+  | 'LINK'
+  | 'UNLINK'
+  | 'CORRECTION'
+  | 'DEPOSIT'
+  | 'BALANCE'
+  | 'OTHER';
+
+export interface PaymentTimelineEntry {
+  uuid: string;
+  kind: PaymentTimelineKind;
+  /** Qué pasó, en una línea ("Transferido a otro cliente"). */
+  title: string;
+  /** El detalle largo, ya redactado. `null` cuando el título se basta solo. */
+  detail: string | null;
+  /** Operador que lo hizo, o `null` si fue automático. */
+  actor: string | null;
+  at: string | null;
 }
 
 export interface PaymentFundDeposit {

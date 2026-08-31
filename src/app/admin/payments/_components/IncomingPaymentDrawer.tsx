@@ -7,10 +7,12 @@ import {
   ArrowRightLeft,
   ChevronRight,
   IdCard,
+  Lock,
   PiggyBank,
   ScanLine,
   Split,
   Sparkles,
+  UserRoundCog,
   Wallet,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -25,6 +27,7 @@ import {
   SidePanelTitle,
 } from '@/components/shared/SidePanel';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 import { paymentService } from '@/services/paymentService';
 import { formatNumber } from '@/utils/functions';
 import { canBeDefaultAccount } from '@/utils/paymentBlock';
@@ -33,6 +36,9 @@ import { CorrectReceiptDialog } from './CorrectReceiptDialog';
 import { LinkOperationPanel } from './LinkOperationPanel';
 import { FundDepositStep, fundDepositLabel } from './FundDepositStep';
 import { PaymentAllocationsPanel } from './PaymentAllocationsPanel';
+import { PaymentTimeline, TransferOriginChip } from './PaymentTransferTrail';
+import { TransferClientStep } from './TransferClientStep';
+import { canTransferPayment, canTransferPayments } from './paymentTransfer';
 import { describeCorrection, describeCoverage, describePayment, describeSuggestion } from './paymentRowData';
 
 interface IncomingPaymentDrawerProps {
@@ -43,7 +49,7 @@ interface IncomingPaymentDrawerProps {
   onSaveClientData: (payment: PaymentData) => void;
 }
 
-type Step = 'detail' | 'operation' | 'allocations' | 'balance' | 'fundDeposit';
+type Step = 'detail' | 'operation' | 'allocations' | 'balance' | 'fundDeposit' | 'transfer';
 
 /**
  * Título y subtítulo de cada paso. Viven en la CABECERA, no como un encabezado más dentro
@@ -68,6 +74,11 @@ const STEP_META: Record<Exclude<Step, 'detail'>, { title: string; subtitle: stri
   balance: {
     title: 'Acreditar como saldo a favor',
     subtitle: 'Cada abono posterior se cotiza a la tasa del día y lo descuenta del saldo.',
+  },
+  transfer: {
+    title: 'Transferir a otro cliente',
+    subtitle:
+      'El comprobante y el monto se mudan de perfil, con su fecha original. El pago no se duplica ni se anula, y la mudanza queda escrita en los dos perfiles.',
   },
 };
 
@@ -143,6 +154,7 @@ export function IncomingPaymentDrawer({
   onConverted,
   onSaveClientData,
 }: IncomingPaymentDrawerProps) {
+  const { user } = useAuth();
   const [step, setStep] = useState<Step>('detail');
   // Cabecera que un sub-paso hijo (la revisión de la diferencia al crear una operación)
   // toma prestada mientras dura. `null` = la del paso actual.
@@ -181,6 +193,10 @@ export function IncomingPaymentDrawer({
   const correction = describeCorrection(p);
   const unassigned = p.unassigned_amount ?? 0;
   const balanceEligible = BALANCE_CURRENCIES.has((p.currency || '').toUpperCase());
+  // Dos cosas distintas: si ESTE operador puede transferir, y si ESTE pago admite mudarse.
+  // Se separan porque el motivo que se enseña en la fila deshabilitada no es el mismo.
+  const allowedToTransfer = canTransferPayments(user?.role);
+  const transferBlock = canTransferPayment(p);
 
   const finish = () => {
     onDone();
@@ -313,28 +329,32 @@ export function IncomingPaymentDrawer({
 
       {step === 'detail' ? (
         <SidePanelBody>
-          {/* Quién pagó */}
-          <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
-            <span
-              aria-hidden
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-bold text-muted-foreground"
-            >
-              {initials(d.client) || '?'}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold text-foreground">{d.client}</div>
-              <div className="truncate text-xs text-muted-foreground">
-                {(p.client_phone || '').replace(/@(c|g)\.us$/, '') || 'Sin teléfono'}
-              </div>
-            </div>
-            {p.client_uuid ? (
-              <Link
-                href={`/admin/clients/${p.client_uuid}`}
-                className="shrink-0 text-xs font-semibold text-primary hover:underline"
+          {/* Quién pagó. La tarjeta no es editable a propósito: cambiar de cliente mueve
+              plata entre perfiles y vive abajo, entre las acciones con consecuencias. */}
+          <div className="space-y-2 rounded-xl border border-border bg-card p-3">
+            <div className="flex items-center gap-3">
+              <span
+                aria-hidden
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-bold text-muted-foreground"
               >
-                Ver perfil
-              </Link>
-            ) : null}
+                {initials(d.client) || '?'}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-semibold text-foreground">{d.client}</div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {(p.client_phone || '').replace(/@(c|g)\.us$/, '') || 'Sin teléfono'}
+                </div>
+              </div>
+              {p.client_uuid ? (
+                <Link
+                  href={`/admin/clients/${p.client_uuid}`}
+                  className="shrink-0 text-xs font-semibold text-primary hover:underline"
+                >
+                  Ver perfil
+                </Link>
+              ) : null}
+            </div>
+            <TransferOriginChip payment={p} />
           </div>
 
           {/* Qué leyó el bot */}
@@ -517,6 +537,22 @@ export function IncomingPaymentDrawer({
             />
 
             <ActionRow
+              icon={transferBlock.allowed && allowedToTransfer ? UserRoundCog : Lock}
+              title="Transferir a otro cliente"
+              // Deshabilitada, la fila explica por qué en el sitio donde estaría la promesa:
+              // un candado sin motivo se lee como una función rota.
+              description={
+                !allowedToTransfer
+                  ? 'Tu usuario no tiene permiso para transferir pagos.'
+                  : transferBlock.allowed
+                    ? 'El comprobante y el monto se mudan de perfil. Queda registrado.'
+                    : transferBlock.reason
+              }
+              onClick={() => setStep('transfer')}
+              disabled={!allowedToTransfer || !transferBlock.allowed}
+            />
+
+            <ActionRow
               icon={ArrowRightLeft}
               title="Convertir en pago saliente"
               description="Devuélvelo a Salientes si el bot lo clasificó como entrante por error."
@@ -524,7 +560,16 @@ export function IncomingPaymentDrawer({
               disabled={submitting}
             />
           </div>
+
+          <PaymentTimeline payment={p} table="incoming" />
         </SidePanelBody>
+      ) : step === 'transfer' ? (
+        <TransferClientStep
+          payment={p}
+          table="incoming"
+          onDone={finish}
+          onCancel={() => setStep('detail')}
+        />
       ) : step === 'fundDeposit' ? (
         <SidePanelBody>
           <FundDepositStep
