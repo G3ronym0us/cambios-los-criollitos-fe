@@ -101,6 +101,25 @@ describe('canTransferPayment (estado del comprobante)', () => {
     expect(canTransferPayment(payment({ credited_to_balance: 0 })).allowed).toBe(true);
     expect(canTransferPayment(payment({ credited_to_balance: 0.004 })).allowed).toBe(true);
   });
+
+  it('bloquea el saliente que ya originó un préstamo', () => {
+    // La deuda quedó a nombre del cliente de origen, con su valuación y sus abonos: mudar
+    // el comprobante la dejaría con quien no la tiene.
+    const block = canTransferPayment(
+      payment({
+        loan: {
+          uuid: 'loan-1',
+          status: 'OPEN',
+          preferred_value: 'USDT',
+          preferred_currency: 'USDT',
+          principal_amount: 220,
+          outstanding_amount: 220,
+        },
+      }),
+    );
+    expect(block.allowed).toBe(false);
+    expect(block.allowed === false && block.reason).toMatch(/préstamo/i);
+  });
 });
 
 describe('transferUnlinksOperation', () => {

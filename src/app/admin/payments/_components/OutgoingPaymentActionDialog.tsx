@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRightLeft, Ban, ChevronRight, HandCoins, Info, Link2, PiggyBank, RotateCcw, ScanLine, Split, Tag, TriangleAlert, Wallet } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, Ban, ChevronRight, HandCoins, Info, Link2, Lock, PiggyBank, RotateCcw, ScanLine, Split, Tag, TriangleAlert, UserRoundCog, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   SidePanel,
@@ -24,6 +24,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { paymentService } from '@/services/paymentService';
 import { adminService } from '@/services/adminService';
 import { clientService } from '@/services/clientService';
+import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { formatAmountForInput, formatCaracasDateTime, formatNumber, isUnassignedClientPhone } from '@/utils/functions';
 import { CurrencyType, type CurrencyData } from '@/types/admin';
@@ -35,6 +36,9 @@ import type { LoanPreferredValue, LoanValuation, PaymentData, PaymentSuggestion 
 import { LinkOperationPanel } from './LinkOperationPanel';
 import { FundDepositStep, fundDepositLabel } from './FundDepositStep';
 import { OutgoingSettlementsPanel } from './OutgoingSettlementsPanel';
+import { PaymentTimeline, TransferOriginChip } from './PaymentTransferTrail';
+import { TransferClientStep } from './TransferClientStep';
+import { canTransferPayment, canTransferPayments } from './paymentTransfer';
 import { LoanReferenceFields } from '@/components/loans/LoanReferenceFields';
 
 interface OutgoingPaymentActionDialogProps {
@@ -82,6 +86,11 @@ const STEP_META: Record<
     title: () => 'Marcar como irrelevante',
     subtitle: () => 'Duplicado o ajeno a las operaciones. Deja constancia del motivo.',
   },
+  transfer: {
+    title: () => 'Transferir a otro cliente',
+    subtitle: () =>
+      'El comprobante y el monto se mudan de perfil, con su fecha original. El pago no se duplica ni se anula, y la mudanza queda escrita en los dos perfiles.',
+  },
 };
 
 /**
@@ -96,9 +105,18 @@ function defaultLoanReference(paymentCurrency: string, fiatCurrency: string): Lo
   return fiatCurrency === 'VES' ? 'BCV' : 'USDT';
 }
 
-type Step = 'choose' | 'personal' | 'irrelevant' | 'operation' | 'settlements' | 'loan' | 'fundDeposit';
+type Step =
+  | 'choose'
+  | 'personal'
+  | 'irrelevant'
+  | 'operation'
+  | 'settlements'
+  | 'loan'
+  | 'fundDeposit'
+  | 'transfer';
 
 export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConverted }: OutgoingPaymentActionDialogProps) {
+  const { user } = useAuth();
   const [step, setStep] = useState<Step>('choose');
   // Cabecera que un sub-paso hijo (la revisión de la diferencia al crear una operación)
   // toma prestada mientras dura. `null` = la del paso actual.
@@ -229,6 +247,10 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
     .join(' · ');
 
   const correction = describeCorrection(payment);
+  // Dos cosas distintas: si ESTE operador puede transferir, y si ESTE pago admite mudarse.
+  // Se separan porque el motivo que se enseña en la fila deshabilitada no es el mismo.
+  const allowedToTransfer = canTransferPayments(user?.role);
+  const transferBlock = canTransferPayment(payment);
 
   const finish = () => {
     onDone();
@@ -422,6 +444,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
     active,
     suggested = false,
     onClick,
+    disabled = false,
   }: {
     icon: typeof Link2;
     title: string;
@@ -430,11 +453,13 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
     /** Lo que propone el matcher. Señal distinta de `active`: pueden no coincidir. */
     suggested?: boolean;
     onClick: () => void;
+    /** Deshabilitada por permiso o por estado del pago; la razón va en `description`. */
+    disabled?: boolean;
   }) => (
     <button
       type="button"
       onClick={onClick}
-      disabled={submitting}
+      disabled={submitting || disabled}
       className={cn(
         'flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition-colors disabled:opacity-60',
         'bg-card',
@@ -459,7 +484,14 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
             </span>
           ) : null}
         </span>
-        <span className="block truncate text-[11.5px] text-muted-foreground">{description}</span>
+        <span
+          className={cn(
+            'block text-[11.5px] text-muted-foreground',
+            disabled ? 'text-pretty' : 'truncate',
+          )}
+        >
+          {description}
+        </span>
       </span>
       <ChevronRight
         className={cn('h-4 w-4 shrink-0', active ? 'text-primary' : 'text-muted-foreground')}
@@ -543,6 +575,11 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
       {step === 'choose' ? (
         <>
         <SidePanelBody>
+            {/* El cajón del saliente no tiene ficha de cliente —la cabecera lleva banco y
+                cuenta—, así que el rastro de una mudanza vive aquí arriba, antes de las
+                opciones: es contexto sobre de quién es este pago, no una acción más. */}
+            <TransferOriginChip payment={payment} />
+
             {/* Cinco opciones planas se leían como cinco iguales, y no lo son: dos dejan el
                 pago ligado a un cliente, dos lo sacan de toda operación y la última no es
                 una clasificación sino un arreglo de la lectura del bot. */}
@@ -630,7 +667,10 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
 
             <div className="space-y-1.5">
               <span className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
-                Corregir la lectura del bot
+                {/* Antes decía «Corregir la lectura del bot». Ya no todas lo son: convertir
+                    en entrante y transferir arreglan a QUIÉN o a qué lado pertenece el
+                    comprobante, y un tercero que paga por otro no es un error del bot. */}
+                Corregir el comprobante
               </span>
               <ChoiceButton
                 icon={ScanLine}
@@ -649,6 +689,22 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                 description="Es dinero que entró, no que salió."
                 active={false}
                 onClick={convertToIncoming}
+              />
+              <ChoiceButton
+                icon={transferBlock.allowed && allowedToTransfer ? UserRoundCog : Lock}
+                title="Transferir a otro cliente"
+                // Deshabilitada, la fila explica por qué en el sitio donde estaría la
+                // promesa: un candado sin motivo se lee como una función rota.
+                description={
+                  !allowedToTransfer
+                    ? 'Tu usuario no tiene permiso para transferir pagos.'
+                    : transferBlock.allowed
+                      ? 'El comprobante y el monto se mudan de perfil. Queda registrado.'
+                      : transferBlock.reason
+                }
+                active={false}
+                disabled={!allowedToTransfer || !transferBlock.allowed}
+                onClick={() => setStep('transfer')}
               />
               {/* Texto crudo del OCR: plegado, igual que en el cajón de entrantes. Cuando el
                   monto o el banco salieron mal, es lo único que dice POR QUÉ salieron mal. */}
@@ -675,6 +731,8 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                 </div>
               ) : null}
             </div>
+
+            <PaymentTimeline payment={payment} table="outgoing" />
         </SidePanelBody>
 
         <SidePanelFooter>
@@ -686,6 +744,13 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
           </Button>
         </SidePanelFooter>
         </>
+      ) : step === 'transfer' ? (
+        <TransferClientStep
+          payment={payment}
+          table="outgoing"
+          onDone={finish}
+          onCancel={() => setStep('choose')}
+        />
       ) : step === 'operation' ? (
         <LinkOperationPanel
           payment={payment}
