@@ -13,10 +13,14 @@ export default function OperationsAdminPage() {
     <div className="space-y-6">
       <PageHeader
         title="Operaciones"
-        description="Operaciones del bot de WhatsApp: cotizaciones, pendientes y entregas."
+        description="Cotizaciones del bot, tratos en curso y entregas pendientes."
       />
 
-      <OperationsStats stats={state.stats} />
+      <OperationsStats
+        stats={state.stats}
+        active={state.filters.needs}
+        onPick={(needs) => actions.setFilters({ ...state.filters, needs, segment: 'ALL' })}
+      />
 
       <OperationsFilters
         filters={state.filters}
@@ -30,6 +34,14 @@ export default function OperationsAdminPage() {
         loading={state.loading}
         hasActiveFilters={state.hasActiveFilters}
         onResetFilters={actions.resetFilters}
+        page={state.page}
+        pageSize={state.pageSize}
+        total={state.total}
+        totalPages={state.totalPages}
+        from={state.from}
+        to={state.to}
+        onPageChange={actions.setPage}
+        onPageSizeChange={actions.setPageSize}
       />
     </div>
   );
