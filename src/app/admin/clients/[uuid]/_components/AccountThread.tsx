@@ -120,9 +120,15 @@ function BalanceRow({ entry }: { entry: BalanceEntry }) {
           {formatCaracasShortDateTime(entry.created_at)}
           {entry.created_by_username ? ` · ${entry.created_by_username}` : ''}
         </p>
-        {entry.notes ? (
-          <p className="truncate text-xs text-muted-foreground">{entry.notes}</p>
+        {/* A qué tasa se aplicó el saldo y cuántos bolívares pagó: esta es la única pantalla
+            donde se puede ver, así que no puede perderse. */}
+        {!isCredit && entry.operation_rate_used != null && entry.operation_to_amount != null ? (
+          <p className="text-xs tabular-nums text-muted-foreground">
+            @ {entry.operation_rate_used.toLocaleString('es-VE', { maximumFractionDigits: 4 })} →{' '}
+            {entry.operation_to_amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })} Bs
+          </p>
         ) : null}
+        {entry.notes ? <p className="text-xs text-muted-foreground">{entry.notes}</p> : null}
       </div>
 
       <span

@@ -48,6 +48,22 @@ describe('accountCounts', () => {
 
     expect(counts).toEqual({ all: 5, pending: 1, delivered: 2, balance: 2 });
   });
+
+  it('cuenta lo que el chip va a enseñar de verdad: con par, acotado', () => {
+    const operations = [
+      op({ uuid: 'a', pending_amount: 50 }),
+      op({ uuid: 'b' }),
+      op({ uuid: 'c', pending_amount: 10, pair_symbol: 'VES/COP' }),
+    ];
+    const counts = accountCounts(operations, [entry({ uuid: 'e1' })], 'VES/COP');
+
+    // «Todo» no incluye el saldo porque con un par elegido no se enseña...
+    expect(counts.all).toBe(1);
+    expect(counts.pending).toBe(1);
+    expect(counts.delivered).toBe(0);
+    // ...pero el chip de «Saldo» sí, porque su filtro ignora el par.
+    expect(counts.balance).toBe(1);
+  });
 });
 
 describe('accountThread', () => {
@@ -87,6 +103,12 @@ describe('accountThread', () => {
 
   it('«saldo» sólo trae el ledger', () => {
     expect(keys(accountThread(operations, entries, 'balance'))).toEqual(['bal:e1']);
+  });
+
+  it('«saldo» ignora el par: su selector no se enseña y la lista quedaría vacía sin salida', () => {
+    expect(keys(accountThread(operations, entries, 'balance', { pair: 'USD/VES' }))).toEqual([
+      'bal:e1',
+    ]);
   });
 
   it('el par acota las operaciones y deja fuera el saldo, que no pertenece a ninguno', () => {

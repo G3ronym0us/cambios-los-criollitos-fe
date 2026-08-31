@@ -43,15 +43,24 @@ export interface AccountCounts {
   balance: number;
 }
 
+/**
+ * Los números de los chips.
+ *
+ * Cuentan exactamente lo que cada chip va a enseñar, `pair` incluido: un chip que dice 4 y
+ * abre una lista de 1 es peor que no tener número. «Saldo» es la excepción y no se acota,
+ * porque su filtro tampoco mira el par (ver `accountThread`).
+ */
 export function accountCounts(
   operations: OperationData[],
   entries: BalanceEntry[],
+  pair?: string,
 ): AccountCounts {
-  const pending = operations.filter(isPendingOperation).length;
+  const scoped = pair ? operations.filter((op) => op.pair_symbol === pair) : operations;
+  const pending = scoped.filter(isPendingOperation).length;
   return {
-    all: operations.length + entries.length,
+    all: scoped.length + (pair ? 0 : entries.length),
     pending,
-    delivered: operations.length - pending,
+    delivered: scoped.length - pending,
     balance: entries.length,
   };
 }
@@ -72,7 +81,11 @@ export function accountThread(
   filter: AccountFilter,
   options: { pair?: string; dates?: PaymentDates } = {},
 ): AccountItem[] {
-  const { pair, dates } = options;
+  const { dates } = options;
+  // En «Saldo» el par no pinta nada —el saldo a favor es un ledger en USD, no es de ningún
+  // par— y además su selector ni se enseña: hacerle caso dejaría la lista vacía sin manera
+  // visible de arreglarlo.
+  const pair = filter === 'balance' ? '' : options.pair;
   const items: AccountItem[] = [];
 
   if (filter !== 'balance') {
@@ -90,9 +103,9 @@ export function accountThread(
     }
   }
 
-  // Los movimientos de saldo no pertenecen a ningún par —el saldo a favor es un ledger en
-  // USD—, así que con un par elegido no hay nada que enseñar de ellos.
-  if ((filter === 'all' || filter === 'balance') && !pair) {
+  // En «Todo» con un par elegido los movimientos de saldo no encajan y se quedan fuera; en
+  // «Saldo» el par ya se ha ignorado arriba, así que siempre salen.
+  if ((filter === 'all' && !pair) || filter === 'balance') {
     for (const entry of entries) {
       items.push({ kind: 'balance', key: `bal:${entry.uuid}`, at: entry.created_at, entry });
     }

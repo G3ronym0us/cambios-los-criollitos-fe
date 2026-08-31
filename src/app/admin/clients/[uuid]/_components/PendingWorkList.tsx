@@ -14,6 +14,7 @@ import { OperationCoveragePanel } from '../../../operations/_components/Operatio
 import {
   formatPending,
   formatPendingBreakdown,
+  isPendingOperation,
   payoutEquivalent,
   pendingSince,
   pendingTone,
@@ -102,6 +103,8 @@ function PendingRow({
   const currency = valueCurrency(operation);
   const pending = operation.pending_amount ?? 0;
   const delivered = operation.delivered_amount ?? 0;
+  // Ya no debe nada: sigue en la cola sólo para poder deshacerla.
+  const done = !isPendingOperation(operation);
   const payout = payoutEquivalent(operation);
   const waited = waitedFor(since);
   const alert = pendingTone(since) === 'destructive';
@@ -110,7 +113,7 @@ function PendingRow({
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-2 py-2 last:border-b-0 sm:px-3">
       <Checkbox
         checked={checked}
-        disabled={!!blocked}
+        disabled={!!blocked || done}
         label={`Seleccionar operación ${operation.uuid.slice(0, 8)}`}
         onChange={onToggle}
       />
@@ -123,7 +126,11 @@ function PendingRow({
           >
             {operation.uuid.slice(0, 8)}
           </Link>
-          {waited ? (
+          {done ? (
+            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+              Entregada
+            </span>
+          ) : waited ? (
             <span
               className={cn(
                 'text-xs font-semibold',
@@ -161,7 +168,11 @@ function PendingRow({
           <span
             className={cn(
               'text-sm font-bold',
-              alert ? 'text-destructive' : 'text-amber-700 dark:text-amber-400',
+              done
+                ? 'text-muted-foreground'
+                : alert
+                  ? 'text-destructive'
+                  : 'text-amber-700 dark:text-amber-400',
             )}
           >
             {formatPending(pending, currency)}

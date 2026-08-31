@@ -167,7 +167,7 @@ export default function ClientProfilePage() {
             loanTotals={loanTotals}
             hasOpenLoan={hasOpenLoan}
             onAdjustBalance={actions.adjustBalance}
-            onChanged={actions.reload}
+            onChanged={actions.reloadOperations}
           />
         </TabsContent>
 

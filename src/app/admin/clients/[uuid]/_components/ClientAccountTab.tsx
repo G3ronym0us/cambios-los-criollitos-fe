@@ -153,7 +153,10 @@ export function ClientAccountTab({
   const paymentDates = usePaymentDates(operations);
 
   const entries = useMemo(() => balance?.entries ?? [], [balance]);
-  const counts = useMemo(() => accountCounts(operations, entries), [operations, entries]);
+  const counts = useMemo(
+    () => accountCounts(operations, entries, pair),
+    [operations, entries, pair],
+  );
   const pairs = useMemo(() => accountPairs(operations), [operations]);
 
   const scopedOperations = useMemo(
@@ -173,7 +176,8 @@ export function ClientAccountTab({
   const pendingTotal = pendingTotals(pendingEntries);
   const waited = waitedFor(pendingTotal.oldest_at);
 
-  if (operationsLoading || balanceLoading) return <LoadingState label="Cargando la cuenta..." />;
+  const firstLoad = (operationsLoading && operations.length === 0) || (balanceLoading && !balance);
+  if (firstLoad) return <LoadingState label="Cargando la cuenta..." />;
 
   const owed = loanTotals?.by_reference ?? [];
 
@@ -266,15 +270,19 @@ export function ClientAccountTab({
         </p>
       ) : null}
 
-      {filter === 'pending' ? (
+      {/* Los dos modos se quedan montados y se esconde el inactivo. Renderizar sólo uno
+          desmontaba la cola de trabajo en cada clic de chip, y con ella lo seleccionado, el
+          monto escrito y lo que se podía deshacer. */}
+      <div hidden={filter !== 'pending'}>
         <PendingWorkList
           operations={scopedOperations}
           paymentDates={paymentDates}
           onChanged={onChanged}
         />
-      ) : (
+      </div>
+      <div hidden={filter === 'pending'}>
         <AccountThread items={items} emptyLabel={EMPTY_LABEL[filter]} />
-      )}
+      </div>
 
       {hasOpenLoan && filter === 'pending' ? (
         <div className="flex items-start gap-2 rounded-lg border border-border bg-card p-3">

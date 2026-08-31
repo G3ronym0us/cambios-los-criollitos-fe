@@ -59,7 +59,20 @@ export function useClientPending(
    */
   const [undoable, setUndoable] = useState<CoverageSnapshot[]>([]);
 
-  const pending = useMemo(() => operations.filter(isPendingOperation), [operations]);
+  const undoableIds = useMemo(
+    () => new Set(undoable.map((item) => item.operationUuid)),
+    [undoable],
+  );
+
+  /**
+   * Lo que sigue a la vista en la cola: lo que falta por entregar MÁS lo que se acaba de
+   * marcar en esta sesión. Sin lo segundo, marcar una fila la hace desaparecer y con ella su
+   * botón de deshacer justo cuando hace falta — que es el segundo siguiente.
+   */
+  const pending = useMemo(
+    () => operations.filter((op) => isPendingOperation(op) || undoableIds.has(op.uuid)),
+    [operations, undoableIds],
+  );
 
   /** La cola de trabajo: de la más vieja a la más nueva, que es el orden en que se reparte. */
   const rows = useMemo(() => {
@@ -75,8 +88,14 @@ export function useClientPending(
   const entries = useMemo(() => pendingByPair(rows, paymentDates), [rows, paymentDates]);
   const totals = useMemo(() => pendingTotals(entries), [entries]);
 
-  /** Las que sí se pueden marcar: «seleccionar todas» nunca incluye a las trabadas. */
-  const selectable = useMemo(() => rows.filter((op) => blockedReason(op) === null), [rows]);
+  /**
+   * Las que sí se pueden marcar: ni las trabadas por falta de datos, ni las que ya se
+   * marcaron en esta sesión y sólo siguen ahí para poder deshacerlas.
+   */
+  const selectable = useMemo(
+    () => rows.filter((op) => isPendingOperation(op) && blockedReason(op) === null),
+    [rows],
+  );
 
   const selectedRows = useMemo(
     () => selectable.filter((op) => selected.has(op.uuid)),
@@ -97,7 +116,12 @@ export function useClientPending(
 
   /** Las trabadas por falta de datos: no reciben reparto, pero se siguen debiendo. */
   const blocked = useMemo(
-    () => new Set(rows.filter((op) => blockedReason(op) !== null).map((op) => op.uuid)),
+    () =>
+      new Set(
+        rows
+          .filter((op) => !isPendingOperation(op) || blockedReason(op) !== null)
+          .map((op) => op.uuid),
+      ),
     [rows],
   );
 
@@ -110,7 +134,10 @@ export function useClientPending(
   const distributeCurrency = totals.currency;
 
   const distributableRows = useMemo(
-    () => (distributeCurrency ? rows.filter((op) => valueCurrency(op) === distributeCurrency) : []),
+    () =>
+      distributeCurrency
+        ? rows.filter((op) => isPendingOperation(op) && valueCurrency(op) === distributeCurrency)
+        : [],
     [rows, distributeCurrency],
   );
 
