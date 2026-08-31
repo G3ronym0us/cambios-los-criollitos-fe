@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Calculator, ChevronDown, ChevronRight, CircleAlert, Info, Plus } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, ChevronUp, CircleAlert, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { SidePanelBody, SidePanelFooter } from '@/components/shared/SidePanel';
 import { Button } from '@/components/ui/button';
@@ -36,6 +36,7 @@ import {
   rateDecimals,
   type AmountSide,
 } from '@/utils/rounding';
+import { roundOptions, type RoundOption } from './roundAmounts';
 import {
   buildValueDifference,
   differenceChoices,
@@ -148,6 +149,12 @@ export function CreateOperationForm({
   const [difference, setDifference] = useState<ValueDifference | null>(null);
   const [choice, setChoice] = useState<DifferenceChoice>('raise');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // La tasa siempre está a la vista; lo que se pliega es el EDITOR. En la mayoría de las
+  // cotizaciones nadie lo toca —el par ya trae su tasa, ya redondeada— y ocupaba ~230 px
+  // por encima de los montos, que son el trabajo.
+  const [showRateEditor, setShowRateEditor] = useState(false);
+  // El monto redondo con el que se fijó la tasa, para que la línea diga de dónde sale.
+  const [roundedTo, setRoundedTo] = useState<number | null>(null);
   const [loadingData, setLoadingData] = useState(true);
 
   // Por referencia: así el efecto de abajo depende SOLO del paso, y un host que pase una
@@ -253,6 +260,9 @@ export function CreateOperationForm({
     setActiveRate(null);
     // La tasa propia era de la cotización anterior: con otro par no significa nada.
     setManualRate(null);
+    // Y con ella se va el editor abierto y el redondeo que la había fijado.
+    setShowRateEditor(false);
+    setRoundedTo(null);
     setDerivedExact(null);
     // La tasa del DÍA DEL COMPROBANTE, no la de hoy: al cliente se le cotizó cuando pagó, y
     // un pago de la mañana leído por la tarde cambiaba de trato solo porque la tasa se movió.
@@ -286,6 +296,13 @@ export function CreateOperationForm({
   // La tasa que se pidió a fecha del comprobante ya no es la vigente: la desactivó la
   // siguiente. Es la señal más directa de que se está cotizando con la de aquel día.
   const rateIsHistoric = activeRate != null && activeRate.is_active === false;
+
+  /**
+   * Lo que se pliega es el caso normal. Las excepciones se ganan su espacio y salen
+   * abiertas —y se quedan abiertas mientras duren—: si el operador vuelve a entrar, ve
+   * por qué el número no es el del par.
+   */
+  const rateEditorOpen = showRateEditor || manualRate != null || rateIsHistoric || rateError;
 
   // El redondeo configurado en el par, el mismo que aplican el bot y la calculadora al
   // cotizar (USD-VES redondea la tasa a múltiplos de 5 hacia abajo: 919,005 → 915). Sin
@@ -486,6 +503,7 @@ export function CreateOperationForm({
     const rate = Number(sanitized);
     if (sanitized === '' || !Number.isFinite(rate) || rate <= 0) return;
     setManualRate(rate);
+    setRoundedTo(null);
     if (baseEffectiveRate) setMarginInput(formatMarginForInput((1 - rate / baseEffectiveRate) * 100));
     requote(rate);
   };
@@ -501,6 +519,7 @@ export function CreateOperationForm({
     const rate = baseEffectiveRate * (1 - margin / 100);
     if (!Number.isFinite(rate) || rate <= 0) return;
     setManualRate(rate);
+    setRoundedTo(null);
     setRateInput(formatRateForInput(rate));
     requote(rate);
   };
@@ -509,6 +528,7 @@ export function CreateOperationForm({
   const resetToPairRate = () => {
     if (!pairEffectiveRate) return;
     setManualRate(null);
+    setRoundedTo(null);
     setRateInput(formatRateForInput(pairEffectiveRate));
     setMarginInput(
       baseEffectiveRate ? formatMarginForInput((1 - pairEffectiveRate / baseEffectiveRate) * 100) : '',
@@ -520,9 +540,54 @@ export function CreateOperationForm({
   const useBaseRate = () => {
     if (!baseEffectiveRate) return;
     setManualRate(baseEffectiveRate);
+    setRoundedTo(null);
     setRateInput(formatRateForInput(baseEffectiveRate));
     setMarginInput('0');
     requote(baseEffectiveRate);
+  };
+
+  /**
+   * Montos redondos para el lado libre — el que NO trae el comprobante.
+   *
+   * Solo hay fila si el par define un múltiplo de negociación Y ese múltiplo está en la
+   * moneda del lado libre: si el comprobante ya fija esa moneda, no hay nada que redondear.
+   */
+  const roundSuggestions = useMemo(() => {
+    if (!pair) return [];
+    const stepSide = pair.negotiation_step_side;
+    const freeIsFrom = anchorSide === 'RECEIVE';
+    if (!stepSide || (freeIsFrom ? stepSide !== 'FROM' : stepSide !== 'TO')) return [];
+
+    const anchorAmount = Number((anchorSide === 'SEND' ? fromAmount : toAmount).replace(',', '.'));
+    const typedFree = Number((freeIsFrom ? fromAmount : toAmount).replace(',', '.'));
+    // El lado calculado sin recortar es más fiel que lo que se ve en el campo.
+    const freeAmount = derivedExact ?? typedFree;
+
+    return roundOptions({
+      anchorAmount,
+      freeAmount,
+      anchorSide,
+      step: pair.negotiation_step,
+      baseEffectiveRate,
+      currentMargin: rawMargin,
+    });
+  }, [pair, anchorSide, fromAmount, toAmount, derivedExact, baseEffectiveRate, rawMargin]);
+
+  /** La moneda en la que se está negociando, para etiquetar la fila y los chips. */
+  const freeCur = anchorSide === 'RECEIVE' ? fromCur : toCur;
+
+  /**
+   * Elegir un chip es exactamente fijar la tasa a mano: el lado del comprobante no se
+   * mueve, así que llevar el otro a un número redondo cambia la tasa del trato.
+   */
+  const applyRoundAmount = (option: RoundOption) => {
+    setManualRate(option.rate);
+    setRoundedTo(option.amount);
+    setRateInput(formatRateForInput(option.rate));
+    if (baseEffectiveRate) {
+      setMarginInput(formatMarginForInput((1 - option.rate / baseEffectiveRate) * 100));
+    }
+    requote(option.rate);
   };
 
   const withFund = direction === 'SEND';
@@ -764,8 +829,121 @@ export function CreateOperationForm({
           />
         </div>
 
-        {pair && activeRate ? (
+        {pair && (activeRate || rateError) ? (
           <div className="space-y-2">
+            {/* La línea: el dato que el operador sí necesita ver cabe en 44 px. */}
+            <div
+              className={cn(
+                'flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border px-3 py-2',
+                rateError
+                  ? 'border-destructive/30 bg-destructive/10'
+                  : manualRate != null || rateIsHistoric
+                    ? 'border-amber-500/30 bg-amber-500/10'
+                    : 'border-border bg-card',
+              )}
+            >
+              <span className="flex min-w-0 flex-col">
+                {rateError ? (
+                  <span className="text-sm font-medium text-destructive">
+                    Sin tasa activa para {fromCur}/{toCur}
+                  </span>
+                ) : loadingRate ? (
+                  <span className="text-sm text-muted-foreground">
+                    Calculando con la tasa del comprobante…
+                  </span>
+                ) : (
+                  <span className="text-sm text-foreground tabular-nums">
+                    1 {fromCur} ={' '}
+                    <strong className="font-bold">
+                      {effectiveRate && Number.isFinite(effectiveRate)
+                        ? effectiveRate.toLocaleString('es-VE', { maximumFractionDigits: 6 })
+                        : '—'}
+                    </strong>{' '}
+                    {toCur}
+                  </span>
+                )}
+                <span
+                  className={cn(
+                    'text-xs',
+                    rateError
+                      ? 'text-destructive'
+                      : manualRate != null || rateIsHistoric
+                        ? 'text-amber-700 dark:text-amber-400'
+                        : 'text-muted-foreground',
+                  )}
+                >
+                  {rateError
+                    ? 'escribe los dos montos a mano; la operación nacerá sin margen deducido'
+                    : rateIsHistoric && manualRate == null
+                      ? 'tasa del día del comprobante, no la de hoy'
+                      : [
+                          roundedTo != null
+                            ? `fijada al redondear a ${formatAmountForInput(roundedTo)} ${freeCur}`
+                            : manualRate != null
+                              ? 'fijada a mano'
+                              : null,
+                          registeredMargin != null
+                            ? `margen ${registeredMargin.toLocaleString('es-VE', { maximumFractionDigits: 2 })} %`
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ') || 'la tasa del par'}
+                </span>
+              </span>
+
+              <span className="flex shrink-0 items-center gap-2">
+                {!rateError && manualRate == null && !rateIsHistoric ? (
+                  <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[0.65rem] font-bold tracking-wide text-emerald-700 dark:text-emerald-400">
+                    DEL PAR
+                  </span>
+                ) : null}
+                {manualRate != null && pairEffectiveRate ? (
+                  <Button type="button" variant="ghost" size="sm" className="h-8" onClick={resetToPairRate}>
+                    Volver a la del par
+                  </Button>
+                ) : null}
+                {!rateEditorOpen ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-primary"
+                    onClick={() => setShowRateEditor(true)}
+                  >
+                    Ajustar
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                ) : manualRate == null && !rateIsHistoric && !rateError ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-primary"
+                    onClick={() => setShowRateEditor(false)}
+                  >
+                    Cerrar
+                    <ChevronUp className="h-3 w-3" />
+                  </Button>
+                ) : null}
+              </span>
+            </div>
+
+            {/* Solo sobrevive el cartel que sí es noticia: el margen que NO se registra. */}
+            {rawMargin !== null && registeredMargin === null ? (
+              <p className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  {rawMargin < 0
+                    ? `Le estás pagando por encima de la tasa (${rawMargin.toLocaleString('es-VE', { maximumFractionDigits: 2 })} %): la operación va a perder y no se registra margen.`
+                    : 'La tasa no se parece a la del par: la operación va a nacer sin margen.'}
+                </span>
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {pair && activeRate && rateEditorOpen ? (
+          <div className="space-y-2 rounded-lg border border-primary/40 p-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="op-rate">
@@ -848,67 +1026,47 @@ export function CreateOperationForm({
           </div>
         </div>
 
-        {pair ? (
-          <div className="flex gap-2.5 rounded-lg border border-border bg-muted/35 px-3 py-2.5 text-xs">
-            {rateError ? (
-              <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-            ) : (
-              <Calculator className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-            )}
-            <div className="space-y-0.5">
-              <p className="font-medium text-foreground">
-                {loadingRate
-                  ? 'Calculando con la tasa del comprobante…'
-                  : rateError
-                    ? 'No hay una tasa activa para este par'
-                    : manualRate != null
-                      ? 'Monto calculado con la tasa que fijaste'
-                      : rateIsHistoric
-                        ? 'Monto calculado con la tasa del día del comprobante'
-                        : 'Monto calculado con la tasa actual'}
-              </p>
-              <p className="text-muted-foreground">
-                {effectiveRate && Number.isFinite(effectiveRate)
-                  ? `1 ${fromCur} = ${effectiveRate.toLocaleString('es-VE', { maximumFractionDigits: 6 })} ${toCur}. Al modificar un monto, el otro se recalcula automáticamente.`
-                  : 'Puedes indicar ambos montos manualmente.'}
-              </p>
-              {rawMargin !== null ? (
-                <p className="pt-0.5 text-muted-foreground">
-                  Margen que se registrará:{' '}
-                  <span
-                    className={cn(
-                      'font-mono font-semibold tabular-nums',
-                      registeredMargin === null
-                        ? 'text-amber-600 dark:text-amber-400'
-                        : registeredMargin === 0
-                          ? 'text-foreground'
-                          : 'text-emerald-600 dark:text-emerald-400',
-                    )}
-                  >
-                    {registeredMargin !== null
-                      ? `${registeredMargin.toLocaleString('es-VE', { maximumFractionDigits: 2 })}%`
-                      : 'ninguno'}
-                  </span>
-                  {registeredMargin === null
-                    ? rawMargin < 0
-                      ? ` — le estás pagando por encima de la tasa (${rawMargin.toLocaleString('es-VE', { maximumFractionDigits: 2 })}%), la operación va a perder y no se registra margen`
-                      : ' — la tasa no se parece a la del par, la operación va a nacer sin margen'
-                    : registeredMargin === 0
-                      ? ' — sin ganancia, como una operación personal'
-                      : ''}
-                </p>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-
-        {pair ? (
-          <div className="flex gap-2.5 rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2.5 text-xs">
-            <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-700 dark:text-sky-400" />
-            <p className="text-muted-foreground">
-              Estado al crear: <span className="font-semibold text-foreground">{creationStatus.label}</span>.{' '}
-              {creationStatus.detail}
-            </p>
+        {roundSuggestions.length > 0 ? (
+          <div className="-mt-1 flex flex-wrap items-center gap-2">
+            <span className="text-xs whitespace-nowrap text-muted-foreground">
+              Redondear a{' '}
+              <strong className="font-bold text-foreground tabular-nums">
+                {formatAmountForInput(pair!.negotiation_step!)}
+              </strong>
+            </span>
+            {roundSuggestions.map((option) => (
+              <button
+                key={option.amount}
+                type="button"
+                onClick={() => applyRoundAmount(option)}
+                title={`Deja la tasa en ${option.rate.toLocaleString('es-VE', { maximumFractionDigits: 6 })} ${toCur} por ${fromCur}`}
+                className={cn(
+                  'flex min-h-11 items-center gap-1.5 rounded-lg border px-2.5 whitespace-nowrap transition-colors sm:min-h-8',
+                  option.recommended
+                    ? 'border-primary bg-card'
+                    : option.registers
+                      ? 'border-border bg-card hover:bg-muted/60'
+                      : 'border-destructive/40 bg-card hover:bg-destructive/5',
+                )}
+              >
+                <span className="text-xs font-bold text-foreground tabular-nums">
+                  {formatAmountForInput(option.amount)}
+                </span>
+                <span
+                  className={cn(
+                    'text-xs font-bold tabular-nums',
+                    option.registers
+                      ? option.recommended
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-muted-foreground'
+                      : 'text-destructive',
+                  )}
+                >
+                  {option.margin > 0 ? '+' : ''}
+                  {option.margin.toLocaleString('es-VE', { maximumFractionDigits: 2 })} %
+                </span>
+              </button>
+            ))}
           </div>
         ) : null}
 
@@ -989,6 +1147,17 @@ export function CreateOperationForm({
       </SidePanelBody>
 
       <SidePanelFooter>
+        {/*
+          Es la consecuencia de pulsar el botón, así que se lee junto al botón y no
+          300 px más arriba. `w-full` le da su propia fila sin romper los dos botones.
+        */}
+        {pair ? (
+          <p className="w-full text-xs text-muted-foreground">
+            Se creará <span className="font-semibold text-foreground">{creationStatus.label}</span>
+            {' — '}
+            {creationStatus.detail}
+          </p>
+        ) : null}
         <Button variant="ghost" onClick={onBack} disabled={creating}>
           <ArrowLeft className="h-4 w-4" />
           Volver
