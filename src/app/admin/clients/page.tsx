@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { ClientsStats } from './_components/ClientsStats';
 import { ClientsFilters } from './_components/ClientsFilters';
 import { ClientsList } from './_components/ClientsList';
+import { ClientsPendingSummary } from './_components/ClientsPendingSummary';
 import { NewEntityDialog } from './_components/NewEntityDialog';
 import { useClients } from './_hooks/useClients';
 
@@ -38,9 +39,21 @@ export default function ClientsAdminPage() {
       <ClientsFilters
         filters={state.filters}
         hasActiveFilters={state.hasActiveFilters}
+        pairs={state.pairs}
         onChange={actions.setFilters}
         onReset={actions.resetFilters}
       />
+
+      {/* La franja sólo tiene sentido cuando hay deuda a la vista que resumir. */}
+      {!state.pendingLoading && state.pendingSummary.clients > 0 ? (
+        <ClientsPendingSummary
+          clients={state.pendingSummary.clients}
+          totals={state.pendingSummary.totals}
+          capped={state.pendingSummary.capped}
+          sort={state.sort}
+          onSort={actions.setSort}
+        />
+      ) : null}
 
       <ClientsList
         clients={state.clients}

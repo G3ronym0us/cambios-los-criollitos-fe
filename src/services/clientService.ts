@@ -26,6 +26,10 @@ export class ClientService {
     if (filters.search) params.append('search', filters.search);
     if (filters.is_blocked != null) params.append('is_blocked', String(filters.is_blocked));
     if (filters.is_tracked != null) params.append('is_tracked', String(filters.is_tracked));
+    // Todavía no los resuelve el servidor (ver `docs/api/clients-pending.md`): viajan para
+    // que el día que existan la lista deje de filtrar en memoria sin tocar el servicio.
+    if (filters.has_pending != null) params.append('has_pending', String(filters.has_pending));
+    if (filters.pair) params.append('pair', filters.pair);
 
     const qs = params.toString();
     const result = await httpClient.get<ClientListResponse>(qs ? `/clients?${qs}` : '/clients');

@@ -17,6 +17,14 @@ export interface ClientData {
   linked_group_jid: string | null;
   // Saldo a favor en USD (ledger de abonos); 0 si no tiene.
   balance: number;
+  /**
+   * Deuda por entregar, agrupada por par. Hoy el backend NO lo manda: lo rellena el front
+   * agregando las operaciones sin cubrir (`src/app/admin/clients/_lib/pending.ts`), con el
+   * techo que eso implica. `docs/api/clients-pending.md` describe el campo que lo traerá
+   * resuelto del servidor — cuando llegue, la agregación del front se borra y esto se lee
+   * tal cual.
+   */
+  pending_by_pair?: ClientPendingByPair[] | null;
   last_seen_at: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -162,6 +170,22 @@ export interface ClientAccountUpdate {
   is_confirmed?: boolean;
 }
 
+// Lo que le debemos al cliente en un par: el trozo de sus operaciones que ningún
+// comprobante de salida cubre todavía. Los montos van en la moneda del VALOR del trato
+// (`OperationData.currency`, el lado que entrega el cliente), que es la unidad de
+// `pending_amount`; `payout_*` es el equivalente en la moneda con la que se paga, derivado
+// de la tasa cotizada — se muestra con "≈", no se suma ni se ordena por él.
+export interface ClientPendingByPair {
+  pair_symbol: string;
+  currency: string;
+  amount: number;
+  operations: number;
+  /** La operación más vieja sin cubrir, para medir cuánto lleva esperando. */
+  oldest_at: string | null;
+  payout_currency: string | null;
+  payout_amount: number | null;
+}
+
 export interface ClientListResponse {
   items: ClientData[];
   total: number;
@@ -187,4 +211,8 @@ export interface ClientFilters {
   search?: string;
   is_blocked?: boolean;
   is_tracked?: boolean;
+  /** Solo los que tienen algo sin entregar. Ver `docs/api/clients-pending.md`. */
+  has_pending?: boolean;
+  /** Símbolo del par ("USD/VES") al que acotar `has_pending` y `pending_by_pair`. */
+  pair?: string;
 }
