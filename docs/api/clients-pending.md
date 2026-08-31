@@ -1,9 +1,8 @@
 # Lo que le debemos al cliente («por entregar») — contrato de API
 
-**Pendiente en el backend.** A diferencia de `payment-transfer.md`, esto no describe algo que ya
-existe: es lo que el frontend necesita y todavía no tiene. La pantalla está construida y funciona
-sin ello —con los apaños que se detallan abajo y sus límites reales—, así que esto es la lista de
-lo que hay que implementar para que deje de ser un apaño.
+**Estado: §1 y §3 implementados; §2 todavía no.** La lectura —la deuda agregada por el servidor y
+la fecha del pago en la operación— ya existe y el frontend la consume tal cual. La escritura sigue
+siendo un apaño sobre `PUT /operations/{uuid}/coverage`, con los límites que se detallan en §2.
 
 El frontend lo consume desde `src/app/admin/clients/_lib/pending.ts` (la lectura) y
 `_lib/pendingDelivery.ts` (la escritura). Esos dos archivos son los únicos que hay que tocar.
@@ -11,9 +10,21 @@ El frontend lo consume desde `src/app/admin/clients/_lib/pending.ts` (la lectura
 ## De qué estamos hablando
 
 «Por entregar» es la plata que le debemos al cliente: el trozo del valor de una operación que
-ningún comprobante de salida cubre todavía, o sea `operations.pending_amount > 0`. Es exactamente
-la misma bandeja que el listado de Operaciones llama **«por cuadrar»** (`needs=settle`), leída
-desde el lado del cliente en vez del lado de la operación.
+ningún comprobante de salida cubre todavía (`operations.pending_amount > 0`) **y cuyo dinero ya
+entró**. Es casi la misma bandeja que el listado de Operaciones llama **«por cuadrar»**
+(`needs=settle`), leída desde el lado del cliente en vez del lado de la operación.
+
+Esa segunda condición es lo que separa una deuda de un trato en el papel. `pending_amount` sale de
+los comprobantes de SALIDA: mide lo que no le hemos pagado. Pero no le debemos nada hasta que su
+plata llega — una operación registrada sin comprobante entrante es una cotización o un trato a
+medio armar. Contarlas mezclaba las dos patas del cambio y hacía que la lista pidiera pagar cosas
+que nadie había pagado. La regla vive en `ClientPendingService._pending_query` (un join, no un
+outerjoin, contra los entrantes) y el front la repite exacta en `isPendingOperation`; si divergen,
+la lista dice que se le debe a alguien y su perfil lo niega.
+
+Una `QUOTED` con el dinero adentro cuenta —que no le hayan movido el estado no cambia que su plata
+llegó—; una `COMPLETED` no, aunque le falte cobertura: está cerrada, y lo que le falte es un
+descuadre que se arregla en la operación.
 
 > **Cuidado con el nombre.** La tarjeta «por entregar» del listado de Operaciones es OTRA cosa:
 > `delivery_status`, el efectivo que falta mover en mano. Son dos conceptos y hoy comparten
@@ -26,9 +37,9 @@ que este contrato agrega o filtra va en esa moneda. El equivalente en moneda de 
 
 ---
 
-## 1. `GET /clients` — deuda por cliente
+## 1. `GET /clients` — deuda por cliente ✅ implementado
 
-### Campo nuevo en cada `ClientData`
+### Campo en cada `ClientData`
 
 ```json
 "pending_by_pair": [
@@ -53,7 +64,7 @@ que ninguna.
 
 `oldest_at` debe ser la fecha del **comprobante entrante**, no la de la operación. Ver §3.
 
-### Parámetros nuevos
+### Parámetros
 
 | Parámetro | Tipo | Qué hace |
 |---|---|---|
@@ -63,17 +74,20 @@ que ninguna.
 `pair` recorta lo que se ve del cliente, no sólo qué clientes salen: con `pair=USD/VES`, un cliente
 que además debe en VES/COP devuelve sólo la entrada de USD/VES.
 
-### Por qué hace falta
+### Por qué hacía falta
 
-Hoy el frontend pide las operaciones sin cubrir (`GET /operations?needs=settle&limit=500`) y las
-agrupa por `client_uuid` en memoria. Pasado ese techo **los totales mienten**: no se quedan cortos
-de forma visible, dicen un número menor como si fuera el bueno. La pantalla avisa cuando lo toca
-(`total > operations.length`), pero es un aviso, no una solución. Ordenar por monto tiene el mismo
-problema, porque ordena sobre lo que cupo.
+El frontend pedía las operaciones sin cubrir (`GET /operations?needs=settle&limit=500`) y las
+agrupaba por `client_uuid` en memoria. Pasado ese techo **los totales mentían**: no se quedaban
+cortos de forma visible, decían un número menor como si fuera el bueno. Y contaban tratos que el
+cliente no había pagado, porque `needs=settle` no mira los entrantes.
+
+El listado ya no manda `pair` al servidor aunque el parámetro exista: acota lo que devuelve, y con
+él puesto el selector de pares se quedaría con una sola opción. Se pide la deuda entera y se
+recorta en memoria, que es filtrar un array que ya está en la mano.
 
 ---
 
-## 2. Marcar entregado — el endpoint que falta
+## 2. Marcar entregado — el endpoint que falta ⏳ pendiente
 
 El diseño pide tres cosas que hoy no existen: marcar un lote de operaciones de una vez, repartir un
 monto entre ellas, y deshacer con rastro.
@@ -172,13 +186,20 @@ monedas a la vista la pantalla pide elegir un par antes de dejar repartir.
 
 ---
 
-## 3. La fecha del pago en la operación — lo que arregla el orden
+## 3. La fecha del pago en la operación — lo que arregla el orden ✅ implementado
 
 ```
 GET /operations  →  "first_incoming_payment_at": "2026-08-24T14:02:00Z"
+                    "last_outgoing_payment_at": "2026-08-26T09:30:00Z"
 ```
 
-Un campo por operación con la fecha de su primer comprobante entrante (`null` si no tiene).
+Dos campos por operación (`null` si no hay comprobante de ese lado): cuándo entró el dinero del
+cliente —su primer entrante, mirando tanto el FK del pago como el reparto— y cuándo salió el
+nuestro —el último saliente, porque un trato pagado en dos veces no está pagado hasta el último—.
+
+El listado del admin además ordena por el saliente: `GET /operations?order_by=paid`, que es su
+predeterminado (el bot sigue con `created`). Tiene que resolverse en SQL y no en el navegador,
+porque la lista viene paginada y reordenar una página ya recortada sólo reordena esas 25 filas.
 
 ### Por qué
 
@@ -191,18 +212,12 @@ No es sólo un orden feo. El reparto de un monto va **de la más vieja a la más
 orden equivocado aplica el dinero a la operación equivocada, y «la más vieja lleva N esperando»
 miente en el sentido que más importa: hacia abajo.
 
-### Qué hace el frontend mientras tanto
+### Qué hacía el frontend mientras tanto
 
-En el **perfil del cliente** lo resuelve: pide `GET /operations/{uuid}/payments` por cada operación
-sin cubrir y se queda con el entrante más antiguo (`src/app/admin/clients/_lib/paymentDates.ts`).
-Son pocas operaciones y son de un solo cliente, así que el coste está acotado. De ahí salen el
-orden, la antigüedad de cada fila y el orden del reparto.
-
-En el **listado de clientes** no se puede: serían cientos de peticiones. Ahí `oldest_at` sigue
-saliendo de la fecha de la operación, así que el orden por antigüedad y el «la más vieja lleva N»
-de la franja se quedan cortos precisamente para las operaciones creadas a mano. Es la razón
-principal para implementar este campo: con él, la agregación del §1 sale bien de una vez y el
-frontend deja de pedir pagos uno por uno.
+En el perfil pedía `GET /operations/{uuid}/payments` por cada operación sin cubrir y se quedaba con
+el entrante más antiguo. En el listado no se podía —serían cientos de peticiones—, así que
+`oldest_at` salía de la fecha de la operación y se quedaba corto justo para las creadas a mano. Con
+el campo, las dos pantallas leen lo mismo y esa resolución uno por uno se borró.
 
 ### El límite que ni esto arregla
 

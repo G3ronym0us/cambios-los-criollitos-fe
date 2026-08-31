@@ -100,7 +100,7 @@ export function OperationsList({
           <span>Tasa</span>
           <span>Cobertura</span>
           <span>Estado</span>
-          <span>Creada</span>
+          <span>Fecha</span>
         </div>
 
         {operations.map((op) => (

@@ -54,7 +54,7 @@ export default function ClientsAdminPage() {
         />
 
         {/* La franja sólo tiene sentido cuando hay deuda a la vista que resumir. */}
-        {!state.pendingLoading && state.pendingSummary.clients > 0 ? (
+        {!state.loading && state.pendingSummary.clients > 0 ? (
           <ClientsPendingSummary
             clients={state.pendingSummary.clients}
             totals={state.pendingSummary.totals}

@@ -18,11 +18,9 @@ export interface ClientData {
   // Saldo a favor en USD (ledger de abonos); 0 si no tiene.
   balance: number;
   /**
-   * Deuda por entregar, agrupada por par. Hoy el backend NO lo manda: lo rellena el front
-   * agregando las operaciones sin cubrir (`src/app/admin/clients/_lib/pending.ts`), con el
-   * techo que eso implica. `docs/api/clients-pending.md` describe el campo que lo traerá
-   * resuelto del servidor — cuando llegue, la agregación del front se borra y esto se lee
-   * tal cual.
+   * Deuda por entregar, agrupada por par, ya resuelta en el servidor
+   * (`ClientPendingService`): viene con el cliente, tanto en el listado como en el perfil.
+   * Vacío = no se le debe nada.
    */
   pending_by_pair?: ClientPendingByPair[] | null;
   last_seen_at: string | null;

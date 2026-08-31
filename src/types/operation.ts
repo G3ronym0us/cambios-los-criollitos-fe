@@ -70,6 +70,14 @@ export interface OperationData {
   cancelled_at: string | null;
   created_at: string;
   updated_at: string | null;
+  /**
+   * Cuándo llegó el dinero del cliente (su primer comprobante entrante) y cuándo salió el
+   * nuestro (el último saliente). Ninguna de las dos es `created_at`: una operación que el
+   * bot no reconoció se arma a mano días después de que el dinero se moviera.
+   * `null` = no tiene comprobante de ese lado.
+   */
+  first_incoming_payment_at: string | null;
+  last_outgoing_payment_at: string | null;
   has_incoming_payment?: boolean;
   has_outgoing_payment?: boolean;
 }

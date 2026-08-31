@@ -8,7 +8,8 @@ import type { OperationData } from '@/types/operation';
  * —`pending_amount`—, que es justo lo que el listado de Operaciones llama «por cuadrar»
  * (`needs=settle`). Cuidado con el nombre: la tarjeta «por entregar» de esa pantalla es
  * OTRA cosa (`delivery_status`, el efectivo que falta mover en mano). Aquí, y en el
- * módulo de Clientes entero, «por entregar» = `pending_amount > 0`.
+ * módulo de Clientes entero, «por entregar» = `pending_amount > 0` **y su dinero ya
+ * entró**.
  *
  * ### En qué moneda
  *
@@ -18,11 +19,13 @@ import type { OperationData } from '@/types/operation';
  * (`payout_amount`) sale de multiplicar por la tasa cotizada: se muestra con «≈» y no se
  * agrega jamás, porque la tasa real la fijan los comprobantes.
  *
- * ### De dónde salen los datos
+ * ### Sólo si su dinero ya entró
  *
- * Hoy se agregan en el front a partir de las operaciones sin cubrir. El servidor no tiene
- * el agregado (`docs/api/clients-pending.md` lo especifica), así que los totales valen
- * hasta el techo de operaciones que se pidan de una vez.
+ * Una operación sin comprobante entrante no es una deuda: es un trato apuntado del que
+ * todavía no hemos recibido nada, y contarlo mezcla las dos patas del cambio —lo que él nos
+ * manda y lo que nosotros le pagamos— en una sola cifra que no es ninguna de las dos. El
+ * servidor aplica la misma regla en el agregado (`client_pending_service`, join a los
+ * entrantes), así que la lista y el perfil dicen lo mismo.
  */
 
 /** Pasados estos días la espera deja de ser ámbar y se pinta de rojo. */
@@ -31,9 +34,25 @@ export const PENDING_ALERT_DAYS = 3;
 /** Debajo de esto es ruido de redondeo, no deuda. */
 const EPSILON = 0.01;
 
-/** ¿Esta operación tiene algo sin cubrir que de verdad haya que entregar? */
+/** ¿Ya nos entró el dinero de este trato? */
+export function hasIncomingPayment(op: OperationData): boolean {
+  return op.first_incoming_payment_at != null;
+}
+
+/**
+ * ¿Esta operación tiene algo sin cubrir que de verdad haya que entregar?
+ *
+ * Es LA definición de la pantalla y tiene que decir exactamente lo mismo que
+ * `ClientPendingService._pending_query` en el servidor, que es quien la calcula para el
+ * listado: si divergen, la lista dice que se le debe a alguien y su perfil lo niega.
+ *
+ * Una `QUOTED` con el dinero adentro cuenta: que el operador no le haya movido el estado no
+ * cambia que su plata llegó y no ha salido. Una `COMPLETED` no, aunque le falte cobertura —
+ * está dada por cerrada, y lo que le falte es un descuadre que se arregla en la operación.
+ */
 export function isPendingOperation(op: OperationData): boolean {
-  if (op.status === 'CANCELLED' || op.status === 'QUOTED') return false;
+  if (op.status !== 'PENDING' && op.status !== 'QUOTED') return false;
+  if (!hasIncomingPayment(op)) return false;
   return (op.pending_amount ?? 0) > EPSILON;
 }
 
@@ -63,13 +82,7 @@ export function payoutEquivalent(op: OperationData): number | null {
 }
 
 /**
- * La fecha del comprobante entrante de cada operación, cuando se ha podido resolver.
- * `null` como valor = se miró y no hay comprobante; ausente = no se ha mirado.
- */
-export type PaymentDates = ReadonlyMap<string, string | null>;
-
-/**
- * Desde cuándo espera el cliente: la fecha del PAGO, no la de la operación.
+ * Desde cuándo espera el cliente: la fecha de su PAGO, no la de la operación.
  *
  * Cuando el bot no reconoce un comprobante, el operador crea la operación a mano días
  * después (`POST /payments/{table}/{id}/create-operation`, que no lleva fecha). Su
@@ -78,10 +91,11 @@ export type PaymentDates = ReadonlyMap<string, string | null>;
  * la más vieja a la más nueva, eso no es sólo un orden feo — es dinero aplicado a la
  * operación equivocada.
  *
- * Sin `dates` se cae a la fecha de la operación, que para las que creó el bot es la buena.
+ * Sin comprobante entrante se cae a la fecha de la operación, que para las que creó el bot
+ * es la buena.
  */
-export function pendingSince(op: OperationData, dates?: PaymentDates): string | null {
-  return dates?.get(op.uuid) ?? op.created_at ?? op.quoted_at ?? null;
+export function pendingSince(op: OperationData): string | null {
+  return op.first_incoming_payment_at ?? op.created_at ?? op.quoted_at ?? null;
 }
 
 function pairKey(op: OperationData): string {
@@ -98,10 +112,7 @@ function older(a: string | null, b: string | null): string | null {
  * Agrupa por par las operaciones sin cubrir de UN cliente.
  * Ordena de mayor a menor deuda, que es el orden en que se lee.
  */
-export function pendingByPair(
-  operations: OperationData[],
-  dates?: PaymentDates,
-): ClientPendingByPair[] {
+export function pendingByPair(operations: OperationData[]): ClientPendingByPair[] {
   const groups = new Map<string, ClientPendingByPair>();
 
   for (const op of operations) {
@@ -117,7 +128,7 @@ export function pendingByPair(
         currency: valueCurrency(op),
         amount,
         operations: 1,
-        oldest_at: pendingSince(op, dates),
+        oldest_at: pendingSince(op),
         payout_currency: payoutCurrency(op),
         payout_amount: payout,
       });
@@ -126,7 +137,7 @@ export function pendingByPair(
 
     current.amount += amount;
     current.operations += 1;
-    current.oldest_at = older(current.oldest_at, pendingSince(op, dates));
+    current.oldest_at = older(current.oldest_at, pendingSince(op));
     // Si a una sola op del grupo le falta la tasa, el equivalente del grupo entero deja de
     // ser cierto: se cae a null en vez de mostrar una suma incompleta.
     current.payout_amount =
@@ -134,22 +145,6 @@ export function pendingByPair(
   }
 
   return [...groups.values()].sort((a, b) => b.amount - a.amount);
-}
-
-/** Lo mismo, pero para la lista: de cliente a su deuda por par. */
-export function pendingByClient(operations: OperationData[]): Map<string, ClientPendingByPair[]> {
-  const byClient = new Map<string, OperationData[]>();
-
-  for (const op of operations) {
-    if (!op.client_uuid || !isPendingOperation(op)) continue;
-    const bucket = byClient.get(op.client_uuid);
-    if (bucket) bucket.push(op);
-    else byClient.set(op.client_uuid, [op]);
-  }
-
-  const result = new Map<string, ClientPendingByPair[]>();
-  for (const [clientUuid, ops] of byClient) result.set(clientUuid, pendingByPair(ops));
-  return result;
 }
 
 export interface PendingTotals {

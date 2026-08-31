@@ -1,10 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import type { BalanceEntry } from '@/types/client';
 import type { OperationData } from '@/types/operation';
-import { accountCounts, accountThread, operationState } from './account';
+import {
+  accountCounts,
+  accountDate,
+  accountThread,
+  isAccountMovement,
+  operationState,
+} from './account';
 
+/**
+ * Una operación con movimiento: por defecto su dinero entró el día que se registró, que es
+ * lo normal cuando el bot la reconoce. Lo interesante es sobrescribirlo.
+ */
 function op(overrides: Partial<OperationData>): OperationData {
-  return {
+  const base = {
     status: 'PENDING',
     pending_amount: 0,
     currency: 'USD',
@@ -15,7 +25,12 @@ function op(overrides: Partial<OperationData>): OperationData {
     to_amount: 28_000,
     created_at: '2026-08-30T00:00:00Z',
     quoted_at: '2026-08-30T00:00:00Z',
+    last_outgoing_payment_at: null,
     ...overrides,
+  };
+  return {
+    first_incoming_payment_at: base.created_at,
+    ...base,
   } as OperationData;
 }
 
@@ -34,8 +49,41 @@ describe('operationState', () => {
   it('separa lo pendiente de lo entregado, y saca cotizadas y canceladas del medio', () => {
     expect(operationState(op({ pending_amount: 50 }))).toBe('pending');
     expect(operationState(op({ pending_amount: 0 }))).toBe('delivered');
-    expect(operationState(op({ status: 'QUOTED', pending_amount: 50 }))).toBe('quoted');
+    expect(
+      operationState(
+        op({ status: 'QUOTED', pending_amount: 50, first_incoming_payment_at: null }),
+      ),
+    ).toBe('quoted');
     expect(operationState(op({ status: 'CANCELLED', pending_amount: 50 }))).toBe('cancelled');
+  });
+
+  it('una cotización ya pagada se lee como deuda, no como cotización', () => {
+    expect(operationState(op({ status: 'QUOTED', pending_amount: 50 }))).toBe('pending');
+  });
+});
+
+describe('isAccountMovement', () => {
+  it('deja fuera lo que no movió plata: canceladas y tratos sin ningún comprobante', () => {
+    expect(isAccountMovement(op({ status: 'CANCELLED' }))).toBe(false);
+    expect(isAccountMovement(op({ first_incoming_payment_at: null }))).toBe(false);
+    expect(isAccountMovement(op({ status: 'QUOTED', first_incoming_payment_at: null }))).toBe(
+      false,
+    );
+  });
+
+  it('entra en cuanto hay un comprobante de cualquiera de los dos lados', () => {
+    expect(isAccountMovement(op({}))).toBe(true);
+    expect(
+      isAccountMovement(
+        op({ first_incoming_payment_at: null, last_outgoing_payment_at: '2026-08-30T00:00:00Z' }),
+      ),
+    ).toBe(true);
+  });
+
+  it('una completada entra aunque no se le vea comprobante: las viejas migradas no lo traen', () => {
+    expect(isAccountMovement(op({ status: 'COMPLETED', first_incoming_payment_at: null }))).toBe(
+      true,
+    );
   });
 });
 
@@ -47,6 +95,19 @@ describe('accountCounts', () => {
     );
 
     expect(counts).toEqual({ all: 5, pending: 1, delivered: 2, balance: 2 });
+  });
+
+  it('no cuenta los tratos sin comprobante: no son movimientos de la cuenta', () => {
+    const counts = accountCounts(
+      [
+        op({ uuid: 'a', pending_amount: 50 }),
+        op({ uuid: 'sin-pago', pending_amount: 50, first_incoming_payment_at: null }),
+        op({ uuid: 'cotizada', status: 'QUOTED', first_incoming_payment_at: null }),
+      ],
+      [],
+    );
+
+    expect(counts).toEqual({ all: 1, pending: 1, delivered: 0, balance: 0 });
   });
 
   it('cuenta lo que el chip va a enseñar de verdad: con par, acotado', () => {
@@ -63,6 +124,28 @@ describe('accountCounts', () => {
     expect(counts.delivered).toBe(0);
     // ...pero el chip de «Saldo» sí, porque su filtro ignora el par.
     expect(counts.balance).toBe(1);
+  });
+});
+
+describe('accountDate', () => {
+  it('mientras se debe manda la fecha de entrada: es desde cuándo espera', () => {
+    const debt = op({
+      pending_amount: 50,
+      first_incoming_payment_at: '2026-08-02T00:00:00Z',
+      last_outgoing_payment_at: null,
+    });
+
+    expect(accountDate(debt)).toBe('2026-08-02T00:00:00Z');
+  });
+
+  it('una vez entregada manda la de salida: ahí terminó el movimiento', () => {
+    const done = op({
+      status: 'COMPLETED',
+      first_incoming_payment_at: '2026-08-02T00:00:00Z',
+      last_outgoing_payment_at: '2026-08-29T00:00:00Z',
+    });
+
+    expect(accountDate(done)).toBe('2026-08-29T00:00:00Z');
   });
 });
 
@@ -117,14 +200,35 @@ describe('accountThread', () => {
     ]);
   });
 
-  it('ordena por la fecha del comprobante cuando se conoce', () => {
+  it('ordena por la fecha del comprobante, no por la de la operación', () => {
     // «nueva» se registró la última, pero su dinero entró antes que todo lo demás.
-    const dates = new Map([['nueva', '2026-07-01T00:00:00Z']]);
-    expect(keys(accountThread(operations, entries, 'all', { dates }))).toEqual([
+    const manual = [
+      operations[0],
+      op({
+        uuid: 'nueva',
+        created_at: '2026-08-28T00:00:00Z',
+        first_incoming_payment_at: '2026-07-01T00:00:00Z',
+      }),
+      operations[2],
+    ];
+
+    expect(keys(accountThread(manual, entries, 'all'))).toEqual([
       'bal:e1',
       'op:otro-par',
       'op:vieja',
       'op:nueva',
     ]);
+  });
+
+  it('no enseña tratos sin comprobante ni cotizaciones: la cuenta son movimientos', () => {
+    const noisy = [
+      ...operations,
+      op({ uuid: 'sin-pago', pending_amount: 50, first_incoming_payment_at: null }),
+      op({ uuid: 'cotizada', status: 'QUOTED', first_incoming_payment_at: null }),
+    ];
+
+    expect(keys(accountThread(noisy, entries, 'all'))).not.toContain('op:sin-pago');
+    expect(keys(accountThread(noisy, entries, 'all'))).not.toContain('op:cotizada');
+    expect(keys(accountThread(noisy, entries, 'delivered'))).toEqual(['op:nueva']);
   });
 });

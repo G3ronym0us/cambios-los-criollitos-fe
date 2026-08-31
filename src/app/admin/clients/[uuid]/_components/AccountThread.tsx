@@ -30,6 +30,10 @@ function formatUsd(value: number) {
 /**
  * Una operación en el hilo. Es una lectura, no una cola de trabajo: enseña el trato y en
  * qué estado quedó, y para actuar se entra en la operación o se filtra por «Por entregar».
+ *
+ * La fila ENTERA es el enlace a la operación, no sólo el uuid: es a donde se va desde aquí
+ * —a ver los comprobantes, a cuadrarla—, y un blanco de ocho caracteres en móvil no es un
+ * blanco. Por eso tampoco hay ningún otro enlace dentro; anidarlos no es válido.
  */
 function OperationRow({ operation, at }: { operation: OperationData; at: string | null }) {
   const state = operationState(operation);
@@ -37,15 +41,15 @@ function OperationRow({ operation, at }: { operation: OperationData; at: string 
   const payout = payoutEquivalent(operation);
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3">
+    <Link
+      href={`/admin/operations/${operation.uuid}`}
+      className="-mx-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-2 py-3 transition-colors hover:bg-muted"
+    >
       <div className="min-w-0 flex-1 basis-56">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <Link
-            href={`/admin/operations/${operation.uuid}`}
-            className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline"
-          >
+          <span className="font-mono text-xs text-muted-foreground">
             {operation.uuid.slice(0, 8)}
-          </Link>
+          </span>
           <span
             className={cn(
               'rounded-full border px-2 py-0.5 text-[11px] font-medium',
@@ -85,7 +89,7 @@ function OperationRow({ operation, at }: { operation: OperationData; at: string 
           </p>
         ) : null}
       </div>
-    </div>
+    </Link>
   );
 }
 

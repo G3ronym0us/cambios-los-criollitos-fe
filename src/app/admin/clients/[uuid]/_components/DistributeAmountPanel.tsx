@@ -109,7 +109,7 @@ export function DistributeAmountPanel({ state, actions }: DistributeAmountPanelP
         {preview.rows.map((row) => {
           const operation = byUuid.get(row.uuid);
           if (!operation) return null;
-          const waited = waitedFor(pendingSince(operation, state.paymentDates));
+          const waited = waitedFor(pendingSince(operation));
           const name = operation.beneficiary_alias || 'Sin beneficiario';
           const blocked = blockedReason(operation);
           const excluded = state.excluded.has(row.uuid);
