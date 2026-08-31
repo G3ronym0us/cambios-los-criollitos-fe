@@ -101,9 +101,16 @@ parcial tiene que mandar `uncovered_previo + entregado`; mandar sólo lo nuevo l
 entrega anterior desaparece sin dejar rastro. Por lo mismo, deshacer no borra `uncovered`: repone
 el valor que tenía antes de esa entrega, que puede no ser cero.
 
-**Dos cosas de esto conviene confirmarlas contra el backend**, porque el panel de cobertura nunca
-las ejercita: que acepte `payments: []` en una operación sin ningún comprobante, y que acepte
-`uncovered` y `partial: true` a la vez (en el panel son excluyentes).
+**Verificado contra `set_operation_coverage`** (`app/services/whatsapp_payment_service.py`), que es
+donde vive la regla:
+
+- `payments: []` funciona: el bucle no se ejecuta y la derivación de tasa se salta por `if rows`.
+- `uncovered` y `partial: true` conviven: `partial` sólo controla si se deriva la tasa; el hueco se
+  aplica aparte.
+- **`uncovered` hay que mandarlo siempre, incluso en cero.** El backend sólo lo toca si el campo
+  llega (`if uncovered is not None`); omitirlo deja el hueco como estaba, así que un deshacer sin
+  ese campo no deshace nada. Con `amount: 0` la validación del motivo se salta y el hueco se borra
+  (`op.uncovered_amount = resto or None`).
 
 Lo que se paga por hacerlo así:
 

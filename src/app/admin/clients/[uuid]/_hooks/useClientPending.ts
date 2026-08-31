@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import type { OperationData } from '@/types/operation';
 import {
@@ -11,7 +11,6 @@ import {
   valueCurrency,
   type PaymentDates,
 } from '../../_lib/pending';
-import { loadPaymentDates } from '../../_lib/paymentDates';
 import { distribute, type Distribution } from '../../_lib/distribute';
 import {
   markDelivered,
@@ -22,12 +21,14 @@ import {
 } from '../../_lib/pendingDelivery';
 
 /**
- * La pestaña «Por entregar» en funcionamiento: qué se le debe al cliente y las dos maneras
- * de saldarlo — marcar a mano las que pagaste, o escribir cuánto entregaste y repartirlo.
+ * El filtro «Por entregar» de la pestaña Cuenta en funcionamiento: qué se le debe al cliente
+ * y las dos maneras de saldarlo — marcar a mano las que pagaste, o escribir cuánto
+ * entregaste y repartirlo.
  *
- * Trabaja sobre las operaciones que ya cargó `useClientProfile`, no vuelve a pedirlas: son
- * las mismas, filtradas. Cuando algo cambia, avisa al padre con `onChanged` para que
- * recargue de verdad.
+ * Recibe las operaciones YA acotadas al par elegido y las fechas de pago YA resueltas — las
+ * dos cosas viven arriba, en Cuenta, porque son comunes a todos los filtros — y se queda con
+ * las que están sin cubrir. No pide nada: son las que ya cargó `useClientProfile`. Cuando
+ * algo cambia, avisa con `onChanged` para que el perfil recargue de verdad.
  */
 
 /** Una operación no se puede dar por entregada si le falta a quién entregársela. */
@@ -41,8 +42,11 @@ export function blockedReason(op: OperationData): string | null {
 
 export type PendingMode = 'select' | 'distribute';
 
-export function useClientPending(operations: OperationData[], onChanged: () => void) {
-  const [pair, setPair] = useState<string>('');
+export function useClientPending(
+  operations: OperationData[],
+  paymentDates: PaymentDates,
+  onChanged: () => void,
+) {
   const [mode, setMode] = useState<PendingMode>('select');
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [excluded, setExcluded] = useState<ReadonlySet<string>>(new Set());
@@ -54,53 +58,44 @@ export function useClientPending(operations: OperationData[], onChanged: () => v
    * página se pierde y entonces se deshace desde el panel de cobertura de la operación.
    */
   const [undoable, setUndoable] = useState<CoverageSnapshot[]>([]);
-  /** Fecha del comprobante entrante de cada op; hasta que llega se usa la de la operación. */
-  const [paymentDates, setPaymentDates] = useState<PaymentDates>(new Map());
 
-  const pending = useMemo(() => operations.filter(isPendingOperation), [operations]);
-
-  /**
-   * Resolver la fecha real cuesta una petición por operación, así que se hace una sola vez
-   * por conjunto de operaciones sin cubrir — pocas, y sólo las de este cliente. La clave es
-   * el propio conjunto de uuids: cambia cuando se marca o se deshace algo, no en cada render.
-   */
-  const pendingKey = useMemo(() => pending.map((op) => op.uuid).sort().join(','), [pending]);
-
-  useEffect(() => {
-    if (!pendingKey) {
-      setPaymentDates(new Map());
-      return;
-    }
-    let alive = true;
-    loadPaymentDates(pendingKey.split(',')).then((dates) => {
-      if (alive) setPaymentDates(dates);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [pendingKey]);
-
-  const pairs = useMemo(
-    () => [...new Set(pending.map((op) => op.pair_symbol).filter((s): s is string => !!s))].sort(),
-    [pending],
+  const undoableIds = useMemo(
+    () => new Set(undoable.map((item) => item.operationUuid)),
+    [undoable],
   );
 
+  /**
+   * Lo que sigue a la vista en la cola: lo que falta por entregar MÁS lo que se acaba de
+   * marcar en esta sesión. Sin lo segundo, marcar una fila la hace desaparecer y con ella su
+   * botón de deshacer justo cuando hace falta — que es el segundo siguiente.
+   */
+  const pending = useMemo(
+    () => operations.filter((op) => isPendingOperation(op) || undoableIds.has(op.uuid)),
+    [operations, undoableIds],
+  );
+
+  /** La cola de trabajo: de la más vieja a la más nueva, que es el orden en que se reparte. */
   const rows = useMemo(() => {
-    const scoped = pair ? pending.filter((op) => op.pair_symbol === pair) : pending;
-    return [...scoped].sort((a, b) => {
+    return [...pending].sort((a, b) => {
       const left = pendingSince(a, paymentDates);
       const right = pendingSince(b, paymentDates);
       if (!left) return right ? 1 : 0;
       if (!right) return -1;
       return new Date(left).getTime() - new Date(right).getTime();
     });
-  }, [pending, pair, paymentDates]);
+  }, [pending, paymentDates]);
 
   const entries = useMemo(() => pendingByPair(rows, paymentDates), [rows, paymentDates]);
   const totals = useMemo(() => pendingTotals(entries), [entries]);
 
-  /** Las que sí se pueden marcar: «seleccionar todas» nunca incluye a las trabadas. */
-  const selectable = useMemo(() => rows.filter((op) => blockedReason(op) === null), [rows]);
+  /**
+   * Las que sí se pueden marcar: ni las trabadas por falta de datos, ni las que ya se
+   * marcaron en esta sesión y sólo siguen ahí para poder deshacerlas.
+   */
+  const selectable = useMemo(
+    () => rows.filter((op) => isPendingOperation(op) && blockedReason(op) === null),
+    [rows],
+  );
 
   const selectedRows = useMemo(
     () => selectable.filter((op) => selected.has(op.uuid)),
@@ -121,7 +116,12 @@ export function useClientPending(operations: OperationData[], onChanged: () => v
 
   /** Las trabadas por falta de datos: no reciben reparto, pero se siguen debiendo. */
   const blocked = useMemo(
-    () => new Set(rows.filter((op) => blockedReason(op) !== null).map((op) => op.uuid)),
+    () =>
+      new Set(
+        rows
+          .filter((op) => !isPendingOperation(op) || blockedReason(op) !== null)
+          .map((op) => op.uuid),
+      ),
     [rows],
   );
 
@@ -134,7 +134,10 @@ export function useClientPending(operations: OperationData[], onChanged: () => v
   const distributeCurrency = totals.currency;
 
   const distributableRows = useMemo(
-    () => (distributeCurrency ? rows.filter((op) => valueCurrency(op) === distributeCurrency) : []),
+    () =>
+      distributeCurrency
+        ? rows.filter((op) => isPendingOperation(op) && valueCurrency(op) === distributeCurrency)
+        : [],
     [rows, distributeCurrency],
   );
 
@@ -265,8 +268,6 @@ export function useClientPending(operations: OperationData[], onChanged: () => v
       remainingEntries,
       distributeCurrency,
       distributableRows,
-      pairs,
-      pair,
       mode,
       selected,
       selectedRows,
@@ -282,7 +283,6 @@ export function useClientPending(operations: OperationData[], onChanged: () => v
       paymentDates,
     },
     actions: {
-      setPair,
       setMode,
       toggle,
       toggleExcluded,

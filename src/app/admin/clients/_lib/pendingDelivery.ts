@@ -115,13 +115,16 @@ export async function markManyDelivered(operationUuids: string[]): Promise<Deliv
  * Devuelve la operación a como estaba: los mismos comprobantes y el mismo hueco declarado
  * que tenía ANTES de esta entrega — que puede no ser cero, si ya se le había entregado algo
  * sin comprobante. `partial: true` porque volver atrás es justamente dejarla sin cuadrar.
+ *
+ * `uncovered` viaja SIEMPRE, incluso valiendo cero. El backend sólo toca el hueco si el
+ * campo llega (`if uncovered is not None`), así que omitirlo no lo limpia: lo deja como
+ * está. Y como está es justo lo que acabamos de escribir, o sea que deshacer no desharía
+ * nada — que es el caso normal, el de una operación que no debía nada antes.
  */
 export async function undoDelivery(before: CoverageSnapshot): Promise<string | null> {
   const result = await operationService.setCoverage(before.operationUuid, {
     payments: before.paymentIds.map((payment_id) => ({ payment_id })),
-    ...(before.uncovered > 0
-      ? { uncovered: { amount: before.uncovered, reason: before.uncoveredReason ?? 'CASH' } }
-      : {}),
+    uncovered: { amount: before.uncovered, reason: before.uncoveredReason ?? 'CASH' },
     partial: true,
   });
   return result.success ? null : result.error || 'No se pudo deshacer la entrega';

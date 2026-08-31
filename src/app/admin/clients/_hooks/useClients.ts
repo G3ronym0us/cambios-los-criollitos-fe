@@ -19,21 +19,13 @@ export type ClientsSort = 'amount' | 'age' | 'name';
 
 export interface ClientsFilters {
   search: string;
-  blocked: BoolFilter;
-  tracked: BoolFilter;
   /** «Con pendiente»: sólo los clientes a los que les debemos algo. */
   pending: BoolFilter;
   /** Símbolo del par al que acotar la deuda ("USD/VES"), o `''` para todos. */
   pair: string;
 }
 
-const emptyFilters: ClientsFilters = {
-  search: '',
-  blocked: 'ALL',
-  tracked: 'ALL',
-  pending: 'ALL',
-  pair: '',
-};
+const emptyFilters: ClientsFilters = { search: '', pending: 'ALL', pair: '' };
 
 /**
  * Techo de operaciones sin cubrir que se traen para agregar la deuda en memoria. Es el
@@ -114,11 +106,7 @@ export function useClients() {
   }, []);
 
   const hasActiveFilters =
-    filters.search.trim() !== '' ||
-    filters.blocked !== 'ALL' ||
-    filters.tracked !== 'ALL' ||
-    filters.pending !== 'ALL' ||
-    filters.pair !== '';
+    filters.search.trim() !== '' || filters.pending !== 'ALL' || filters.pair !== '';
 
   /**
    * Cada cliente con su deuda ya acotada al par filtrado. El filtro de par recorta lo que
@@ -141,8 +129,6 @@ export function useClients() {
   const filtered = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
     return decorated.filter(({ client, totals }) => {
-      if (filters.blocked !== 'ALL' && client.is_blocked !== (filters.blocked === 'YES')) return false;
-      if (filters.tracked !== 'ALL' && client.is_tracked !== (filters.tracked === 'YES')) return false;
       if (filters.pending !== 'ALL' && (totals.operations > 0) !== (filters.pending === 'YES')) {
         return false;
       }
@@ -182,15 +168,6 @@ export function useClients() {
     const totals: PendingTotals = pendingTotals(withDebt.flatMap((row) => row.client.pending_by_pair ?? []));
     return { clients: withDebt.length, totals, capped: pendingCapped };
   }, [sorted, pendingCapped]);
-
-  const stats = useMemo(
-    () => ({
-      total,
-      blocked: clients.filter((c) => c.is_blocked).length,
-      tracked: clients.filter((c) => c.is_tracked).length,
-    }),
-    [clients, total]
-  );
 
   /** Los pares en los que hoy hay deuda, para no ofrecer un selector con opciones muertas. */
   const pairs = useMemo(() => pairsOf(pending.values()), [pending]);
@@ -239,7 +216,7 @@ export function useClients() {
       filters,
       sort,
       pairs,
-      stats,
+      total,
       pendingSummary,
       hasActiveFilters,
       hiddenCount,
