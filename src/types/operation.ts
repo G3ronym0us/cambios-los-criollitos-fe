@@ -20,6 +20,14 @@ export interface OperationData {
   // Cuánto cubren ya sus comprobantes de salida, y cuánto falta.
   delivered_amount: number | null;
   pending_amount: number | null;
+  /** Cuántos comprobantes de salida cubren la operación. */
+  payments_count: number;
+  /**
+   * La tasa que resultó de los comprobantes (entregado ÷ valor). `rate_used` es la que se
+   * COTIZÓ; la desviación entre ambas es lo que la columna de cobertura viene a mostrar.
+   * `null` mientras no haya nada entregado.
+   */
+  real_rate: number | null;
   amount_usdt: number | null;
   usdt_rate: number | null;
   bcv_amount: number | null;
@@ -83,7 +91,10 @@ export type OrphanAction = 'KEEP' | 'DELETE_OPERATION';
 
 export interface OperationListResponse {
   operations: OperationData[];
+  /** El total tras los filtros, no el tamaño de la página. */
   total: number;
+  page: number;
+  limit: number | null;
 }
 
 // ---- Emparejamiento comprobante ↔ operación ----
@@ -120,12 +131,26 @@ export interface OperationStats {
   quoted: number;
   cancelled: number;
   completed_today: number;
+  // Lo accionable: cuentan TODO, no la página.
+  to_settle: number;
+  to_settle_amount: number;
+  to_deliver: number;
+  to_deliver_oldest_at: string | null;
+  without_client: number;
+  expiring: number;
+  expiring_next_at: string | null;
 }
 
 export interface OperationFilters {
   status?: string;
   delivery_status?: string;
+  scenario?: string;
+  /** Lo que hace falta hacer: settle | deliver | client | expiring | action. */
+  needs?: string;
   phone?: string;
+  /** Nombre o teléfono del cliente; lo resuelve el servidor. */
+  search?: string;
+  page?: number;
   limit?: number;
 }
 

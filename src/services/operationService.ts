@@ -25,7 +25,11 @@ export class OperationService {
     const params = new URLSearchParams();
     if (filters.status) params.append('status', filters.status);
     if (filters.delivery_status) params.append('delivery_status', filters.delivery_status);
+    if (filters.scenario) params.append('scenario', filters.scenario);
+    if (filters.needs) params.append('needs', filters.needs);
     if (filters.phone) params.append('phone', filters.phone);
+    if (filters.search) params.append('search', filters.search);
+    if (filters.page != null) params.append('page', String(filters.page));
     if (filters.limit != null) params.append('limit', String(filters.limit));
 
     const qs = params.toString();

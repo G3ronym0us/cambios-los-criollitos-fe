@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 import type { OperationsFilters as Filters } from '../_hooks/useOperations';
 
 interface OperationsFiltersProps {
@@ -25,6 +26,40 @@ export function OperationsFilters({ filters, hasActiveFilters, onChange, onReset
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:flex-wrap sm:items-end sm:gap-6">
+        {/*
+          El segmento reemplaza a armar la bandeja con tres selects. «Requieren acción» es
+          el mismo `needs=action` que aplican las tarjetas de arriba.
+        */}
+        <div
+          role="radiogroup"
+          aria-label="Qué operaciones mostrar"
+          className="flex w-full gap-1 rounded-lg border border-border bg-muted/50 p-1"
+        >
+          {(
+            [
+              ['ACTION', 'Requieren acción'],
+              ['OPEN', 'En curso'],
+              ['ALL', 'Todas'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={filters.segment === value}
+              onClick={() => onChange({ ...filters, segment: value, needs: null })}
+              className={cn(
+                'min-h-11 flex-1 rounded-md px-3 text-xs font-medium transition-colors sm:min-h-8',
+                filters.segment === value
+                  ? 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         <div className="flex flex-1 flex-col gap-1.5 sm:min-w-[240px]">
           <Label htmlFor="ops-search" className="text-xs uppercase tracking-wide text-muted-foreground">
             Buscar
@@ -36,7 +71,7 @@ export function OperationsFilters({ filters, hasActiveFilters, onChange, onReset
               type="search"
               value={filters.search}
               onChange={(e) => onChange({ ...filters, search: e.target.value })}
-              placeholder="Cliente, teléfono o par"
+              placeholder="Cliente o teléfono"
               className="h-10 pl-9"
             />
           </div>
