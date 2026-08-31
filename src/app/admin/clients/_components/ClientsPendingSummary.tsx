@@ -36,7 +36,7 @@ export function ClientsPendingSummary({
   const alert = pendingTone(totals.oldest_at) === 'destructive';
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+    <div className="flex flex-col gap-3 border-b border-border bg-amber-500/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5">
       <div className="min-w-0 space-y-0.5">
         <p className="text-sm font-bold tabular-nums text-foreground">
           {clients} {clients === 1 ? 'cliente' : 'clientes'}
