@@ -63,6 +63,19 @@ export function useClientProfile(uuid: string) {
     setOperationsLoading(false);
   }, []);
 
+  /**
+   * Refresca las operaciones sin tocar el `loading` de la página.
+   *
+   * `load` levanta el loading general y el perfil entero se sustituye por el spinner, lo que
+   * DESMONTA las pestañas. Para un refresco después de una acción eso es fatal: se lleva por
+   * delante el estado de la pestaña —lo marcado en la sesión, que es lo único que permite
+   * deshacer—, así que la barra de deshacer nunca llegaba a verse. Aquí sólo se recargan las
+   * operaciones y el árbol se queda en pie.
+   */
+  const reloadOperations = useCallback(async () => {
+    if (client?.phone) await loadOperations(client.phone);
+  }, [client?.phone, loadOperations]);
+
   const load = useCallback(async () => {
     setLoading(true);
     const result = await clientService.getClient(uuid);
@@ -154,6 +167,6 @@ export function useClientProfile(uuid: string) {
       client, loading, notFound, saving, operations, operationsLoading, pairs,
       balance, balanceLoading, loans, loansLoading, loanTotals,
     },
-    actions: { updateFields, reload: load, adjustBalance, addLoanRepayment, createLoan },
+    actions: { updateFields, reload: load, reloadOperations, adjustBalance, addLoanRepayment, createLoan },
   };
 }
