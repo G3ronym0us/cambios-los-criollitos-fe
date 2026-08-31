@@ -1,6 +1,6 @@
 import type { BalanceEntry } from '@/types/client';
 import type { OperationData } from '@/types/operation';
-import { isPendingOperation, pendingSince, type PaymentDates } from './pending';
+import { hasIncomingPayment, isPendingOperation, pendingSince } from './pending';
 
 /**
  * La pestaña «Cuenta»: Transacciones + Por entregar + Saldo en un solo hilo.
@@ -23,10 +23,38 @@ export type AccountItem =
 /** El estado de una operación dentro de la cuenta, con el vocabulario de esta pantalla. */
 export type OperationState = 'pending' | 'delivered' | 'quoted' | 'cancelled';
 
+/**
+ * Se pregunta primero si se debe y después por el estado: una cotización que el cliente ya
+ * pagó es deuda, se llame como se llame en la base. Al revés, saldría «Cotizada» encima de
+ * una plata que hay que entregar hoy.
+ */
 export function operationState(op: OperationData): OperationState {
+  if (isPendingOperation(op)) return 'pending';
   if (op.status === 'CANCELLED') return 'cancelled';
   if (op.status === 'QUOTED') return 'quoted';
-  return isPendingOperation(op) ? 'pending' : 'delivered';
+  return 'delivered';
+}
+
+/**
+ * ¿Esta operación es un movimiento de la cuenta del cliente?
+ *
+ * Una cuenta son movimientos de dinero, no el registro de todo lo que se habló. Se quedan
+ * fuera:
+ *
+ * - Las que **no tienen ningún comprobante** y tampoco están completadas: un trato apuntado
+ *   —o una cotización que caducó— del que no ha entrado ni salido plata. Se ven en
+ *   Operaciones, que es donde se trabajan; aquí sólo hacían bulto y hacían parecer que se le
+ *   debía algo que no se le debe.
+ * - Las **canceladas**: si movieron algo, se devolvió, y la devolución es su propio
+ *   movimiento.
+ *
+ * `COMPLETED` entra aunque no se le vea comprobante: lo dio por cerrado un operador, y de
+ * las viejas migradas de SQLite muchas no traen comprobante ninguno.
+ */
+export function isAccountMovement(op: OperationData): boolean {
+  if (op.status === 'CANCELLED') return false;
+  if (op.status === 'COMPLETED') return true;
+  return hasIncomingPayment(op) || op.last_outgoing_payment_at != null;
 }
 
 export const STATE_LABEL: Record<OperationState, string> = {
@@ -55,7 +83,8 @@ export function accountCounts(
   entries: BalanceEntry[],
   pair?: string,
 ): AccountCounts {
-  const scoped = pair ? operations.filter((op) => op.pair_symbol === pair) : operations;
+  const movements = operations.filter(isAccountMovement);
+  const scoped = pair ? movements.filter((op) => op.pair_symbol === pair) : movements;
   const pending = scoped.filter(isPendingOperation).length;
   return {
     all: scoped.length + (pair ? 0 : entries.length),
@@ -66,10 +95,21 @@ export function accountCounts(
 }
 
 /**
- * Funde operaciones y movimientos de saldo en un hilo ordenado.
+ * Cuándo pasó, para situar la operación en el hilo.
  *
- * `dates` es la fecha del comprobante de cada operación: la misma que ordena la lista de
- * «por entregar», para que una operación no salte de sitio al cambiar de filtro.
+ * Mientras se debe, la fecha que importa es la de ENTRADA: es desde cuándo espera el
+ * cliente, la misma por la que ordena la cola de «por entregar», así que la fila no salta
+ * de sitio al cambiar de filtro. Una vez entregada, el movimiento terminó cuando salió el
+ * dinero, y esa es la fecha que el operador busca — dejarla en la de entrada la hunde en el
+ * hilo semanas por debajo de cosas que pasaron antes.
+ */
+export function accountDate(op: OperationData): string | null {
+  if (isPendingOperation(op)) return pendingSince(op);
+  return op.last_outgoing_payment_at ?? op.completed_at ?? pendingSince(op);
+}
+
+/**
+ * Funde operaciones y movimientos de saldo en un hilo ordenado.
  *
  * El orden es del más nuevo al más viejo salvo en «Por entregar», que deja de ser un
  * histórico que se consulta y pasa a ser una cola de trabajo: ahí manda la antigüedad,
@@ -79,9 +119,8 @@ export function accountThread(
   operations: OperationData[],
   entries: BalanceEntry[],
   filter: AccountFilter,
-  options: { pair?: string; dates?: PaymentDates } = {},
+  options: { pair?: string } = {},
 ): AccountItem[] {
-  const { dates } = options;
   // En «Saldo» el par no pinta nada —el saldo a favor es un ledger en USD, no es de ningún
   // par— y además su selector ni se enseña: hacerle caso dejaría la lista vacía sin manera
   // visible de arreglarlo.
@@ -90,6 +129,7 @@ export function accountThread(
 
   if (filter !== 'balance') {
     for (const operation of operations) {
+      if (!isAccountMovement(operation)) continue;
       if (pair && operation.pair_symbol !== pair) continue;
       const state = operationState(operation);
       if (filter === 'pending' && state !== 'pending') continue;
@@ -97,7 +137,7 @@ export function accountThread(
       items.push({
         kind: 'operation',
         key: `op:${operation.uuid}`,
-        at: pendingSince(operation, dates),
+        at: accountDate(operation),
         operation,
       });
     }
@@ -122,11 +162,14 @@ export function accountThread(
   });
 }
 
-/** Los pares con actividad en la cuenta, para el selector. */
+/**
+ * Los pares con actividad en la cuenta, para el selector. Sólo los que de verdad tienen
+ * movimientos: un par cuya única operación es una cotización daría un chip que abre vacío.
+ */
 export function accountPairs(operations: OperationData[]): string[] {
   const symbols = new Set<string>();
   for (const operation of operations) {
-    if (operation.pair_symbol) symbols.add(operation.pair_symbol);
+    if (operation.pair_symbol && isAccountMovement(operation)) symbols.add(operation.pair_symbol);
   }
   return [...symbols].sort((a, b) => a.localeCompare(b));
 }

@@ -3,14 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { clientService } from '@/services/clientService';
-import { operationService } from '@/services/operationService';
 import { ClientData } from '@/types/client';
-import {
-  pairsOf,
-  pendingByClient,
-  pendingTotals,
-  type PendingTotals,
-} from '../_lib/pending';
+import { pairsOf, pendingTotals, type PendingTotals } from '../_lib/pending';
 
 export type BoolFilter = 'ALL' | 'YES' | 'NO';
 
@@ -28,12 +22,12 @@ export interface ClientsFilters {
 const emptyFilters: ClientsFilters = { search: '', pending: 'ALL', pair: '' };
 
 /**
- * Techo de operaciones sin cubrir que se traen para agregar la deuda en memoria. Es el
- * mismo apaño que el `limit: 500` de los clientes y tiene el mismo problema: pasado el
- * techo los totales mienten. Por eso la pantalla avisa cuando lo toca, y por eso
- * `docs/api/clients-pending.md` pide el agregado en servidor.
+ * Cuántos clientes caben en la lista. No hay paginación: se traen todos los que quepan y se
+ * busca en memoria. Pasado el techo la pantalla avisa (`hiddenCount`), y con «Con
+ * pendiente» puesto el filtro viaja al servidor, así que esas plazas se llenan sólo con
+ * clientes a los que de verdad se les debe.
  */
-const PENDING_LIMIT = 500;
+const CLIENT_LIMIT = 500;
 
 export function useClients() {
   const [clients, setClients] = useState<ClientData[]>([]);
@@ -43,17 +37,23 @@ export function useClients() {
   const [filters, setFilters] = useState<ClientsFilters>(emptyFilters);
   const [sort, setSort] = useState<ClientsSort>('name');
 
-  // Deuda por cliente, agregada en el front a partir de las operaciones sin cubrir.
-  const [pending, setPending] = useState<Map<string, NonNullable<ClientData['pending_by_pair']>>>(
-    new Map(),
-  );
-  const [pendingLoading, setPendingLoading] = useState(true);
-  const [pendingCapped, setPendingCapped] = useState(false);
-
+  /**
+   * La deuda viene con el cliente, ya agregada por par en el servidor
+   * (`ClientPendingService`): una consulta para toda la página y la misma cifra que enseña
+   * el perfil. Antes se traían las operaciones sin cubrir y se sumaban aquí, lo que tenía un
+   * techo silencioso y, sobre todo, contaba tratos que el cliente todavía no había pagado.
+   *
+   * `pair` no viaja: acota lo que devuelve el servidor y dejaría el selector de pares con
+   * una sola opción. Se pide entero y se recorta en memoria, que es filtrar un array que ya
+   * está en la mano.
+   */
   const loadClients = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const result = await clientService.getClients({ limit: 500 });
+    const result = await clientService.getClients({
+      limit: CLIENT_LIMIT,
+      ...(filters.pending === 'ALL' ? {} : { has_pending: filters.pending === 'YES' }),
+    });
     if (result.success && result.data) {
       const items = result.data.items || [];
       setClients(items);
@@ -62,48 +62,23 @@ export function useClients() {
       setError(result.error || 'Error al cargar los clientes');
     }
     setLoading(false);
-  }, []);
-
-  /**
-   * `needs=settle` es, en el servidor, exactamente «le falta cobertura»: las operaciones
-   * cuyo `pending_amount` no cubre ningún comprobante. Es la misma bandeja que la pantalla
-   * de Operaciones llama «por cuadrar», leída desde el lado del cliente.
-   */
-  const loadPending = useCallback(async () => {
-    setPendingLoading(true);
-    const result = await operationService.getOperations({
-      needs: 'settle',
-      limit: PENDING_LIMIT,
-    });
-    if (result.success && result.data) {
-      setPending(pendingByClient(result.data.operations));
-      setPendingCapped(result.data.total > result.data.operations.length);
-    } else {
-      // Que falle la deuda no puede tumbar el directorio: la lista sigue siendo útil sin
-      // la columna, así que se queda vacía y no se propaga el error.
-      setPending(new Map());
-      setPendingCapped(false);
-    }
-    setPendingLoading(false);
-  }, []);
+  }, [filters.pending]);
 
   const reload = useCallback(() => {
     loadClients();
-    loadPending();
-  }, [loadClients, loadPending]);
+  }, [loadClients]);
 
   useEffect(() => {
     loadClients();
   }, [loadClients]);
 
-  useEffect(() => {
-    loadPending();
-  }, [loadPending]);
-
   const resetFilters = useCallback(() => {
     setFilters(emptyFilters);
     setSort('name');
   }, []);
+
+  // Clientes que exceden el límite de carga y no están en memoria (ni en la búsqueda).
+  const hidden = Math.max(0, total - clients.length);
 
   const hasActiveFilters =
     filters.search.trim() !== '' || filters.pending !== 'ALL' || filters.pair !== '';
@@ -115,7 +90,7 @@ export function useClients() {
    */
   const decorated = useMemo(() => {
     return clients.map((client) => {
-      const entries = pending.get(client.uuid) ?? [];
+      const entries = client.pending_by_pair ?? [];
       const scoped = filters.pair
         ? entries.filter((entry) => entry.pair_symbol === filters.pair)
         : entries;
@@ -124,7 +99,7 @@ export function useClients() {
         totals: pendingTotals(scoped),
       };
     });
-  }, [clients, pending, filters.pair]);
+  }, [clients, filters.pair]);
 
   const filtered = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
@@ -166,14 +141,14 @@ export function useClients() {
   const pendingSummary = useMemo(() => {
     const withDebt = sorted.filter((row) => row.totals.operations > 0);
     const totals: PendingTotals = pendingTotals(withDebt.flatMap((row) => row.client.pending_by_pair ?? []));
-    return { clients: withDebt.length, totals, capped: pendingCapped };
-  }, [sorted, pendingCapped]);
+    return { clients: withDebt.length, totals, capped: hidden > 0 };
+  }, [sorted, hidden]);
 
   /** Los pares en los que hoy hay deuda, para no ofrecer un selector con opciones muertas. */
-  const pairs = useMemo(() => pairsOf(pending.values()), [pending]);
-
-  // Clientes que exceden el límite de carga y no están en memoria (ni en la búsqueda).
-  const hiddenCount = Math.max(0, total - clients.length);
+  const pairs = useMemo(
+    () => pairsOf(clients.map((client) => client.pending_by_pair ?? [])),
+    [clients],
+  );
 
   // Alta de un negocio sin teléfono propio (cliente-entidad).
   const createEntity = useCallback(
@@ -211,7 +186,6 @@ export function useClients() {
     state: {
       clients: sorted,
       loading,
-      pendingLoading,
       error,
       filters,
       sort,
@@ -219,7 +193,7 @@ export function useClients() {
       total,
       pendingSummary,
       hasActiveFilters,
-      hiddenCount,
+      hiddenCount: hidden,
     },
     actions: { setFilters: applyFilters, setSort, resetFilters, reload, createEntity },
   };

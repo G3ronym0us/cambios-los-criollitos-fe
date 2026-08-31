@@ -20,7 +20,6 @@ import {
   pendingTone,
   valueCurrency,
   waitedFor,
-  type PaymentDates,
 } from '../../_lib/pending';
 import { blockedReason, useClientPending } from '../_hooks/useClientPending';
 import { DistributeAmountPanel } from './DistributeAmountPanel';
@@ -28,8 +27,6 @@ import { DistributeAmountPanel } from './DistributeAmountPanel';
 interface PendingWorkListProps {
   /** Operaciones del cliente ya acotadas al par elegido en Cuenta. */
   operations: OperationData[];
-  /** Fechas de pago ya resueltas en Cuenta, comunes al hilo y a esta cola. */
-  paymentDates: PaymentDates;
   onChanged: () => void;
 }
 
@@ -215,8 +212,8 @@ function PendingRow({
  * «Cubrir» abre el panel de cobertura de siempre —el que ata comprobantes de verdad—; las
  * casillas y el reparto son el otro camino, el de la entrega en efectivo sin comprobante.
  */
-export function PendingWorkList({ operations, paymentDates, onChanged }: PendingWorkListProps) {
-  const { state, actions } = useClientPending(operations, paymentDates, onChanged);
+export function PendingWorkList({ operations, onChanged }: PendingWorkListProps) {
+  const { state, actions } = useClientPending(operations, onChanged);
   const [covering, setCovering] = useState<string | null>(null);
 
   if (state.rows.length === 0) {
@@ -255,7 +252,7 @@ export function PendingWorkList({ operations, paymentDates, onChanged }: Pending
               <PendingRow
                 key={operation.uuid}
                 operation={operation}
-                since={pendingSince(operation, state.paymentDates)}
+                since={pendingSince(operation)}
                 checked={state.selected.has(operation.uuid)}
                 undoable={undoableIds.has(operation.uuid)}
                 working={state.working}

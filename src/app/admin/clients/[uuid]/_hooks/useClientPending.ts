@@ -9,7 +9,6 @@ import {
   pendingSince,
   pendingTotals,
   valueCurrency,
-  type PaymentDates,
 } from '../../_lib/pending';
 import { distribute, type Distribution } from '../../_lib/distribute';
 import {
@@ -42,11 +41,7 @@ export function blockedReason(op: OperationData): string | null {
 
 export type PendingMode = 'select' | 'distribute';
 
-export function useClientPending(
-  operations: OperationData[],
-  paymentDates: PaymentDates,
-  onChanged: () => void,
-) {
+export function useClientPending(operations: OperationData[], onChanged: () => void) {
   const [mode, setMode] = useState<PendingMode>('select');
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [excluded, setExcluded] = useState<ReadonlySet<string>>(new Set());
@@ -77,15 +72,15 @@ export function useClientPending(
   /** La cola de trabajo: de la más vieja a la más nueva, que es el orden en que se reparte. */
   const rows = useMemo(() => {
     return [...pending].sort((a, b) => {
-      const left = pendingSince(a, paymentDates);
-      const right = pendingSince(b, paymentDates);
+      const left = pendingSince(a);
+      const right = pendingSince(b);
       if (!left) return right ? 1 : 0;
       if (!right) return -1;
       return new Date(left).getTime() - new Date(right).getTime();
     });
-  }, [pending, paymentDates]);
+  }, [pending]);
 
-  const entries = useMemo(() => pendingByPair(rows, paymentDates), [rows, paymentDates]);
+  const entries = useMemo(() => pendingByPair(rows), [rows]);
   const totals = useMemo(() => pendingTotals(entries), [entries]);
 
   /**
@@ -103,15 +98,15 @@ export function useClientPending(
   );
 
   const selectedEntries = useMemo(
-    () => pendingByPair(selectedRows, paymentDates),
-    [selectedRows, paymentDates],
+    () => pendingByPair(selectedRows),
+    [selectedRows],
   );
   const selectedTotals = useMemo(() => pendingTotals(selectedEntries), [selectedEntries]);
 
   /** Lo que quedaría debiéndose si se marcara lo seleccionado, por moneda. */
   const remainingEntries = useMemo(
-    () => pendingByPair(rows.filter((op) => !selected.has(op.uuid)), paymentDates),
-    [rows, selected, paymentDates],
+    () => pendingByPair(rows.filter((op) => !selected.has(op.uuid))),
+    [rows, selected],
   );
 
   /** Las trabadas por falta de datos: no reciben reparto, pero se siguen debiendo. */
@@ -153,11 +148,11 @@ export function useClientPending(
         distributableRows.map((op) => ({
           uuid: op.uuid,
           pending: op.pending_amount ?? 0,
-          since: pendingSince(op, paymentDates),
+          since: pendingSince(op),
         })),
         { allowPartial, excluded: new Set([...excluded, ...blocked]) },
       ),
-    [amount, distributableRows, allowPartial, excluded, blocked, paymentDates],
+    [amount, distributableRows, allowPartial, excluded, blocked],
   );
 
   const toggle = useCallback((uuid: string) => {
@@ -280,7 +275,6 @@ export function useClientPending(
       preview,
       working,
       undoable,
-      paymentDates,
     },
     actions: {
       setMode,

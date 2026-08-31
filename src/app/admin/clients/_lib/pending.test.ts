@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { OperationData } from '@/types/operation';
 import {
   formatPendingBreakdown,
+  isPendingOperation,
   pendingByPair,
   pendingSince,
   pendingTotals,
@@ -21,35 +22,71 @@ function op(overrides: Partial<OperationData>): OperationData {
     to_amount: 28_000,
     created_at: '2026-08-30T00:00:00Z',
     quoted_at: '2026-08-30T00:00:00Z',
+    first_incoming_payment_at: '2026-08-30T00:00:00Z',
+    last_outgoing_payment_at: null,
     ...overrides,
   } as OperationData;
 }
 
-describe('pendingSince', () => {
-  it('usa la fecha del comprobante cuando se conoce, no la de la operación', () => {
-    // El caso de una op creada a mano: registrada hoy, pero el dinero llegó hace una semana.
-    const manual = op({ uuid: 'manual', created_at: '2026-08-31T00:00:00Z' });
-    const dates = new Map([['manual', '2026-08-24T00:00:00Z']]);
+describe('isPendingOperation', () => {
+  it('no se le debe nada a quien todavía no ha pagado', () => {
+    // El trato está apuntado y sin cubrir, pero su dinero no ha entrado: no es una deuda.
+    expect(isPendingOperation(op({ uuid: 'sin-pago', first_incoming_payment_at: null }))).toBe(
+      false,
+    );
+    expect(isPendingOperation(op({ uuid: 'pagada' }))).toBe(true);
+  });
 
-    expect(pendingSince(manual, dates)).toBe('2026-08-24T00:00:00Z');
-    expect(pendingSince(manual)).toBe('2026-08-31T00:00:00Z');
+  it('una cotización que el cliente ya pagó sí es deuda: su plata entró y no ha salido', () => {
+    expect(isPendingOperation(op({ uuid: 'q', status: 'QUOTED' }))).toBe(true);
+    expect(
+      isPendingOperation(op({ uuid: 'q2', status: 'QUOTED', first_incoming_payment_at: null })),
+    ).toBe(false);
+  });
+
+  it('ni las canceladas ni las completadas: unas no van y las otras están cerradas', () => {
+    expect(isPendingOperation(op({ uuid: 'c', status: 'CANCELLED' }))).toBe(false);
+    expect(isPendingOperation(op({ uuid: 'd', status: 'COMPLETED' }))).toBe(false);
+  });
+});
+
+describe('pendingSince', () => {
+  it('usa la fecha del comprobante entrante, no la de la operación', () => {
+    // El caso de una op creada a mano: registrada hoy, pero el dinero llegó hace una semana.
+    const manual = op({
+      uuid: 'manual',
+      created_at: '2026-08-31T00:00:00Z',
+      first_incoming_payment_at: '2026-08-24T00:00:00Z',
+    });
+
+    expect(pendingSince(manual)).toBe('2026-08-24T00:00:00Z');
   });
 
   it('se cae a la fecha de la operación cuando no hay comprobante', () => {
-    const bot = op({ uuid: 'bot', created_at: '2026-08-28T00:00:00Z' });
-    // Resuelto y sin comprobante: `null` en el mapa, no ausencia.
-    expect(pendingSince(bot, new Map([['bot', null]]))).toBe('2026-08-28T00:00:00Z');
+    const bot = op({
+      uuid: 'bot',
+      created_at: '2026-08-28T00:00:00Z',
+      first_incoming_payment_at: null,
+    });
+
+    expect(pendingSince(bot)).toBe('2026-08-28T00:00:00Z');
   });
 
   it('la agrupación toma la más vieja según la fecha del comprobante', () => {
     const operations = [
-      op({ uuid: 'reciente', created_at: '2026-08-20T00:00:00Z' }),
-      op({ uuid: 'manual', created_at: '2026-08-31T00:00:00Z' }),
+      op({
+        uuid: 'reciente',
+        created_at: '2026-08-20T00:00:00Z',
+        first_incoming_payment_at: '2026-08-20T00:00:00Z',
+      }),
+      op({
+        uuid: 'manual',
+        created_at: '2026-08-31T00:00:00Z',
+        first_incoming_payment_at: '2026-08-01T00:00:00Z',
+      }),
     ];
-    const dates = new Map([['manual', '2026-08-01T00:00:00Z']]);
 
-    expect(pendingByPair(operations)[0].oldest_at).toBe('2026-08-20T00:00:00Z');
-    expect(pendingByPair(operations, dates)[0].oldest_at).toBe('2026-08-01T00:00:00Z');
+    expect(pendingByPair(operations)[0].oldest_at).toBe('2026-08-01T00:00:00Z');
   });
 });
 

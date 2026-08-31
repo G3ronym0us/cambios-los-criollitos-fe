@@ -143,9 +143,13 @@ export function OperationRow({ operation: op }: OperationRowProps) {
         </p>
       </div>
 
-      {/* Creada */}
+      {/* Fecha — cuándo salió la plata, que es por lo que también ordena el servidor.
+          `created_at` es cuándo se registró el trato: una operación que el bot no reconoció
+          se arma a mano días después de haberse pagado, y por esa fecha aparecía arriba del
+          todo. Sin comprobante de salida todavía no hay pago que enseñar y se cae a la de la
+          operación. */}
       <div className="hidden text-xs text-muted-foreground lg:col-start-6 lg:block">
-        {formatCaracasDateTime(op.created_at)}
+        {formatCaracasDateTime(op.last_outgoing_payment_at ?? op.created_at)}
       </div>
     </Link>
   );

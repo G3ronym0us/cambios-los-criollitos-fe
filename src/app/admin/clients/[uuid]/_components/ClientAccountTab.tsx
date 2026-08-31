@@ -21,7 +21,6 @@ import {
   pendingTotals,
   waitedFor,
 } from '../../_lib/pending';
-import { usePaymentDates } from '../_hooks/usePaymentDates';
 import { AccountThread } from './AccountThread';
 import { BalanceAdjustDialog } from './BalanceAdjustDialog';
 import { PendingWorkList } from './PendingWorkList';
@@ -148,10 +147,6 @@ export function ClientAccountTab({
   const [pair, setPair] = useState('');
   const [adjusting, setAdjusting] = useState(false);
 
-  // Una sola resolución de fechas para toda la pestaña: el hilo y la cola de «por entregar»
-  // ordenan por lo mismo, así que una operación no salta de sitio al cambiar de filtro.
-  const paymentDates = usePaymentDates(operations);
-
   const entries = useMemo(() => balance?.entries ?? [], [balance]);
   const counts = useMemo(
     () => accountCounts(operations, entries, pair),
@@ -165,13 +160,13 @@ export function ClientAccountTab({
   );
 
   const items = useMemo(
-    () => accountThread(operations, entries, filter, { pair, dates: paymentDates }),
-    [operations, entries, filter, pair, paymentDates],
+    () => accountThread(operations, entries, filter, { pair }),
+    [operations, entries, filter, pair],
   );
 
   const pendingEntries = useMemo(
-    () => pendingByPair(scopedOperations.filter(isPendingOperation), paymentDates),
-    [scopedOperations, paymentDates],
+    () => pendingByPair(scopedOperations.filter(isPendingOperation)),
+    [scopedOperations],
   );
   const pendingTotal = pendingTotals(pendingEntries);
   const waited = waitedFor(pendingTotal.oldest_at);
@@ -274,11 +269,7 @@ export function ClientAccountTab({
           desmontaba la cola de trabajo en cada clic de chip, y con ella lo seleccionado, el
           monto escrito y lo que se podía deshacer. */}
       <div hidden={filter !== 'pending'}>
-        <PendingWorkList
-          operations={scopedOperations}
-          paymentDates={paymentDates}
-          onChanged={onChanged}
-        />
+        <PendingWorkList operations={scopedOperations} onChanged={onChanged} />
       </div>
       <div hidden={filter === 'pending'}>
         <AccountThread items={items} emptyLabel={EMPTY_LABEL[filter]} />
