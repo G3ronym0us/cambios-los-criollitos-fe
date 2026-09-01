@@ -40,8 +40,17 @@ import { distribute } from '../../_lib/distribute';
  * operación se pregunta antes, con el número delante.
  */
 
-/** Una operación no se puede dar por entregada si le falta a quién entregársela. */
+/**
+ * Una operación no se puede dar por entregada si le falta a quién entregársela.
+ *
+ * **Salvo en los pares de efectivo**, donde el gesto está invertido: los bolívares ya
+ * salieron y lo que se marca es que el CLIENTE pagó —por eso el botón dice «Pagado» y el
+ * chip «Cobrada»—. A quién se le entregó lo dice el comprobante saliente, que ya cuelga de
+ * la operación, así que el campo sobra. Pedirlo aquí tapaba el botón en 117 de las 120
+ * filas de USD-VES y dejaba la cola sin usar.
+ */
 export function blockedReason(op: OperationData): string | null {
+  if (op.settles_in_cash) return null;
   if (!op.beneficiary_alias && !op.beneficiary_account_uuid) {
     return 'Sin beneficiario: lo dirá el cliente';
   }
