@@ -18,11 +18,11 @@ export interface ClientData {
   // Saldo a favor en USD (ledger de abonos); 0 si no tiene.
   balance: number;
   /**
-   * Deuda por entregar, agrupada por par. Hoy el backend NO lo manda: lo rellena el front
-   * agregando las operaciones sin cubrir (`src/app/admin/clients/_lib/pending.ts`), con el
-   * techo que eso implica. `docs/api/clients-pending.md` describe el campo que lo traerá
-   * resuelto del servidor — cuando llegue, la agregación del front se borra y esto se lee
-   * tal cual.
+   * Deuda por entregar, agrupada por par, resuelta por el servidor.
+   *
+   * Sólo cuenta lo que de verdad se debe: falta cobertura de salida **y** el dinero del
+   * cliente ya entró. Los montos van en la moneda del valor del trato; `payout_*` es el
+   * equivalente en la moneda de pago y se enseña con «≈».
    */
   pending_by_pair?: ClientPendingByPair[] | null;
   last_seen_at: string | null;
@@ -177,6 +177,12 @@ export interface ClientAccountUpdate {
 // de la tasa cotizada — se muestra con "≈", no se suma ni se ordena por él.
 export interface ClientPendingByPair {
   pair_symbol: string;
+  /**
+   * El par se cambia en efectivo: aquí no hay comprobante entrante ni lo habrá, y por eso
+   * cuenta como deuda sin exigirlo. Lo que hay que enseñar es lo contrario de lo normal —
+   * en un par de efectivo esto es lo que el cliente NOS debe.
+   */
+  settles_in_cash: boolean;
   currency: string;
   amount: number;
   operations: number;
@@ -184,6 +190,48 @@ export interface ClientPendingByPair {
   oldest_at: string | null;
   payout_currency: string | null;
   payout_amount: number | null;
+}
+
+/**
+ * Una entrega marcada desde el perfil: un lote de operaciones dadas por entregadas en
+ * efectivo, de una vez y con rastro.
+ *
+ * No es contable — el dinero sigue viviendo en el `uncovered_amount` de cada operación,
+ * igual que cuando se declara desde el panel de cobertura. Esto guarda quién marcó qué,
+ * cuándo, y qué había antes, que es lo único que permite deshacerlo de verdad.
+ *
+ * Deshacer no borra el lote: lo marca (`undone_at`). Un error revertido sigue siendo
+ * auditable, y por eso no hay límite de tiempo para deshacer.
+ */
+export interface PendingDeliveryItem {
+  uuid: string;
+  operation_uuid: string | null;
+  pair_symbol: string | null;
+  amount: number;
+  currency: string | null;
+  previous_uncovered: number | null;
+  previous_uncovered_reason: string | null;
+}
+
+export interface PendingDelivery {
+  uuid: string;
+  client_uuid: string | null;
+  note: string | null;
+  /** Lo entregado en el lote entero, sumando sus operaciones. */
+  amount: number;
+  /** Cuántas operaciones lleva el lote: deshacerlo las devuelve TODAS a pendiente. */
+  operations: number;
+  created_by_username: string | null;
+  created_at: string;
+  undone_at: string | null;
+  undone_by_username: string | null;
+  items: PendingDeliveryItem[];
+}
+
+/** Una operación del lote a entregar. Sin `amount` se entrega todo lo que le falte. */
+export interface PendingDeliveryInput {
+  operation_uuid: string;
+  amount?: number;
 }
 
 export interface ClientListResponse {

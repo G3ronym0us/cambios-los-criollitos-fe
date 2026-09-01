@@ -3,13 +3,15 @@
 import Link from 'next/link';
 import { ArrowDownCircle, ArrowUpCircle, Receipt } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { buttonVariants } from '@/components/ui/button';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { cn } from '@/lib/utils';
 import { formatCaracasShortDateTime } from '@/utils/functions';
 import type { BalanceEntry } from '@/types/client';
 import type { OperationData } from '@/types/operation';
 import { STATE_LABEL, operationState, type AccountItem, type OperationState } from '../../_lib/account';
-import { formatPending, payoutEquivalent, valueCurrency } from '../../_lib/pending';
+import { coveredAmount, formatPending, valueAmount, valueCurrency } from '../../_lib/pending';
+import { ACCOUNT_COL as COL, ACCOUNT_GRID as GRID, ACCOUNT_TABLE_MIN as TABLE_MIN } from './accountTable';
 
 interface AccountThreadProps {
   items: AccountItem[];
@@ -27,121 +29,175 @@ function formatUsd(value: number) {
   return `$${value.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function Chip({ className, children }: { className: string; children: React.ReactNode }) {
+  return (
+    <span className={cn('rounded-full border px-2 py-0.5 text-[11px] font-medium', className)}>
+      {children}
+    </span>
+  );
+}
+
+/** La cabecera de columnas, la misma que la cola de «Por entregar». Sólo en ≥lg. */
+function ThreadHeader() {
+  return (
+    <div
+      className={cn(
+        GRID,
+        'hidden border-b border-border bg-muted/40 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground lg:grid lg:px-3',
+      )}
+    >
+      <span className={COL.check} />
+      <span className={COL.when}>Fecha</span>
+      <span className={COL.value}>Valor</span>
+      <span className={COL.state}>Estado</span>
+      <span className={cn(COL.action, 'text-right')}>Acción</span>
+    </div>
+  );
+}
+
 /**
  * Una operación en el hilo. Es una lectura, no una cola de trabajo: enseña el trato y en
  * qué estado quedó, y para actuar se entra en la operación o se filtra por «Por entregar».
+ *
+ * Se lee EXACTAMENTE igual que una fila de la cola —mismas columnas, mismos anchos, el
+ * valor tachado cuando ya está cubierto—: cambiar de chip filtra la lista, no la rehace.
  */
 function OperationRow({ operation, at }: { operation: OperationData; at: string | null }) {
   const state = operationState(operation);
   const pending = operation.pending_amount ?? 0;
-  const payout = payoutEquivalent(operation);
+  const value = valueAmount(operation);
+  const covered = coveredAmount(operation);
+  const currency = valueCurrency(operation);
+  const partial = state === 'pending' && covered > 0.01;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3">
-      <div className="min-w-0 flex-1 basis-56">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <Link
-            href={`/admin/operations/${operation.uuid}`}
-            className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline"
-          >
-            {operation.uuid.slice(0, 8)}
-          </Link>
-          <span
-            className={cn(
-              'rounded-full border px-2 py-0.5 text-[11px] font-medium',
-              STATE_TONE[state],
-            )}
-          >
-            {STATE_LABEL[state]}
-          </span>
-          {operation.pair_symbol ? (
-            <span className="text-xs text-muted-foreground">{operation.pair_symbol}</span>
-          ) : null}
-        </div>
-        <p className="mt-0.5 truncate text-sm text-foreground">
-          {operation.beneficiary_alias || (
-            <span className="text-muted-foreground">Sin beneficiario</span>
-          )}
+    <div className={cn(GRID, 'border-b border-border px-2 py-2 last:border-b-0 sm:px-3')}>
+      <span className={COL.check} aria-hidden />
+
+      <div className={COL.when}>
+        <Link
+          href={`/admin/operations/${operation.uuid}`}
+          className="block truncate text-sm text-foreground hover:underline"
+        >
+          {formatCaracasShortDateTime(at)}
+        </Link>
+        <p className="truncate text-xs text-muted-foreground">
+          {operation.beneficiary_alias || 'Sin beneficiario'}
+          {operation.pair_symbol ? ` · ${operation.pair_symbol}` : ''}
         </p>
-        <p className="truncate text-xs text-muted-foreground">{formatCaracasShortDateTime(at)}</p>
       </div>
 
-      <div className="ml-auto shrink-0 text-right tabular-nums">
-        <p className="text-sm font-semibold text-foreground">
-          {formatPending(operation.from_amount, operation.from_currency)}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          → {formatPending(operation.to_amount, operation.to_currency)}
-        </p>
+      <div className={cn(COL.value, 'tabular-nums')}>
+        <span className="block text-[10px] uppercase tracking-wider text-muted-foreground lg:hidden">
+          Valor
+        </span>
         {state === 'pending' ? (
-          <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
-            falta {formatPending(pending, valueCurrency(operation))}
-            {payout != null && operation.to_currency ? (
-              <span className="font-normal text-muted-foreground">
-                {' '}
-                (≈ {formatPending(payout, operation.to_currency)})
+          partial ? (
+            <p className="text-sm">
+              <s className="text-muted-foreground">{formatPending(value, null)}</s>{' '}
+              <span className="font-bold text-amber-700 dark:text-amber-400">
+                {formatPending(pending, currency)}
+              </span>
+            </p>
+          ) : (
+            <p className="text-sm font-bold text-amber-700 dark:text-amber-400">
+              {formatPending(value, currency)}
+            </p>
+          )
+        ) : (
+          <p className="text-sm">
+            <s className="text-muted-foreground">{formatPending(value, currency)}</s>{' '}
+            {state === 'delivered' ? (
+              <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                Completado
               </span>
             ) : null}
           </p>
-        ) : null}
+        )}
+      </div>
+
+      <div className={COL.state}>
+        {/* «Parcial» y no «Por entregar»: es la misma palabra que usa la cola de trabajo
+            para esta misma operación, y verla cambiar al pasar de un chip a otro hacía
+            dudar de si eran la misma fila. */}
+        <Chip className={STATE_TONE[state]}>
+          {partial
+            ? 'Parcial'
+            : state === 'delivered' && operation.settles_in_cash
+              ? 'Cobrada'
+              : STATE_LABEL[state]}
+        </Chip>
+      </div>
+
+      <div className={cn('flex items-center', COL.action)}>
+        <Link
+          href={`/admin/operations/${operation.uuid}`}
+          className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'text-xs')}
+        >
+          Ver
+        </Link>
       </div>
     </div>
   );
 }
 
-/** Un movimiento del saldo a favor. Mismo hilo, misma altura de lectura que una operación. */
+/** Un movimiento del saldo a favor. Mismo hilo, mismas columnas que una operación. */
 function BalanceRow({ entry }: { entry: BalanceEntry }) {
   const isCredit = entry.entry_type === 'CREDIT';
+  const tone = isCredit
+    ? 'text-emerald-600 dark:text-emerald-400'
+    : 'text-amber-600 dark:text-amber-400';
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3">
-      <span
-        aria-hidden
-        className={cn(
-          'shrink-0',
-          isCredit
-            ? 'text-emerald-600 dark:text-emerald-400'
-            : 'text-amber-600 dark:text-amber-400',
+    <div className={cn(GRID, 'border-b border-border px-2 py-2 last:border-b-0 sm:px-3')}>
+      <span className={cn(COL.check, 'flex items-center justify-center')} aria-hidden>
+        {isCredit ? (
+          <ArrowDownCircle className={cn('h-4 w-4', tone)} />
+        ) : (
+          <ArrowUpCircle className={cn('h-4 w-4', tone)} />
         )}
-      >
-        {isCredit ? <ArrowDownCircle className="h-5 w-5" /> : <ArrowUpCircle className="h-5 w-5" />}
       </span>
 
-      <div className="min-w-0 flex-1 basis-48">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:text-sky-400">
-            Saldo
-          </span>
-          <span className="text-sm text-foreground">{isCredit ? 'Crédito' : 'Abono'}</span>
-        </div>
+      <div className={COL.when}>
+        <p className="truncate text-sm text-foreground">
+          {formatCaracasShortDateTime(entry.created_at)}
+        </p>
         <p className="truncate text-xs text-muted-foreground">
           {entry.incoming_payment_id != null ? `Pago entrante #${entry.incoming_payment_id} · ` : ''}
           {entry.operation_uuid ? `op ${entry.operation_uuid.slice(0, 8)} · ` : ''}
-          {formatCaracasShortDateTime(entry.created_at)}
-          {entry.created_by_username ? ` · ${entry.created_by_username}` : ''}
+          {entry.created_by_username || (isCredit ? 'crédito' : 'abono')}
         </p>
-        {/* A qué tasa se aplicó el saldo y cuántos bolívares pagó: esta es la única pantalla
-            donde se puede ver, así que no puede perderse. */}
-        {!isCredit && entry.operation_rate_used != null && entry.operation_to_amount != null ? (
-          <p className="text-xs tabular-nums text-muted-foreground">
-            @ {entry.operation_rate_used.toLocaleString('es-VE', { maximumFractionDigits: 4 })} →{' '}
-            {entry.operation_to_amount.toLocaleString('es-VE', { minimumFractionDigits: 2 })} Bs
-          </p>
-        ) : null}
-        {entry.notes ? <p className="text-xs text-muted-foreground">{entry.notes}</p> : null}
       </div>
 
-      <span
-        className={cn(
-          'ml-auto shrink-0 text-sm font-semibold tabular-nums',
-          isCredit
-            ? 'text-emerald-600 dark:text-emerald-400'
-            : 'text-amber-600 dark:text-amber-400',
-        )}
-      >
-        {isCredit ? '+' : '−'}
-        {formatUsd(entry.amount)}
-      </span>
+      <div className={cn(COL.value, 'tabular-nums')}>
+        <span className="block text-[10px] uppercase tracking-wider text-muted-foreground lg:hidden">
+          Valor
+        </span>
+        <p className={cn('text-sm font-semibold', tone)}>
+          {isCredit ? '+' : '−'}
+          {formatUsd(entry.amount)}
+        </p>
+        {/* A qué tasa se aplicó el saldo: esta es la única pantalla donde se puede ver. */}
+        {!isCredit && entry.operation_rate_used != null ? (
+          <p className="text-[11px] text-muted-foreground">
+            @ {entry.operation_rate_used.toLocaleString('es-VE', { maximumFractionDigits: 4 })}
+          </p>
+        ) : null}
+      </div>
+
+      <div className={COL.state}>
+        <Chip className="border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-400">
+          {isCredit ? 'Crédito' : 'Abono'}
+        </Chip>
+      </div>
+
+      <div className={cn('flex items-center', COL.action)}>
+        {entry.notes ? (
+          <span className="truncate text-xs text-muted-foreground" title={entry.notes}>
+            {entry.notes}
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -152,15 +208,18 @@ export function AccountThread({ items, emptyLabel }: AccountThreadProps) {
   }
 
   return (
-    <Card>
-      <CardContent className="divide-y divide-border p-4 sm:p-6">
-        {items.map((item) =>
-          item.kind === 'operation' ? (
-            <OperationRow key={item.key} operation={item.operation} at={item.at} />
-          ) : (
-            <BalanceRow key={item.key} entry={item.entry} />
-          ),
-        )}
+    <Card className="overflow-hidden py-0">
+      <CardContent className="overflow-x-auto p-0">
+        <div className={TABLE_MIN}>
+          <ThreadHeader />
+          {items.map((item) =>
+            item.kind === 'operation' ? (
+              <OperationRow key={item.key} operation={item.operation} at={item.at} />
+            ) : (
+              <BalanceRow key={item.key} entry={item.entry} />
+            ),
+          )}
+        </div>
       </CardContent>
     </Card>
   );

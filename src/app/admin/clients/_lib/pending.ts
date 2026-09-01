@@ -20,9 +20,11 @@ import type { OperationData } from '@/types/operation';
  *
  * ### De dónde salen los datos
  *
- * Hoy se agregan en el front a partir de las operaciones sin cubrir. El servidor no tiene
- * el agregado (`docs/api/clients-pending.md` lo especifica), así que los totales valen
- * hasta el techo de operaciones que se pidan de una vez.
+ * El agregado por par lo resuelve el servidor (`ClientPendingService`) y llega en
+ * `pending_by_pair`, tanto en el listado como en la ficha: eso es lo que pinta el
+ * directorio, sin techos ni totales que se queden cortos. Lo de aquí es lo que hace falta
+ * cuando se trabaja OPERACIÓN A OPERACIÓN —la cola de entregas del perfil—, donde hay que
+ * saber de cada fila cuánto falta y desde cuándo espera.
  */
 
 /** Pasados estos días la espera deja de ser ámbar y se pinta de rojo. */
@@ -31,15 +33,75 @@ export const PENDING_ALERT_DAYS = 3;
 /** Debajo de esto es ruido de redondeo, no deuda. */
 const EPSILON = 0.01;
 
-/** ¿Esta operación tiene algo sin cubrir que de verdad haya que entregar? */
+/**
+ * ¿Esta operación tiene algo sin cubrir que de verdad haya que entregar?
+ *
+ * Son DOS condiciones, no una. `pending_amount` sale de los comprobantes de SALIDA: mide
+ * lo que no le hemos pagado. Pero no le debemos nada hasta que su plata llega — una
+ * operación registrada sin comprobante entrante es una cotización o un trato a medio
+ * armar, y ahí el que debe es él, no nosotros. Contar sólo `pending_amount` mezclaba las
+ * dos patas del cambio y ponía bajo «Le debemos» operaciones que nadie había pagado.
+ *
+ * **Salvo en los pares que se cambian en efectivo** (`settles_in_cash`). Ahí no hay
+ * comprobante entrante ni lo habrá —nadie fotografía un billete—, así que exigirlo borra
+ * el par entero de la pantalla. En esos pares manda lo que falta por cuadrar, a secas.
+ *
+ * Es la misma regla que aplica el backend en `ClientPendingService` para el agregado que
+ * ya consume la lista de clientes; vive aquí para que el perfil no diga otra cosa que la
+ * lista sobre el mismo cliente.
+ */
 export function isPendingOperation(op: OperationData): boolean {
   if (op.status === 'CANCELLED' || op.status === 'QUOTED') return false;
+  if (!op.first_incoming_payment_at && !op.settles_in_cash) return false;
   return (op.pending_amount ?? 0) > EPSILON;
+}
+
+/**
+ * ¿Lo que falta en estas deudas es nuestro o del cliente?
+ *
+ * En un par normal el pendiente es lo que le debemos: su dinero entró y los bolívares no
+ * han salido. En un par de efectivo es al revés — los bolívares ya salieron y lo que falta
+ * es el efectivo del cliente. La misma cifra, el rótulo opuesto, así que la pantalla no
+ * puede llamarlas igual.
+ *
+ * `true` sólo si TODO lo que se está sumando es de pares de efectivo: con una mezcla no hay
+ * un rótulo que sea cierto para las dos, y se cae al neutro.
+ */
+export function isCashDebt(entries: ClientPendingByPair[]): boolean {
+  return entries.length > 0 && entries.every((entry) => entry.settles_in_cash);
 }
 
 /** La moneda en la que está expresado el valor —y por tanto `pending_amount`— de la op. */
 export function valueCurrency(op: OperationData): string {
   return op.currency ?? op.from_currency ?? '';
+}
+
+/**
+ * Cuánto de la operación está ya cubierto, venga de donde venga.
+ *
+ * Son DOS cosas y hay que sumarlas: lo que cubren comprobantes de salida
+ * (`delivered_amount`) y lo que se declaró entregado o cobrado en efectivo, sin comprobante
+ * (`uncovered_amount`). El backend descuenta las dos de `pending_amount`, pero sólo la
+ * primera viaja como «entregado».
+ *
+ * Mirar sólo `delivered_amount` fue un fallo real: al repartir 240 y colocar 40 en una
+ * operación de 75, la fila pasaba a enseñar «75,00» tachado… no, peor: enseñaba 35,00 a
+ * secas, como si el trato hubiera sido de 35 desde el principio. Los 40 no aparecían en
+ * ningún sitio de la pantalla.
+ */
+export function coveredAmount(op: OperationData): number {
+  return (op.delivered_amount ?? 0) + (op.uncovered_amount ?? 0);
+}
+
+/**
+ * El valor del trato en la moneda del valor: lo ya cubierto más lo que falta.
+ *
+ * Se prefiere `amount` porque es el dato del trato; la suma es el respaldo para las
+ * operaciones viejas que no lo traen.
+ */
+export function valueAmount(op: OperationData): number {
+  if (op.amount != null) return op.amount;
+  return coveredAmount(op) + (op.pending_amount ?? 0);
 }
 
 /** La moneda con la que se le paga al cliente. */
@@ -63,12 +125,6 @@ export function payoutEquivalent(op: OperationData): number | null {
 }
 
 /**
- * La fecha del comprobante entrante de cada operación, cuando se ha podido resolver.
- * `null` como valor = se miró y no hay comprobante; ausente = no se ha mirado.
- */
-export type PaymentDates = ReadonlyMap<string, string | null>;
-
-/**
  * Desde cuándo espera el cliente: la fecha del PAGO, no la de la operación.
  *
  * Cuando el bot no reconoce un comprobante, el operador crea la operación a mano días
@@ -78,10 +134,12 @@ export type PaymentDates = ReadonlyMap<string, string | null>;
  * la más vieja a la más nueva, eso no es sólo un orden feo — es dinero aplicado a la
  * operación equivocada.
  *
- * Sin `dates` se cae a la fecha de la operación, que para las que creó el bot es la buena.
+ * El respaldo a la fecha de la operación es para las ya entregadas, que se enseñan en el
+ * hilo sin tener entrante: en la cola de «por entregar» no hace falta, porque sin entrante
+ * no entran (ver `isPendingOperation`).
  */
-export function pendingSince(op: OperationData, dates?: PaymentDates): string | null {
-  return dates?.get(op.uuid) ?? op.created_at ?? op.quoted_at ?? null;
+export function pendingSince(op: OperationData): string | null {
+  return op.first_incoming_payment_at ?? op.created_at ?? op.quoted_at ?? null;
 }
 
 function pairKey(op: OperationData): string {
@@ -98,10 +156,7 @@ function older(a: string | null, b: string | null): string | null {
  * Agrupa por par las operaciones sin cubrir de UN cliente.
  * Ordena de mayor a menor deuda, que es el orden en que se lee.
  */
-export function pendingByPair(
-  operations: OperationData[],
-  dates?: PaymentDates,
-): ClientPendingByPair[] {
+export function pendingByPair(operations: OperationData[]): ClientPendingByPair[] {
   const groups = new Map<string, ClientPendingByPair>();
 
   for (const op of operations) {
@@ -114,10 +169,13 @@ export function pendingByPair(
     if (!current) {
       groups.set(key, {
         pair_symbol: key,
+        // Se normaliza a booleano: el campo es obligatorio en la entrada y una operación
+        // vieja que llegue sin él es un par normal, no un `undefined` que se propague.
+        settles_in_cash: op.settles_in_cash ?? false,
         currency: valueCurrency(op),
         amount,
         operations: 1,
-        oldest_at: pendingSince(op, dates),
+        oldest_at: pendingSince(op),
         payout_currency: payoutCurrency(op),
         payout_amount: payout,
       });
@@ -126,7 +184,7 @@ export function pendingByPair(
 
     current.amount += amount;
     current.operations += 1;
-    current.oldest_at = older(current.oldest_at, pendingSince(op, dates));
+    current.oldest_at = older(current.oldest_at, pendingSince(op));
     // Si a una sola op del grupo le falta la tasa, el equivalente del grupo entero deja de
     // ser cierto: se cae a null en vez de mostrar una suma incompleta.
     current.payout_amount =
@@ -134,22 +192,6 @@ export function pendingByPair(
   }
 
   return [...groups.values()].sort((a, b) => b.amount - a.amount);
-}
-
-/** Lo mismo, pero para la lista: de cliente a su deuda por par. */
-export function pendingByClient(operations: OperationData[]): Map<string, ClientPendingByPair[]> {
-  const byClient = new Map<string, OperationData[]>();
-
-  for (const op of operations) {
-    if (!op.client_uuid || !isPendingOperation(op)) continue;
-    const bucket = byClient.get(op.client_uuid);
-    if (bucket) bucket.push(op);
-    else byClient.set(op.client_uuid, [op]);
-  }
-
-  const result = new Map<string, ClientPendingByPair[]>();
-  for (const [clientUuid, ops] of byClient) result.set(clientUuid, pendingByPair(ops));
-  return result;
 }
 
 export interface PendingTotals {
@@ -266,11 +308,4 @@ export function formatPendingBreakdown(entries: ClientPendingByPair[]): string {
   const totals = totalsByCurrency(entries);
   if (totals.length === 0) return formatPending(0, null);
   return totals.map((total) => formatPending(total.amount, total.currency)).join(' + ');
-}
-
-/** Los pares presentes en un conjunto de deudas, para llenar el selector de par. */
-export function pairsOf(pending: Iterable<ClientPendingByPair[]>): string[] {
-  const symbols = new Set<string>();
-  for (const entries of pending) for (const entry of entries) symbols.add(entry.pair_symbol);
-  return [...symbols].sort((a, b) => a.localeCompare(b));
 }
