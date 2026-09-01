@@ -3,14 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { clientService } from '@/services/clientService';
-import { operationService } from '@/services/operationService';
 import { ClientData } from '@/types/client';
-import {
-  pairsOf,
-  pendingByClient,
-  pendingTotals,
-  type PendingTotals,
-} from '../_lib/pending';
+import { pendingTotals, type PendingTotals } from '../_lib/pending';
 
 export type BoolFilter = 'ALL' | 'YES' | 'NO';
 
@@ -27,14 +21,6 @@ export interface ClientsFilters {
 
 const emptyFilters: ClientsFilters = { search: '', pending: 'ALL', pair: '' };
 
-/**
- * Techo de operaciones sin cubrir que se traen para agregar la deuda en memoria. Es el
- * mismo apaño que el `limit: 500` de los clientes y tiene el mismo problema: pasado el
- * techo los totales mienten. Por eso la pantalla avisa cuando lo toca, y por eso
- * `docs/api/clients-pending.md` pide el agregado en servidor.
- */
-const PENDING_LIMIT = 500;
-
 export function useClients() {
   const [clients, setClients] = useState<ClientData[]>([]);
   const [total, setTotal] = useState(0);
@@ -43,12 +29,6 @@ export function useClients() {
   const [filters, setFilters] = useState<ClientsFilters>(emptyFilters);
   const [sort, setSort] = useState<ClientsSort>('name');
 
-  // Deuda por cliente, agregada en el front a partir de las operaciones sin cubrir.
-  const [pending, setPending] = useState<Map<string, NonNullable<ClientData['pending_by_pair']>>>(
-    new Map(),
-  );
-  const [pendingLoading, setPendingLoading] = useState(true);
-  const [pendingCapped, setPendingCapped] = useState(false);
 
   const loadClients = useCallback(async () => {
     setLoading(true);
@@ -64,41 +44,13 @@ export function useClients() {
     setLoading(false);
   }, []);
 
-  /**
-   * `needs=settle` es, en el servidor, exactamente «le falta cobertura»: las operaciones
-   * cuyo `pending_amount` no cubre ningún comprobante. Es la misma bandeja que la pantalla
-   * de Operaciones llama «por cuadrar», leída desde el lado del cliente.
-   */
-  const loadPending = useCallback(async () => {
-    setPendingLoading(true);
-    const result = await operationService.getOperations({
-      needs: 'settle',
-      limit: PENDING_LIMIT,
-    });
-    if (result.success && result.data) {
-      setPending(pendingByClient(result.data.operations));
-      setPendingCapped(result.data.total > result.data.operations.length);
-    } else {
-      // Que falle la deuda no puede tumbar el directorio: la lista sigue siendo útil sin
-      // la columna, así que se queda vacía y no se propaga el error.
-      setPending(new Map());
-      setPendingCapped(false);
-    }
-    setPendingLoading(false);
-  }, []);
-
   const reload = useCallback(() => {
-    loadClients();
-    loadPending();
-  }, [loadClients, loadPending]);
-
-  useEffect(() => {
     loadClients();
   }, [loadClients]);
 
   useEffect(() => {
-    loadPending();
-  }, [loadPending]);
+    loadClients();
+  }, [loadClients]);
 
   const resetFilters = useCallback(() => {
     setFilters(emptyFilters);
@@ -115,7 +67,7 @@ export function useClients() {
    */
   const decorated = useMemo(() => {
     return clients.map((client) => {
-      const entries = pending.get(client.uuid) ?? [];
+      const entries = client.pending_by_pair ?? [];
       const scoped = filters.pair
         ? entries.filter((entry) => entry.pair_symbol === filters.pair)
         : entries;
@@ -124,7 +76,7 @@ export function useClients() {
         totals: pendingTotals(scoped),
       };
     });
-  }, [clients, pending, filters.pair]);
+  }, [clients, filters.pair]);
 
   const filtered = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
@@ -166,11 +118,25 @@ export function useClients() {
   const pendingSummary = useMemo(() => {
     const withDebt = sorted.filter((row) => row.totals.operations > 0);
     const totals: PendingTotals = pendingTotals(withDebt.flatMap((row) => row.client.pending_by_pair ?? []));
-    return { clients: withDebt.length, totals, capped: pendingCapped };
-  }, [sorted, pendingCapped]);
+    return { clients: withDebt.length, totals };
+  }, [sorted]);
 
-  /** Los pares en los que hoy hay deuda, para no ofrecer un selector con opciones muertas. */
-  const pairs = useMemo(() => pairsOf(pending.values()), [pending]);
+  /**
+   * Las opciones del selector de par.
+   *
+   * Son los pares en los que hoy hay deuda MÁS el par preferido de cada cliente. Con sólo
+   * los primeros, el día que nadie debe nada el selector desaparecía de la tira — un filtro
+   * que se esfuma según el dato es un filtro que no se puede usar, y el operador no tiene
+   * manera de saber que existió.
+   */
+  const pairs = useMemo(() => {
+    const symbols = new Set<string>();
+    for (const client of clients) {
+      for (const entry of client.pending_by_pair ?? []) symbols.add(entry.pair_symbol);
+      if (client.preferred_pair_symbol) symbols.add(client.preferred_pair_symbol);
+    }
+    return [...symbols].sort((a, b) => a.localeCompare(b));
+  }, [clients]);
 
   // Clientes que exceden el límite de carga y no están en memoria (ni en la búsqueda).
   const hiddenCount = Math.max(0, total - clients.length);
@@ -211,7 +177,6 @@ export function useClients() {
     state: {
       clients: sorted,
       loading,
-      pendingLoading,
       error,
       filters,
       sort,

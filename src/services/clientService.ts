@@ -15,6 +15,8 @@ import {
   ClientUpdate,
   ManualLoanCreate,
   ManualLoanValuation,
+  PendingDelivery,
+  PendingDeliveryInput,
 } from '@/types/client';
 
 export class ClientService {
@@ -120,6 +122,53 @@ export class ClientService {
 
   // Libreta de cuentas del cliente (beneficiarios con nombre). Listar requiere usuario
   // autenticado; crear/editar/borrar requieren moderador+ en el backend.
+  // ── Entregas de lo que le debemos ──────────────────────────────────────────
+
+  /** Las entregas marcadas del cliente, de la más nueva a la más vieja. */
+  async getPendingDeliveries(
+    clientUuid: string,
+    limit = 20,
+  ): Promise<ApiResponse<PendingDelivery[]>> {
+    const result = await httpClient.get<PendingDelivery[]>(
+      `/clients/${clientUuid}/pending/deliveries?limit=${limit}`,
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  /**
+   * Marca un lote de operaciones como entregadas en efectivo.
+   *
+   * **O todas o ninguna**: el backend hace el lote en una transacción, así que un error no
+   * deja media entrega marcada. Devuelve el lote con su uuid, que es lo que hace falta
+   * después para deshacerlo. Requiere moderador+.
+   */
+  async deliverPending(
+    clientUuid: string,
+    operations: PendingDeliveryInput[],
+    note?: string,
+  ): Promise<ApiResponse<PendingDelivery>> {
+    const result = await httpClient.post<PendingDelivery>(
+      `/clients/${clientUuid}/pending/deliver`,
+      { operations, note: note ?? null },
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  /**
+   * Devuelve un lote entero a pendiente. Sin límite de tiempo, y sin borrar el rastro: el
+   * lote queda marcado como deshecho, con quién lo deshizo. Requiere moderador+.
+   */
+  async undoPendingDelivery(
+    clientUuid: string,
+    deliveryUuid: string,
+  ): Promise<ApiResponse<PendingDelivery>> {
+    const result = await httpClient.post<PendingDelivery>(
+      `/clients/${clientUuid}/pending/deliveries/${deliveryUuid}/undo`,
+      {},
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
   async getAccounts(clientUuid: string): Promise<ApiResponse<{ items: ClientAccount[] }>> {
     const result = await httpClient.get<{ items: ClientAccount[] }>(`/clients/${clientUuid}/accounts`);
     return { success: result.success, data: result.data, error: result.error };

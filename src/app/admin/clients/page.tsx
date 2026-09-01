@@ -53,16 +53,15 @@ export default function ClientsAdminPage() {
           onReset={actions.resetFilters}
         />
 
-        {/* La franja sólo tiene sentido cuando hay deuda a la vista que resumir. */}
-        {!state.pendingLoading && state.pendingSummary.clients > 0 ? (
-          <ClientsPendingSummary
-            clients={state.pendingSummary.clients}
-            totals={state.pendingSummary.totals}
-            capped={state.pendingSummary.capped}
-            sort={state.sort}
-            onSort={actions.setSort}
-          />
-        ) : null}
+        {/* Siempre: lleva los botones de orden, que no pueden depender de que alguien
+            deba dinero. El resumen de deuda de dentro sí es condicional. */}
+        <ClientsPendingSummary
+          clients={state.pendingSummary.clients}
+          shown={state.clients.length}
+          totals={state.pendingSummary.totals}
+          sort={state.sort}
+          onSort={actions.setSort}
+        />
 
         <ClientsList
           clients={state.clients}

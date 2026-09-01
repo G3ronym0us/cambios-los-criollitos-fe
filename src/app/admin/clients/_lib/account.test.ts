@@ -4,7 +4,7 @@ import type { OperationData } from '@/types/operation';
 import { accountCounts, accountThread, operationState } from './account';
 
 function op(overrides: Partial<OperationData>): OperationData {
-  return {
+  const base = {
     status: 'PENDING',
     pending_amount: 0,
     currency: 'USD',
@@ -16,7 +16,10 @@ function op(overrides: Partial<OperationData>): OperationData {
     created_at: '2026-08-30T00:00:00Z',
     quoted_at: '2026-08-30T00:00:00Z',
     ...overrides,
-  } as OperationData;
+  };
+  // Por defecto el dinero entró cuando se registró la operación —el caso del bot—, así que
+  // el orden no cambia salvo que la prueba diga otra cosa. Con `null` no hay deuda.
+  return { first_incoming_payment_at: base.created_at, ...base } as OperationData;
 }
 
 function entry(overrides: Partial<BalanceEntry>): BalanceEntry {
@@ -36,6 +39,25 @@ describe('operationState', () => {
     expect(operationState(op({ pending_amount: 0 }))).toBe('delivered');
     expect(operationState(op({ status: 'QUOTED', pending_amount: 50 }))).toBe('quoted');
     expect(operationState(op({ status: 'CANCELLED', pending_amount: 50 }))).toBe('cancelled');
+  });
+
+  it('sin el dinero del cliente no hay nada que entregar', () => {
+    // Ni «Por entregar» ni deuda: es un trato a medio armar, y el que debe es él.
+    expect(operationState(op({ pending_amount: 50, first_incoming_payment_at: null }))).toBe(
+      'delivered',
+    );
+  });
+
+  it('en un par de efectivo el comprobante que falta no cambia nada', () => {
+    // Nadie fotografía un billete: exigirlo aquí rotulaba «Entregado» lo que está sin pagar.
+    const efectivo = op({
+      pending_amount: 50,
+      first_incoming_payment_at: null,
+      settles_in_cash: true,
+    });
+
+    expect(operationState(efectivo)).toBe('pending');
+    expect(accountCounts([efectivo], [])).toMatchObject({ pending: 1, delivered: 0 });
   });
 });
 
@@ -117,10 +139,14 @@ describe('accountThread', () => {
     ]);
   });
 
-  it('ordena por la fecha del comprobante cuando se conoce', () => {
+  it('ordena por la fecha del comprobante, no por la de la operación', () => {
     // «nueva» se registró la última, pero su dinero entró antes que todo lo demás.
-    const dates = new Map([['nueva', '2026-07-01T00:00:00Z']]);
-    expect(keys(accountThread(operations, entries, 'all', { dates }))).toEqual([
+    const reordenadas = operations.map((operation) =>
+      operation.uuid === 'nueva'
+        ? { ...operation, first_incoming_payment_at: '2026-07-01T00:00:00Z' }
+        : operation,
+    );
+    expect(keys(accountThread(reordenadas, entries, 'all'))).toEqual([
       'bal:e1',
       'op:otro-par',
       'op:vieja',

@@ -2,53 +2,57 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Check, HandCoins, PartyPopper, RotateCcw } from 'lucide-react';
+import { Check, HandCoins, Minus, PartyPopper, Receipt, RotateCcw } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { SidePanel, SidePanelHeader } from '@/components/shared/SidePanel';
 import { cn } from '@/lib/utils';
-import { formatCaracasShortDateTime } from '@/utils/functions';
+import { formatCaracasShortDateTime, formatRelativeTime } from '@/utils/functions';
 import type { OperationData } from '@/types/operation';
 import { OperationCoveragePanel } from '../../../operations/_components/OperationCoveragePanel';
 import {
+  coveredAmount,
   formatPending,
   formatPendingBreakdown,
   isPendingOperation,
-  payoutEquivalent,
   pendingSince,
   pendingTone,
+  valueAmount,
   valueCurrency,
-  waitedFor,
-  type PaymentDates,
 } from '../../_lib/pending';
-import { blockedReason, useClientPending } from '../_hooks/useClientPending';
+import { blockedReason, type useClientPending } from '../_hooks/useClientPending';
 import { DistributeAmountPanel } from './DistributeAmountPanel';
+import { ACCOUNT_COL as COL, ACCOUNT_GRID as GRID, ACCOUNT_TABLE_MIN as TABLE_MIN } from './accountTable';
+
+type PendingHook = ReturnType<typeof useClientPending>;
 
 interface PendingWorkListProps {
-  /** Operaciones del cliente ya acotadas al par elegido en Cuenta. */
-  operations: OperationData[];
-  /** Fechas de pago ya resueltas en Cuenta, comunes al hilo y a esta cola. */
-  paymentDates: PaymentDates;
+  state: PendingHook['state'];
+  actions: PendingHook['actions'];
   onChanged: () => void;
 }
 
 function Checkbox({
   checked,
+  indeterminate,
   disabled,
   label,
   onChange,
 }: {
   checked: boolean;
+  indeterminate?: boolean;
   disabled?: boolean;
   label: string;
   onChange: () => void;
 }) {
+  const marked = checked || !!indeterminate;
+
   return (
     <button
       type="button"
       role="checkbox"
-      aria-checked={checked}
+      aria-checked={indeterminate ? 'mixed' : checked}
       aria-label={label}
       disabled={disabled}
       onClick={onChange}
@@ -62,22 +66,97 @@ function Checkbox({
           'flex h-[18px] w-[18px] items-center justify-center rounded border-2 transition-colors',
           disabled
             ? 'border-border bg-muted'
-            : checked
+            : marked
               ? 'border-primary bg-primary text-primary-foreground'
               : 'border-muted-foreground/40 bg-card',
         )}
       >
-        {checked ? <Check className="h-3 w-3" strokeWidth={3.5} /> : null}
+        {indeterminate ? (
+          <Minus className="h-3 w-3" strokeWidth={3.5} />
+        ) : checked ? (
+          <Check className="h-3 w-3" strokeWidth={3.5} />
+        ) : null}
       </span>
     </button>
+  );
+}
+
+/** Un estado de fila del diseño: qué le va a pasar a esta operación si confirmas. */
+function StateChip({
+  tone,
+  children,
+}: {
+  tone: 'go' | 'done' | 'warn' | 'blocked';
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className={cn(
+        'rounded-full border px-2 py-0.5 text-[11px] font-medium',
+        tone === 'go' && 'border-primary/40 bg-primary/10 text-primary',
+        tone === 'done' &&
+          'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+        tone === 'warn' &&
+          'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+        tone === 'blocked' && 'border-border bg-muted text-muted-foreground',
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** La cabecera de columnas del diseño. Sólo en ≥lg: es lo que sustituye a las etiquetas. */
+function ListHeader({
+  checked,
+  indeterminate,
+  disabled,
+  onToggleAll,
+}: {
+  checked: boolean;
+  indeterminate: boolean;
+  disabled: boolean;
+  onToggleAll: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        GRID,
+        'hidden border-b border-border bg-muted/40 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground lg:grid lg:px-3',
+      )}
+    >
+      <div className={COL.check}>
+        <Checkbox
+          checked={checked}
+          indeterminate={indeterminate}
+          disabled={disabled}
+          label="Seleccionar todas las operaciones entregables"
+          onChange={onToggleAll}
+        />
+      </div>
+      <span className={COL.when}>Fecha</span>
+      <span className={COL.value}>Valor</span>
+      <span className={COL.state}>Estado</span>
+      <span className={cn(COL.action, 'text-right')}>Acción</span>
+    </div>
   );
 }
 
 /**
  * Una operación sin cubrir, como fila.
  *
- * Es una sola fila responsiva: en móvil las cifras caen bajo el nombre y en ≥lg se alinean
- * en columnas. Nada de duplicar la fila para cada breakpoint.
+ * Cuatro columnas: cuándo fue, cuánto vale, en qué estado está y qué se puede hacer. El
+ * identificador de la operación y el «lleva 6 d esperando» se cayeron a propósito — la
+ * fecha ya dice lo uno y lo otro, y ocupaban una columna entera para repetirlo.
+ *
+ * **El valor cuenta la historia él solo**, que es lo que evita tener que cruzar tres
+ * columnas de cifras para entender una fila:
+ *
+ *     pendiente   130,00 USD
+ *     parcial     ~~100,00~~  60,00 USD     ← tachado el trato, en pie lo que falta
+ *     saldada     ~~130,00~~  Completado
+ *
+ * En móvil la fila envuelve y cada trozo lleva su etiqueta; en ≥lg cae en la rejilla.
  */
 function PendingRow({
   operation,
@@ -87,6 +166,7 @@ function PendingRow({
   working,
   onToggle,
   onCover,
+  onMark,
   onUndo,
 }: {
   operation: OperationData;
@@ -97,95 +177,97 @@ function PendingRow({
   working: boolean;
   onToggle: () => void;
   onCover: () => void;
+  onMark: () => void;
   onUndo: () => void;
 }) {
   const blocked = blockedReason(operation);
   const currency = valueCurrency(operation);
   const pending = operation.pending_amount ?? 0;
-  const delivered = operation.delivered_amount ?? 0;
+  const covered = coveredAmount(operation);
+  const value = valueAmount(operation);
   // Ya no debe nada: sigue en la cola sólo para poder deshacerla.
   const done = !isPendingOperation(operation);
-  const payout = payoutEquivalent(operation);
-  const waited = waitedFor(since);
+  const partial = !done && covered > 0.01;
   const alert = pendingTone(since) === 'destructive';
+  // En efectivo no hay comprobante que atar: el camino corto es marcarla y ya.
+  const cash = operation.settles_in_cash;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-2 py-2 last:border-b-0 sm:px-3">
+    <div className={cn(GRID, 'border-b border-border px-2 py-2 last:border-b-0 sm:px-3')}>
       <Checkbox
         checked={checked}
         disabled={!!blocked || done}
-        label={`Seleccionar operación ${operation.uuid.slice(0, 8)}`}
+        label={`Seleccionar operación del ${formatCaracasShortDateTime(since)}`}
         onChange={onToggle}
       />
 
-      <div className="min-w-0 flex-1 basis-56">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <Link
-            href={`/admin/operations/${operation.uuid}`}
-            className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline"
-          >
-            {operation.uuid.slice(0, 8)}
-          </Link>
-          {done ? (
-            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
-              Entregada
+      {/* La fecha es también el enlace a la operación: sin la columna del id habría que
+          salir de la pantalla para llegar al detalle. */}
+      <div className={COL.when}>
+        <Link
+          href={`/admin/operations/${operation.uuid}`}
+          className={cn(
+            'block truncate text-sm hover:underline',
+            alert && !done ? 'font-semibold text-destructive' : 'text-foreground',
+          )}
+        >
+          {formatCaracasShortDateTime(since)}
+        </Link>
+        <p className="truncate text-xs text-muted-foreground">
+          {operation.beneficiary_alias || 'Sin beneficiario'}
+        </p>
+      </div>
+
+      <div className={cn(COL.value, 'tabular-nums')}>
+        <span className="block text-[10px] uppercase tracking-wider text-muted-foreground lg:hidden">
+          Valor
+        </span>
+        {done ? (
+          <p className="text-sm">
+            <s className="text-muted-foreground">{formatPending(value, currency)}</s>{' '}
+            <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+              Completado
             </span>
-          ) : waited ? (
+          </p>
+        ) : partial ? (
+          <p className="text-sm">
+            <s className="text-muted-foreground">{formatPending(value, null)}</s>{' '}
             <span
               className={cn(
-                'text-xs font-semibold',
+                'font-bold',
                 alert ? 'text-destructive' : 'text-amber-700 dark:text-amber-400',
               )}
             >
-              {waited}
+              {formatPending(pending, currency)}
             </span>
-          ) : null}
-        </div>
-        <p className="truncate text-sm text-foreground">
-          {operation.beneficiary_alias || (
-            <span className="text-muted-foreground">Sin beneficiario</span>
-          )}
-        </p>
-        <p className="truncate text-xs text-muted-foreground">
-          {formatCaracasShortDateTime(since)}
-          {blocked ? <> · {blocked}</> : null}
-        </p>
-      </div>
-
-      <div className="ml-auto flex shrink-0 items-baseline gap-4 text-right tabular-nums">
-        {delivered > 0 ? (
-          <span className="text-xs text-emerald-700 dark:text-emerald-400">
-            <span className="block text-[10px] uppercase tracking-wider text-muted-foreground">
-              Entregado
-            </span>
-            {formatPending(delivered, null)}
-          </span>
-        ) : null}
-        <span>
-          <span className="block text-[10px] uppercase tracking-wider text-muted-foreground">
-            Falta
-          </span>
-          <span
+          </p>
+        ) : (
+          <p
             className={cn(
               'text-sm font-bold',
-              done
-                ? 'text-muted-foreground'
-                : alert
-                  ? 'text-destructive'
-                  : 'text-amber-700 dark:text-amber-400',
+              alert ? 'text-destructive' : 'text-amber-700 dark:text-amber-400',
             )}
           >
-            {formatPending(pending, currency)}
-          </span>
-          {payout != null && operation.to_currency ? (
-            <span className="block text-[11px] font-normal text-muted-foreground">
-              ≈ {formatPending(payout, operation.to_currency)}
-            </span>
-          ) : null}
-        </span>
+            {formatPending(value, currency)}
+          </p>
+        )}
       </div>
 
-      <div className="flex shrink-0 gap-2">
+      <div className={COL.state}>
+        {done ? (
+          <StateChip tone="done">{cash ? 'Cobrada' : 'Entregada'}</StateChip>
+        ) : blocked ? (
+          <StateChip tone="blocked">Falta dato</StateChip>
+        ) : checked ? (
+          <StateChip tone="go">Se marcará</StateChip>
+        ) : partial ? (
+          <StateChip tone="warn">Parcial</StateChip>
+        ) : (
+          <StateChip tone="blocked">Pendiente</StateChip>
+        )}
+      </div>
+
+      <div className={cn('flex items-center gap-1', COL.action)}>
         {undoable ? (
           <Button variant="outline" size="sm" onClick={onUndo} disabled={working}>
             <RotateCcw className="h-3.5 w-3.5" />
@@ -196,11 +278,30 @@ function PendingRow({
             href={`/admin/operations/${operation.uuid}`}
             className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
           >
-            Completar datos
+            Pedir datos
           </Link>
+        ) : cash ? (
+          <>
+            {/* En efectivo el gesto de un vistazo es «ya me pagó». El panel de cobertura
+                sigue a mano en el icono, para el día que sí haya comprobante. */}
+            <Button size="sm" onClick={onMark} disabled={working}>
+              <Check className="h-3.5 w-3.5" strokeWidth={3} />
+              Pagado
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              aria-label="Cuadrar con comprobantes"
+              title="Cuadrar con comprobantes"
+              onClick={onCover}
+            >
+              <Receipt className="h-4 w-4" />
+            </Button>
+          </>
         ) : (
-          <Button variant={delivered > 0 ? 'outline' : 'default'} size="sm" onClick={onCover}>
-            {delivered > 0 ? 'Completar' : 'Cubrir'}
+          <Button variant={partial ? 'outline' : 'default'} size="sm" onClick={onCover}>
+            {partial ? 'Completar' : 'Cubrir'}
           </Button>
         )}
       </div>
@@ -214,9 +315,11 @@ function PendingRow({
  *
  * «Cubrir» abre el panel de cobertura de siempre —el que ata comprobantes de verdad—; las
  * casillas y el reparto son el otro camino, el de la entrega en efectivo sin comprobante.
+ *
+ * El estado vive arriba, en Cuenta: la cabecera de la pestaña ofrece «Entregar todo», y
+ * eso sólo puede encender la selección de esta lista si la selección no es suya.
  */
-export function PendingWorkList({ operations, paymentDates, onChanged }: PendingWorkListProps) {
-  const { state, actions } = useClientPending(operations, paymentDates, onChanged);
+export function PendingWorkList({ state, actions, onChanged }: PendingWorkListProps) {
   const [covering, setCovering] = useState<string | null>(null);
 
   if (state.rows.length === 0) {
@@ -229,41 +332,69 @@ export function PendingWorkList({ operations, paymentDates, onChanged }: Pending
     );
   }
 
-  const undoableIds = new Set(state.undoable.map((item) => item.operationUuid));
+  const allSelected =
+    state.selectable.length > 0 && state.selectedRows.length === state.selectable.length;
+  const someSelected = state.selectedRows.length > 0 && !allSelected;
+  // Con un solo par a la vista el pie puede nombrarlo; con varios sería mentira.
+  const pairLabel = state.entries.length === 1 ? state.entries[0].pair_symbol : null;
 
   return (
     <div className="space-y-4">
-      {/* Barra de la cola: sólo la acción que cambia de modo. Cuánto se debe y el selector
-          de par están arriba, en la cabecera de Cuenta, comunes a todos los filtros. */}
-      <div className="flex justify-end">
-        <Button
-          variant={state.mode === 'distribute' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => actions.setMode(state.mode === 'distribute' ? 'select' : 'distribute')}
-        >
-          <HandCoins className="h-4 w-4" />
-          {state.mode === 'distribute' ? 'Volver a la lista' : 'Repartir un monto'}
-        </Button>
-      </div>
+      {/* Barra de la cola: sólo la acción que cambia de modo, y sólo en modo lista — el
+          panel de reparto trae su propio «volver». Cuánto se debe y el selector de par
+          están arriba, en la cabecera de Cuenta, comunes a todos los filtros. */}
+      {state.mode === 'select' ? (
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" onClick={() => actions.setMode('distribute')}>
+            <HandCoins className="h-4 w-4" />
+            Repartir un monto
+          </Button>
+        </div>
+      ) : null}
 
       {state.mode === 'distribute' ? (
         <DistributeAmountPanel state={state} actions={actions} />
       ) : (
         <Card className="overflow-hidden py-0">
-          <CardContent className="p-0">
+          <CardContent className="overflow-x-auto p-0">
+            <div className={TABLE_MIN}>
+            <ListHeader
+              checked={allSelected}
+              indeterminate={someSelected}
+              disabled={state.selectable.length === 0}
+              onToggleAll={allSelected ? actions.clearSelection : actions.selectAll}
+            />
+
             {state.rows.map((operation) => (
               <PendingRow
                 key={operation.uuid}
                 operation={operation}
-                since={pendingSince(operation, state.paymentDates)}
+                since={pendingSince(operation)}
                 checked={state.selected.has(operation.uuid)}
-                undoable={undoableIds.has(operation.uuid)}
+                undoable={state.deliveryByOperation.has(operation.uuid)}
                 working={state.working}
                 onToggle={() => actions.toggle(operation.uuid)}
                 onCover={() => setCovering(operation.uuid)}
+                onMark={() => actions.markOne(operation.uuid)}
                 onUndo={() => actions.undoOne(operation.uuid)}
               />
             ))}
+
+            {/* El pie del diseño: cuántas quedan sin cubrir y cuánto suman, sin tener que
+                volver a la cabecera después de bajar por la lista. */}
+            {state.totals.operations > 0 ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-muted/40 px-2 py-2 text-xs sm:px-3">
+                <span className="text-muted-foreground">
+                  {state.totals.operations}{' '}
+                  {state.totals.operations === 1 ? 'operación' : 'operaciones'}
+                  {pairLabel ? ` ${pairLabel}` : ''} sin cubrir
+                </span>
+                <span className="font-bold tabular-nums text-foreground">
+                  {formatPendingBreakdown(state.entries)}
+                </span>
+              </div>
+            ) : null}
+            </div>
           </CardContent>
         </Card>
       )}
@@ -287,7 +418,7 @@ export function PendingWorkList({ operations, paymentDates, onChanged }: Pending
             <Button variant="ghost" size="sm" onClick={actions.clearSelection}>
               Quitar selección
             </Button>
-            {state.selectedRows.length < state.selectable.length ? (
+            {!allSelected ? (
               <Button variant="ghost" size="sm" onClick={actions.selectAll}>
                 Seleccionar todas ({state.selectable.length})
               </Button>
@@ -301,27 +432,47 @@ export function PendingWorkList({ operations, paymentDates, onChanged }: Pending
         </div>
       ) : null}
 
+      {/* Las entregas que siguen en pie, con su deshacer. Vienen del servidor, así que
+          siguen ahí mañana: el error que se descubre tarde ya no obliga a entrar operación
+          por operación al panel de cobertura. Se enseñan las últimas cinco. */}
       {state.undoable.length > 0 ? (
-        <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted p-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-muted-foreground">
-            En esta sesión marcaste{' '}
-            <strong className="font-semibold text-foreground">
-              {state.undoable.length}{' '}
-              {state.undoable.length === 1 ? 'operación' : 'operaciones'}
-            </strong>
-            . Deshacer las devuelve a pendiente; al recargar la página se deshace desde la
-            operación.
+        <div className="space-y-2 rounded-lg border border-border bg-muted p-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            Entregas marcadas
           </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={actions.undoSession}
-            disabled={state.working}
-            className="shrink-0"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            Deshacer todo lo de esta sesión
-          </Button>
+          {state.undoable.slice(0, 5).map((delivery) => (
+            <div
+              key={delivery.uuid}
+              className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+            >
+              {/* Qué se marcó, no sólo cuántas: para decidir si hay que deshacer hay que
+                  reconocer la operación, y «1 operación» no se reconoce. */}
+              <p className="min-w-0 text-xs text-muted-foreground">
+                <strong className="font-semibold text-foreground">
+                  {delivery.operations}{' '}
+                  {delivery.operations === 1 ? 'operación' : 'operaciones'} ·{' '}
+                  {formatPending(delivery.amount, delivery.items[0]?.currency ?? null)}
+                </strong>{' '}
+                ({delivery.items
+                  .slice(0, 3)
+                  .map((item) => item.operation_uuid?.slice(0, 8) ?? '—')
+                  .join(', ')}
+                {delivery.operations > 3 ? ` y ${delivery.operations - 3} más` : ''}){' '}
+                {formatRelativeTime(delivery.created_at)}
+                {delivery.created_by_username ? ` · ${delivery.created_by_username}` : ''}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => actions.undoDelivery(delivery)}
+                disabled={state.working}
+                className="shrink-0"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Deshacer
+              </Button>
+            </div>
+          ))}
         </div>
       ) : null}
 

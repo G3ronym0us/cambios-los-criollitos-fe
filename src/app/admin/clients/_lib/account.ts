@@ -1,6 +1,6 @@
 import type { BalanceEntry } from '@/types/client';
 import type { OperationData } from '@/types/operation';
-import { isPendingOperation, pendingSince, type PaymentDates } from './pending';
+import { isPendingOperation, pendingSince } from './pending';
 
 /**
  * La pestaña «Cuenta»: Transacciones + Por entregar + Saldo en un solo hilo.
@@ -68,8 +68,8 @@ export function accountCounts(
 /**
  * Funde operaciones y movimientos de saldo en un hilo ordenado.
  *
- * `dates` es la fecha del comprobante de cada operación: la misma que ordena la lista de
- * «por entregar», para que una operación no salte de sitio al cambiar de filtro.
+ * Ordena por la fecha del comprobante entrante, la misma que ordena la cola de «por
+ * entregar», para que una operación no salte de sitio al cambiar de filtro.
  *
  * El orden es del más nuevo al más viejo salvo en «Por entregar», que deja de ser un
  * histórico que se consulta y pasa a ser una cola de trabajo: ahí manda la antigüedad,
@@ -79,9 +79,8 @@ export function accountThread(
   operations: OperationData[],
   entries: BalanceEntry[],
   filter: AccountFilter,
-  options: { pair?: string; dates?: PaymentDates } = {},
+  options: { pair?: string } = {},
 ): AccountItem[] {
-  const { dates } = options;
   // En «Saldo» el par no pinta nada —el saldo a favor es un ledger en USD, no es de ningún
   // par— y además su selector ni se enseña: hacerle caso dejaría la lista vacía sin manera
   // visible de arreglarlo.
@@ -97,7 +96,7 @@ export function accountThread(
       items.push({
         kind: 'operation',
         key: `op:${operation.uuid}`,
-        at: pendingSince(operation, dates),
+        at: pendingSince(operation),
         operation,
       });
     }

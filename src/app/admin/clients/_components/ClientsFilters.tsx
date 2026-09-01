@@ -17,7 +17,7 @@ import type { ClientsFilters as Filters } from '../_hooks/useClients';
 interface ClientsFiltersProps {
   filters: Filters;
   hasActiveFilters: boolean;
-  /** Los pares en los que hoy hay deuda; vacío, el selector no se ofrece. */
+  /** Los pares que se pueden elegir; vacío, el selector se enseña apagado. */
   pairs: string[];
   onChange: (filters: Filters) => void;
   onReset: () => void;
@@ -93,34 +93,45 @@ export function ClientsFilters({
         </Select>
       </div>
 
-      {pairs.length > 0 ? (
-        <div className="flex flex-col gap-1.5 sm:min-w-[150px]">
-          <Label
-            htmlFor="clients-pair-filter"
-            className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
+      {/* Se enseña siempre, apagado si no hay par que ofrecer. Escondiéndolo cuando la
+          lista salía vacía, la tira de filtros cambiaba de forma según el dato y el
+          operador no tenía manera de saber que ese filtro existía. */}
+      <div className="flex flex-col gap-1.5 sm:min-w-[150px]">
+        <Label
+          htmlFor="clients-pair-filter"
+          className={cn(
+            'text-[10px] font-bold uppercase tracking-wider',
+            filters.pair ? 'text-primary' : 'text-muted-foreground',
+          )}
+        >
+          Par
+        </Label>
+        <Select
+          value={filters.pair || ALL_PAIRS}
+          onValueChange={(value) =>
+            onChange({ ...filters, pair: !value || value === ALL_PAIRS ? '' : value })
+          }
+        >
+          <SelectTrigger
+            id="clients-pair-filter"
+            disabled={pairs.length === 0}
+            className={cn(
+              'h-10 w-full sm:w-[150px]',
+              filters.pair ? 'border-primary ring-3 ring-primary/10' : '',
+            )}
           >
-            Par
-          </Label>
-          <Select
-            value={filters.pair || ALL_PAIRS}
-            onValueChange={(value) =>
-              onChange({ ...filters, pair: !value || value === ALL_PAIRS ? '' : value })
-            }
-          >
-            <SelectTrigger id="clients-pair-filter" className="h-10 w-full sm:w-[150px]">
-              <SelectValue placeholder="Todos" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_PAIRS}>Todos los pares</SelectItem>
-              {pairs.map((pair) => (
-                <SelectItem key={pair} value={pair}>
-                  {pair}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      ) : null}
+            <SelectValue placeholder={pairs.length === 0 ? 'Sin pares' : 'Todos'} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_PAIRS}>Todos los pares</SelectItem>
+            {pairs.map((pair) => (
+              <SelectItem key={pair} value={pair}>
+                {pair}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       {hasActiveFilters ? (
         <Button variant="ghost" onClick={onReset} className="h-10 sm:ml-auto">

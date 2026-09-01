@@ -10,6 +10,7 @@ import type { ClientData, ClientPendingByPair } from '@/types/client';
 import {
   formatPending,
   formatPendingBreakdown,
+  isCashDebt,
   pendingTone,
   type PendingTotals,
 } from '../_lib/pending';
@@ -33,8 +34,8 @@ function formatPhone(phone: string) {
  * El bloque de deuda de la fila. Sólo aparece cuando hay algo que entregar: sin filtro, la
  * lista sigue siendo el directorio de siempre y las pocas filas con deuda destacan solas.
  *
- * La cifra grande es la exacta, en la moneda del valor del trato; debajo va el equivalente
- * en la moneda con la que se paga, con «≈», porque sale de la tasa cotizada y la real la
+ * La cifra es la exacta, en la moneda del valor del trato. El equivalente en la moneda con
+ * la que se paga se quitó: salía de la tasa cotizada y no de la
  * fijan los comprobantes.
  */
 function PendingBlock({
@@ -48,6 +49,9 @@ function PendingBlock({
   // Con más de una moneda no hay una cifra que enseñar: `pendingTotals` deja el total sin
   // moneda justo para esto, y sumarlas igual sería mezclar dólares con bolívares.
   const mixed = pending.currency == null;
+  // En un par de efectivo la cifra es la misma pero significa lo contrario: los bolívares
+  // ya salieron y lo que falta es lo que el cliente tiene que traer.
+  const cash = isCashDebt(entries);
 
   return (
     <div
@@ -62,7 +66,7 @@ function PendingBlock({
           alert ? 'text-destructive' : 'text-amber-700 dark:text-amber-400',
         )}
       >
-        Por entregar
+        {cash ? 'Nos debe' : 'Por entregar'}
       </p>
       <p
         className={cn(
@@ -73,11 +77,6 @@ function PendingBlock({
       >
         {mixed ? formatPendingBreakdown(entries) : formatPending(pending.amount, pending.currency)}
       </p>
-      {!mixed && pending.payout_amount != null && pending.payout_currency ? (
-        <p className="text-xs text-muted-foreground tabular-nums">
-          ≈ {formatPending(pending.payout_amount, pending.payout_currency)}
-        </p>
-      ) : null}
       <p className="text-xs text-muted-foreground tabular-nums">
         {pending.operations} {pending.operations === 1 ? 'operación' : 'operaciones'}
       </p>

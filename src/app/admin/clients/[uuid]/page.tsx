@@ -15,7 +15,13 @@ import { ClientAccountTab } from './_components/ClientAccountTab';
 import { ClientSettingsTab } from './_components/ClientSettingsTab';
 import { ClientLoansTab } from './_components/ClientLoansTab';
 import { useClientProfile } from './_hooks/useClientProfile';
-import { formatPendingBreakdown, isPendingOperation, pendingByPair, pendingTotals } from '../_lib/pending';
+import {
+  formatPendingBreakdown,
+  isCashDebt,
+  isPendingOperation,
+  pendingByPair,
+  pendingTotals,
+} from '../_lib/pending';
 
 function isGroup(phone: string) {
   return phone.includes('@g.us');
@@ -114,7 +120,8 @@ export default function ClientProfilePage() {
         ) : null}
         {pendingTotal.operations > 0 ? (
           <StatusBadge tone="destructive" icon={Truck}>
-            {formatPendingBreakdown(pendingEntries)} por entregar
+            {formatPendingBreakdown(pendingEntries)}{' '}
+            {isCashDebt(pendingEntries) ? 'que nos debe' : 'por entregar'}
           </StatusBadge>
         ) : null}
       </div>
@@ -160,6 +167,7 @@ export default function ClientProfilePage() {
             esto cambiar de pestaña y volver lo borraría sin avisar. */}
         <TabsContent value="account" keepMounted>
           <ClientAccountTab
+            clientUuid={uuid}
             operations={operations}
             operationsLoading={operationsLoading}
             balance={balance}

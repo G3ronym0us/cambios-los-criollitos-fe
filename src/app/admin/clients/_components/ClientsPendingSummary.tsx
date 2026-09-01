@@ -1,15 +1,15 @@
 'use client';
 
-import { AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatPending, pendingTone, waitedFor, type PendingTotals } from '../_lib/pending';
 import type { ClientsSort } from '../_hooks/useClients';
 
 interface ClientsPendingSummaryProps {
+  /** Cuántos de los clientes a la vista deben algo. Cero = no hay deuda que resumir. */
   clients: number;
+  /** Cuántos clientes se están enseñando en total, con deuda o sin ella. */
+  shown: number;
   totals: PendingTotals;
-  /** Se pidieron más operaciones sin cubrir de las que caben: el total se queda corto. */
-  capped: boolean;
   sort: ClientsSort;
   onSort: (sort: ClientsSort) => void;
 }
@@ -21,56 +21,63 @@ const SORTS: { value: ClientsSort; label: string }[] = [
 ];
 
 /**
- * La franja de arriba cuando se filtra por «con pendiente»: cuánto se debe en total, en
- * cuántas operaciones, y desde cuándo. Aquí es donde vive la antigüedad — fila a fila
- * ensuciaba el directorio sin decir nada que no diga el color del monto.
+ * La tira entre los filtros y las filas: qué hay a la vista y en qué orden.
+ *
+ * Se pinta SIEMPRE, aunque nadie deba nada. Antes sólo aparecía cuando había deuda, y con
+ * ella se iban los botones de orden: el día que no hubiera pendientes no se podía ni
+ * ordenar el directorio por A-Z. Lo condicional es el resumen de deuda, no la tira.
+ *
+ * Con deuda enseña cuánto se debe, en cuántas operaciones y desde cuándo. Aquí es donde
+ * vive la antigüedad — fila a fila ensuciaba el directorio sin decir nada que no diga ya
+ * el color del monto.
  */
 export function ClientsPendingSummary({
   clients,
+  shown,
   totals,
-  capped,
   sort,
   onSort,
 }: ClientsPendingSummaryProps) {
   const waited = waitedFor(totals.oldest_at);
   const alert = pendingTone(totals.oldest_at) === 'destructive';
+  const hasDebt = clients > 0;
 
   return (
-    <div className="flex flex-col gap-3 border-b border-border bg-amber-500/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5">
-      <div className="min-w-0 space-y-0.5">
-        <p className="text-sm font-bold tabular-nums text-foreground">
-          {clients} {clients === 1 ? 'cliente' : 'clientes'}
-          {totals.currency ? (
-            <> · {formatPending(totals.amount, totals.currency)} por entregar</>
-          ) : (
-            <> con algo por entregar</>
-          )}
-          {totals.payout_amount != null && totals.payout_currency ? (
-            <span className="font-medium text-muted-foreground">
-              {' '}
-              (≈ {formatPending(totals.payout_amount, totals.payout_currency)})
-            </span>
-          ) : null}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {totals.operations} {totals.operations === 1 ? 'operación' : 'operaciones'} sin cubrir
-          {waited ? (
-            <>
-              {' · '}
-              <span className={cn(alert && 'font-semibold text-destructive')}>
-                la más vieja lleva {waited} esperando
-              </span>
-            </>
-          ) : null}
-          {totals.currency ? null : ' · hay varias monedas, mira cada fila'}
-        </p>
-        {capped ? (
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            Hay más operaciones sin cubrir de las que se cargaron: el total se queda corto.
+    <div
+      className={cn(
+        'flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5',
+        hasDebt ? 'bg-amber-500/10' : 'bg-muted/40',
+      )}
+    >
+      {hasDebt ? (
+        <div className="min-w-0 space-y-0.5">
+          <p className="text-sm font-bold tabular-nums text-foreground">
+            {clients} {clients === 1 ? 'cliente' : 'clientes'}
+            {totals.currency ? (
+              <> · {formatPending(totals.amount, totals.currency)} por entregar</>
+            ) : (
+              <> con algo por entregar</>
+            )}
           </p>
-        ) : null}
-      </div>
+          <p className="text-xs text-muted-foreground">
+            {totals.operations} {totals.operations === 1 ? 'operación' : 'operaciones'} sin
+            cubrir
+            {waited ? (
+              <>
+                {' · '}
+                <span className={cn(alert && 'font-semibold text-destructive')}>
+                  la más vieja lleva {waited} esperando
+                </span>
+              </>
+            ) : null}
+            {totals.currency ? null : ' · hay varias monedas, mira cada fila'}
+          </p>
+        </div>
+      ) : (
+        <p className="min-w-0 text-sm text-muted-foreground">
+          {shown} {shown === 1 ? 'cliente' : 'clientes'} a la vista · no le debemos nada a nadie
+        </p>
+      )}
 
       <div
         role="group"

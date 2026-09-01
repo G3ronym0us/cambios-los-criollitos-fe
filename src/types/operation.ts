@@ -19,9 +19,37 @@ export interface OperationData {
   currency: string | null;
   // Cuánto cubren ya sus comprobantes de salida, y cuánto falta.
   delivered_amount: number | null;
+  /**
+   * El hueco declarado sin comprobante: lo entregado o cobrado en efectivo.
+   *
+   * **No está en `delivered_amount`**, que sólo cuenta comprobantes, pero sí está
+   * descontado de `pending_amount`. Cualquier pantalla que hable de «cuánto se ha cubierto»
+   * tiene que sumar los dos: si no, una operación de 75 con 40 marcados en efectivo se lee
+   * como si valiera 35 desde el principio y los 40 no aparecen en ninguna parte.
+   */
+  uncovered_amount: number | null;
+  uncovered_reason: string | null;
   pending_amount: number | null;
   /** Cuántos comprobantes de salida cubren la operación. */
   payments_count: number;
+  /**
+   * Cuándo llegó el dinero del cliente: su primer comprobante ENTRANTE.
+   *
+   * `null` = todavía no ha llegado, y entonces no le debemos nada por mucho que falte por
+   * entregar: lo que hay es un trato a medio armar, no una deuda. Es también la fecha por
+   * la que se ordena la cola de entregas — `created_at` es cuándo se registró el trato, no
+   * cuándo entró la plata, y las operaciones que el operador arma a mano nacen hoy aunque
+   * el dinero llevara una semana adentro.
+   */
+  first_incoming_payment_at: string | null;
+  /**
+   * Su par se cambia en efectivo (`CurrencyPair.settles_in_cash`).
+   *
+   * Entonces `first_incoming_payment_at` vacío NO dice que el cliente no haya pagado: dice
+   * que de un billete no hay comprobante que adjuntar. Y lo que quede sin cuadrar se lee al
+   * revés — los bolívares ya salieron y lo que falta es el efectivo del cliente.
+   */
+  settles_in_cash: boolean;
   /**
    * La tasa que resultó de los comprobantes (entregado ÷ valor). `rate_used` es la que se
    * COTIZÓ; la desviación entre ambas es lo que la columna de cobertura viene a mostrar.
