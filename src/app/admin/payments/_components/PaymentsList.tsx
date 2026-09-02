@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import type { AttentionFilter, PaymentData, PaymentSuggestion } from '@/types/payment';
 import { PaymentItem } from './PaymentItem';
+import { getPaymentsListState } from './paymentsListState';
 import { PaymentRow, PaymentRowHeader, ROW_GRID } from './PaymentRow';
 
 interface PaymentsListProps {
@@ -122,7 +123,17 @@ export function PaymentsList({
     return () => observer.disconnect();
   }, [hasMore, loading, loadingMore, onLoadMore, payments.length]);
 
-  if (loading) {
+  // Qué se pinta es una decisión pura (ver paymentsListState.ts): loading > error > los
+  // tres vacíos > la lista. Extraída para poder probarla sin montar este componente.
+  const listState = getPaymentsListState({
+    loading,
+    error,
+    paymentsCount: payments.length,
+    attention,
+    hasActiveFilters,
+  });
+
+  if (listState === 'loading') {
     return (
       <>
         <TableSkeleton />
@@ -132,7 +143,7 @@ export function PaymentsList({
   }
 
   // El fallo de la consulta no es una bandeja vacía: los comprobantes siguen guardados.
-  if (error) {
+  if (listState === 'error') {
     return (
       <EmptyState
         icon={AlertTriangle}
@@ -148,33 +159,35 @@ export function PaymentsList({
     );
   }
 
-  if (payments.length === 0) {
-    // Quedarse sin nada por atender es un logro, no un vacío: se dice como tal.
-    if (attention === 'ATTENTION') {
-      return (
-        <EmptyState
-          icon={CheckCircle2}
-          title="Todo conciliado"
-          description="No queda ningún comprobante por atender. Los nuevos aparecerán aquí en cuanto el bot los procese."
-          actions={
-            <Button variant="outline" size="lg" onClick={onResetFilters}>
-              Ver todos los pagos
-            </Button>
-          }
-        />
-      );
-    }
+  // Quedarse sin nada por atender es un logro, no un vacío: se dice como tal.
+  if (listState === 'empty-attention') {
     return (
       <EmptyState
-        icon={hasActiveFilters ? SlidersHorizontal : Banknote}
-        title={hasActiveFilters ? 'No hay pagos con estos filtros' : 'Aún no hay pagos'}
+        icon={CheckCircle2}
+        title="Todo conciliado"
+        description="No queda ningún comprobante por atender. Los nuevos aparecerán aquí en cuanto el bot los procese."
+        actions={
+          <Button variant="outline" size="lg" onClick={onResetFilters}>
+            Ver todos los pagos
+          </Button>
+        }
+      />
+    );
+  }
+
+  if (listState === 'empty-filtered' || listState === 'empty-none') {
+    const hasFilters = listState === 'empty-filtered';
+    return (
+      <EmptyState
+        icon={hasFilters ? SlidersHorizontal : Banknote}
+        title={hasFilters ? 'No hay pagos con estos filtros' : 'Aún no hay pagos'}
         description={
-          hasActiveFilters
+          hasFilters
             ? 'Prueba ajustando la búsqueda, el rango de fechas o el estado.'
             : 'Los pagos se registran cuando el bot procesa comprobantes de WhatsApp.'
         }
         actions={
-          hasActiveFilters ? (
+          hasFilters ? (
             <Button variant="outline" size="lg" onClick={onResetFilters}>
               <RotateCcw className="h-4 w-4" />
               Limpiar filtros
@@ -215,14 +228,16 @@ export function PaymentsList({
       </div>
 
       {/* Centinela + indicador de carga incremental */}
-      <div ref={sentinelRef} className="flex h-10 items-center justify-center">
+      <div ref={sentinelRef} className="flex min-h-10 items-center justify-center">
         {loadingMore ? (
           <span className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             Cargando más…
           </span>
         ) : !hasMore ? (
-          <span className="text-xs text-muted-foreground">No hay más pagos</span>
+          <span className="flex min-h-9 w-full items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 text-xs text-muted-foreground">
+            Fin de la lista · «No hay más pagos»
+          </span>
         ) : null}
       </div>
     </div>
