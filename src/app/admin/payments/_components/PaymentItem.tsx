@@ -66,7 +66,9 @@ export function PaymentItem({ payment: p, outgoing, suggestion, onManage }: Paym
             {d.amount}
           </div>
           <div className="text-[11px] text-muted-foreground">
-            {p.amount == null ? d.time : `${d.method} · ${d.time}`}
+            {/* `when` es hora sola si el pago es de hoy, y día + hora si no: aquí solo
+                cabe un renglón y antes se perdía la fecha por completo. */}
+            {p.amount == null ? d.when : `${d.method} · ${d.when}`}
           </div>
         </div>
       </div>
