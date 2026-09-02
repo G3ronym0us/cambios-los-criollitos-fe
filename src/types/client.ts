@@ -10,6 +10,14 @@ export interface ClientData {
   is_tracked: boolean;
   is_blocked: boolean;
   is_usdt_authorized: boolean;
+  /**
+   * Intermediario que fija la tasa a la que le compramos.
+   *
+   * Con esto puesto, un número suelto que caiga cerca de la tasa del par se lee como TASA y
+   * no como monto — sin ello el bot cotizaba 935 y 940 dólares que nadie había pedido—. La
+   * tasa vale para su próximo cambio y caduca a los 30 minutos.
+   */
+  is_rate_setter: boolean;
   // Cuenta de pago predeterminada del cliente (bloque de datos + moneda fiat).
   default_payment_info: string | null;
   default_payment_currency: string | null;
@@ -246,6 +254,7 @@ export interface ClientUpdate {
   is_tracked?: boolean;
   is_blocked?: boolean;
   is_usdt_authorized?: boolean;
+  is_rate_setter?: boolean;
   preferred_pair_uuid?: string | null;
   default_payment_info?: string | null;
   default_payment_currency?: string | null;

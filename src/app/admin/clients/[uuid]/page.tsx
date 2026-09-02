@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, Ban, Coins, Eye, HandCoins, Truck, Users, UserX, Wallet } from 'lucide-react';
+import { ArrowLeft, Ban, Coins, Eye, HandCoins, Truck, Users, UserX, Wallet, Tag } from 'lucide-react';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -110,6 +110,7 @@ export default function ClientProfilePage() {
         {client.is_blocked ? <StatusBadge tone="destructive" icon={Ban}>Bloqueado</StatusBadge> : null}
         {client.is_tracked ? <StatusBadge tone="info" icon={Eye}>Seguido</StatusBadge> : null}
         {client.is_usdt_authorized ? <StatusBadge tone="success" icon={Coins}>USDT</StatusBadge> : null}
+        {client.is_rate_setter ? <StatusBadge tone="info" icon={Tag}>Fija tasa</StatusBadge> : null}
         {client.balance > 0 ? (
           <StatusBadge tone="success" icon={Wallet}>
             ${client.balance.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} a favor

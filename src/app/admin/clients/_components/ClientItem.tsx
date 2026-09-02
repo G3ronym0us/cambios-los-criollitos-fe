@@ -2,7 +2,7 @@
 
 import { memo } from 'react';
 import Link from 'next/link';
-import { Ban, Building2, ChevronRight, Coins, Eye, Users, Wallet } from 'lucide-react';
+import { Ban, Building2, ChevronRight, Coins, Eye, Users, Wallet, Tag } from 'lucide-react';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { cn } from '@/lib/utils';
 import { isEntityClientPhone } from '@/utils/functions';
@@ -131,6 +131,9 @@ export const ClientItem = memo(function ClientItem({ client, pending }: ClientIt
           {client.is_tracked ? <StatusBadge tone="info" icon={Eye}>Seguido</StatusBadge> : null}
           {client.is_usdt_authorized ? (
             <StatusBadge tone="success" icon={Coins}>USDT</StatusBadge>
+          ) : null}
+          {client.is_rate_setter ? (
+            <StatusBadge tone="info" icon={Tag}>Fija tasa</StatusBadge>
           ) : null}
           {client.balance > 0 ? (
             <StatusBadge tone="success" icon={Wallet}>
