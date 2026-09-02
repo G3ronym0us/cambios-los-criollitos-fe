@@ -148,9 +148,38 @@ export interface OperationSuggestion {
   confident: boolean;
 }
 
-export interface OperationMatchResponse {
+/**
+ * Lo que manda el cajón de "vincular pago" a `POST /operations/match`: los mismos filtros de
+ * `GET /operations` (`phone`/`search`/`status`/`page`/`limit`) más `order_by`, que reemplaza a
+ * los tres botones que antes ordenaban en el navegador ("sugerida"/"monto"/"hora").
+ *
+ * `table` se tipa como string literal en vez de importar `PaymentTable` de `types/payment.ts`
+ * para no crear un ciclo de módulos (`payment.ts` ya importa `OperationStatus` de aquí).
+ */
+export interface OperationRankRequest {
+  payment_id: number;
+  table: 'incoming' | 'outgoing';
+  phone?: string;
+  search?: string;
+  status?: string;
+  order_by: 'suggested' | 'amount' | 'time';
+  page: number;
+  limit: number;
+}
+
+/** Una candidata lista para pintar: la operación entera junto a su puntaje contra el comprobante. */
+export interface OperationMatchItem {
+  operation: OperationData;
+  score: OperationMatchScore;
+}
+
+export interface OperationRankResponse {
   suggestion: OperationSuggestion | null;
-  candidates: OperationMatchScore[];
+  items: OperationMatchItem[];
+  /** El total tras el filtro (no el tamaño de la página) — para saber si hay más que cargar. */
+  total: number;
+  page: number;
+  limit: number;
 }
 
 export interface OperationStats {
