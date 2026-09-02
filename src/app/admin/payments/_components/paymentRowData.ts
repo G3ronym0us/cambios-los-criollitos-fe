@@ -14,6 +14,12 @@ export interface PaymentRowData {
   /** Hora en Caracas y el día ("hoy" / "ayer" / "25 jul"). */
   time: string;
   day: string;
+  /**
+   * `time` y `day` en un solo renglón, para sitios angostos como la tarjeta de mobile:
+   * el caso normal (hoy) se queda solo con la hora, y solo se antepone el día cuando
+   * hace falta distinguirlo — así no se repite "hoy" en cada tarjeta de la lista.
+   */
+  when: string;
   /** La operación de la fila: la vinculada, o el resumen del reparto. */
   operation: string | null;
 }
@@ -74,14 +80,17 @@ function caracasDayKey(date: Date) {
   return date.toLocaleDateString('en-CA', { timeZone: 'America/Caracas' });
 }
 
-function describeDay(value: string | null): string {
+/**
+ * `now` es parámetro (no `new Date()` implícito) para que el test pueda fijar "hoy" sin
+ * depender del reloj de la máquina que corre la suite.
+ */
+function describeDay(value: string | null, now: Date = new Date()): string {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  const today = new Date();
-  const yesterday = new Date(today.getTime() - 86400000);
+  const yesterday = new Date(now.getTime() - 86400000);
   const key = caracasDayKey(date);
-  if (key === caracasDayKey(today)) return 'hoy';
+  if (key === caracasDayKey(now)) return 'hoy';
   if (key === caracasDayKey(yesterday)) return 'ayer';
   return date.toLocaleDateString('es-VE', {
     day: 'numeric',
@@ -102,7 +111,18 @@ function describeTime(value: string | null): string {
   });
 }
 
-export function describePayment(p: PaymentData): PaymentRowData {
+/**
+ * Ver el docstring de `PaymentRowData.when`: hora sola si es de hoy, día + hora si no.
+ * Es lo que le faltaba a la tarjeta de mobile (`PaymentItem`) — solo pintaba la hora,
+ * y con un pago de ayer o de hace una semana se leía igual que uno de hace un minuto.
+ */
+function describeWhen(value: string | null, now: Date = new Date()): string {
+  const time = describeTime(value);
+  const day = describeDay(value, now);
+  return day && day !== 'hoy' ? `${day} ${time}` : time;
+}
+
+export function describePayment(p: PaymentData, now: Date = new Date()): PaymentRowData {
   const bank = p.bank_to || p.bank_from || null;
   const source = [
     bank,
@@ -123,7 +143,8 @@ export function describePayment(p: PaymentData): PaymentRowData {
     amount: p.amount != null ? formatNumber(p.amount) : '—',
     method: [p.currency, provider].filter(Boolean).join(' · ') || '—',
     time: describeTime(p.created_at),
-    day: describeDay(p.created_at),
+    day: describeDay(p.created_at, now),
+    when: describeWhen(p.created_at, now),
     operation: describeOperation(p),
   };
 }
