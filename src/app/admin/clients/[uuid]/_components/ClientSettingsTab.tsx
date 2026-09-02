@@ -103,7 +103,7 @@ export function ClientSettingsTab({ client, pairs, saving, onSave }: ClientSetti
 
   // Switches → confirmación individual (uno por uno).
   const askToggle = (
-    key: 'is_tracked' | 'is_usdt_authorized' | 'is_blocked',
+    key: 'is_tracked' | 'is_usdt_authorized' | 'is_rate_setter' | 'is_blocked',
     next: boolean,
     label: string
   ) => {
@@ -119,6 +119,12 @@ export function ClientSettingsTab({ client, pairs, saving, onSave }: ClientSetti
         off: 'El cliente ya no podrá cotizar pares con USDT.',
         okOn: 'USDT autorizado',
         okOff: 'USDT desautorizado',
+      },
+      is_rate_setter: {
+        on: 'Cuando mande un número suelto que se parezca a la tasa del par, el bot lo tomará como la tasa de su próximo cambio en vez de como un monto.',
+        off: 'Un número suelto volverá a leerse como un monto.',
+        okOn: 'Puede fijar tasa',
+        okOff: 'Ya no fija tasa',
       },
       is_blocked: {
         on: 'El bot ignorará los mensajes de este cliente.',
@@ -139,7 +145,7 @@ export function ClientSettingsTab({ client, pairs, saving, onSave }: ClientSetti
   };
 
   const toggleRow = (
-    key: 'is_tracked' | 'is_usdt_authorized' | 'is_blocked',
+    key: 'is_tracked' | 'is_usdt_authorized' | 'is_rate_setter' | 'is_blocked',
     title: string,
     description: string
   ) => (
@@ -217,6 +223,11 @@ export function ClientSettingsTab({ client, pairs, saving, onSave }: ClientSetti
         <CardContent className="flex flex-col gap-2 p-4 sm:p-6">
           {toggleRow('is_tracked', 'Seguido', 'Aparece en el seguimiento del operador.')}
           {toggleRow('is_usdt_authorized', 'USDT autorizado', 'Puede cotizar pares con USDT a tasa de mercado.')}
+          {toggleRow(
+            'is_rate_setter',
+            'Fija su tasa',
+            'Intermediario: dice él a qué tasa le compramos. Un número suelto cerca de la tasa del par se lee como tasa, no como monto, y vale 30 minutos.',
+          )}
           {toggleRow('is_blocked', 'Bloqueado', 'El bot ignora los mensajes de este cliente.')}
         </CardContent>
       </Card>
