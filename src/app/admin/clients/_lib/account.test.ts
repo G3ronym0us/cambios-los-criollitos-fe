@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BalanceEntry } from '@/types/client';
 import type { OperationData } from '@/types/operation';
-import { accountCounts, accountThread, operationState } from './account';
+import { STATE_LABEL, accountCounts, accountThread, operationState } from './account';
 
 function op(overrides: Partial<OperationData>): OperationData {
   const base = {
@@ -36,15 +36,34 @@ function entry(overrides: Partial<BalanceEntry>): BalanceEntry {
 describe('operationState', () => {
   it('separa lo pendiente de lo entregado, y saca cotizadas y canceladas del medio', () => {
     expect(operationState(op({ pending_amount: 50 }))).toBe('pending');
-    expect(operationState(op({ pending_amount: 0 }))).toBe('delivered');
+    expect(operationState(op({ pending_amount: 0, status: 'COMPLETED' }))).toBe('delivered');
     expect(operationState(op({ status: 'QUOTED', pending_amount: 50 }))).toBe('quoted');
     expect(operationState(op({ status: 'CANCELLED', pending_amount: 50 }))).toBe('cancelled');
   });
 
-  it('sin el dinero del cliente no hay nada que entregar', () => {
-    // Ni «Por entregar» ni deuda: es un trato a medio armar, y el que debe es él.
+  it('cubierta no es completada: sin cerrar sigue siendo «Pendiente»', () => {
+    // Es la USD-VES que nace de su propio comprobante de salida: se crea cubierta y en
+    // PENDING a la vez, porque los billetes del cliente se reciben después. Darla por
+    // entregada aquí la enseñaba «Completado · Cobrada» mientras Pagos, que lee `status`,
+    // la enseñaba «Pendiente».
+    const cubierta = op({
+      status: 'PENDING',
+      pending_amount: 0,
+      first_incoming_payment_at: null,
+      settles_in_cash: true,
+    });
+
+    expect(operationState(cubierta)).toBe('open');
+    expect(STATE_LABEL[operationState(cubierta)]).toBe('Pendiente');
+    // Y sigue fuera de la cola de trabajo: no le debemos nada.
+    expect(accountCounts([cubierta], [])).toMatchObject({ pending: 0, delivered: 1 });
+  });
+
+  it('sin el dinero del cliente no hay nada que entregar, pero tampoco está entregada', () => {
+    // Ni «Por entregar» ni deuda: es un trato a medio armar, y el que debe es él. Fuera de
+    // la cola, sí — pero rotularlo «Entregado» era decir que el trato terminó.
     expect(operationState(op({ pending_amount: 50, first_incoming_payment_at: null }))).toBe(
-      'delivered',
+      'open',
     );
   });
 
