@@ -6,13 +6,14 @@ import {
   OperationData,
   OperationFilters,
   OperationListResponse,
-  OperationMatchResponse,
+  OperationRankRequest,
+  OperationRankResponse,
   OperationStatus,
   OperationStats,
   ProfitAllocationInput,
   ProfitAllocationList,
 } from '@/types/operation';
-import type { PaymentData, PaymentTable } from '@/types/payment';
+import type { PaymentData } from '@/types/payment';
 
 export interface OperationPayments {
   incoming: PaymentData[];
@@ -38,20 +39,13 @@ export class OperationService {
   }
 
   /**
-   * Puntúa las operaciones recientes contra un comprobante, para ordenar el selector de
-   * "vincular pago" y marcar la más probable. La regla es la misma que usa el matcher
-   * automático del bot: vive en el backend, no se duplica aquí.
+   * El cajón de "vincular pago" en UN solo viaje: filtra (phone/search/status), puntúa contra
+   * el comprobante y ordena/pagina — todo en el servidor. Reemplaza al par
+   * `matchForPayment` + `getOperations` (que cruzaban por uuid en el navegador): ahora cada
+   * candidata ya viene con su `score` incorporado.
    */
-  async matchForPayment(
-    paymentId: number,
-    table: PaymentTable,
-    limit = 500,
-  ): Promise<ApiResponse<OperationMatchResponse>> {
-    const result = await httpClient.post<OperationMatchResponse>('/operations/match', {
-      payment_id: paymentId,
-      table,
-      limit,
-    });
+  async rankForPayment(payload: OperationRankRequest): Promise<ApiResponse<OperationRankResponse>> {
+    const result = await httpClient.post<OperationRankResponse>('/operations/match', payload);
     return { success: result.success, data: result.data, error: result.error };
   }
 

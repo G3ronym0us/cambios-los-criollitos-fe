@@ -21,12 +21,14 @@ import { cn } from '@/lib/utils';
 import { operationService } from '@/services/operationService';
 import { paymentService } from '@/services/paymentService';
 import { fundService } from '@/services/fundService';
+import { clientService } from '@/services/clientService';
 import { formatCaracasShortDateTime, formatNumber, formatRelativeTime } from '@/utils/functions';
 import { getStatusMeta } from '@/utils/operationStatus';
 import type {
   OperationData,
-  OperationMatchResponse,
+  OperationMatchItem,
   OperationMatchScore,
+  OperationSuggestion,
   OrphanAction,
   UnlinkPreview,
 } from '@/types/operation';
@@ -36,6 +38,13 @@ import { describeCoverage } from './paymentRowData';
 import { CreateOperationForm } from './CreateOperationForm';
 import { OutgoingCoveragePanel } from './OutgoingCoveragePanel';
 import { UnlinkOrphanDialog } from './UnlinkOrphanDialog';
+import {
+  buildMatchQuery,
+  type LinkScope as Scope,
+  type LinkSortMode as SortMode,
+  type LinkStatusView as StatusView,
+  type ScoredOperation,
+} from './linkOperationQuery';
 
 interface LinkOperationPanelProps {
   payment: PaymentData;
@@ -63,13 +72,6 @@ function samePhone(a: string | null, b: string | null) {
   return na !== '' && na === nb;
 }
 
-type Scope = 'auto' | 'global';
-type StatusView = 'active' | 'completed';
-type SortMode = 'suggested' | 'amount' | 'time';
-
-/** Operación candidata junto a la puntuación que le dio el backend (si la tiene). */
-type ScoredOperation = { op: OperationData; score: OperationMatchScore | null };
-
 /** Verde cuando calza, ámbar cuando deja remanente que habrá que repartir, gris si falta. */
 function coverageTone(score: OperationMatchScore) {
   if (score.within_tolerance) return 'text-emerald-600 dark:text-emerald-400';
@@ -77,8 +79,8 @@ function coverageTone(score: OperationMatchScore) {
   return 'text-muted-foreground';
 }
 
-const byCreatedAtDesc = (a: ScoredOperation, b: ScoredOperation) =>
-  (b.op.created_at ?? '').localeCompare(a.op.created_at ?? '');
+/** Cuánto esperar tras la última tecla antes de volver a pedirle candidatas al servidor. */
+const SEARCH_DEBOUNCE_MS = 300;
 
 /**
  * Por qué el matcher propone ESTA operación, en las palabras del propio puntaje.
@@ -124,16 +126,36 @@ export function LinkOperationPanel({
   pickLabel = 'Elegir',
   onHeaderChange,
 }: LinkOperationPanelProps) {
-  const [operations, setOperations] = useState<OperationData[]>([]);
-  // Puntuación de las candidatas frente a este comprobante: la calcula el backend, con la
-  // misma regla que usa el matcher automático del bot.
-  const [match, setMatch] = useState<OperationMatchResponse | null>(null);
+  // Lo que respondió la última consulta al servidor: cada candidata ya trae su puntuación
+  // contra este comprobante en la MISMA respuesta (`POST /operations/match` filtra, puntúa y
+  // ordena en un solo viaje — antes eran dos consultas, `GET /operations` y
+  // `POST /operations/match`, cruzadas por uuid en el navegador).
+  const [items, setItems] = useState<OperationMatchItem[]>([]);
+  // La operación ya vinculada a este pago (si la hay) se pide aparte, SIEMPRE, sin importar
+  // el alcance/búsqueda/pestaña de turno: si no, cambiar de pestaña podía hacer "desaparecer"
+  // del cajón la operación que el pago ya tiene enganchada.
+  const [linkedOp, setLinkedOp] = useState<OperationData | null>(null);
+  // Sugerencia del backend para el filtro/orden actuales — viaja en la misma respuesta que
+  // `items`, así que ya no hace falta pedirla ni cruzarla aparte.
+  const [suggestion, setSuggestion] = useState<OperationSuggestion | null>(null);
+  // Total tras el filtro (no `items.length`): con esto se sabe si "Cargar más" tiene sentido.
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [groups, setGroups] = useState<FundGroup[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState('');
+  // Lo que de verdad viaja al servidor: se actualiza con retraso para no disparar una
+  // consulta por cada tecla (ver el efecto de debounce, más abajo).
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [scope, setScope] = useState<Scope>('auto');
   const [statusView, setStatusView] = useState<StatusView>('active');
   const [sortMode, setSortMode] = useState<SortMode>('suggested');
+  // Teléfono con el que se filtra en el servidor cuando el alcance es del cliente. Empieza
+  // con el remitente del comprobante (respuesta inmediata) y se corrige solo si el pago
+  // resulta transferido a otro cliente (ver el efecto de abajo) — ahí SÍ hay que consultar
+  // por el teléfono del nuevo dueño, no el de quien mandó el dinero.
+  const [queryPhone, setQueryPhone] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [mode, setMode] = useState<'pick' | 'create' | 'coverage'>('pick');
@@ -144,57 +166,173 @@ export function LinkOperationPanel({
   // Pago cuya sugerencia ya se preseleccionó: se hace una sola vez, para no mover después la
   // selección del operador al cambiar de pestaña o de alcance.
   const autoPickedFor = useRef<number | null>(null);
+  // Descarta la respuesta de "Cargar más" si mientras viajaba cambió el filtro (búsqueda,
+  // orden, pestaña, alcance): esa página ya no corresponde a lo que se está pintando. La
+  // consulta principal (efecto de abajo) sube este contador en cada disparo; "Cargar más"
+  // sólo aplica su respuesta si el contador sigue igual a como estaba cuando la pidió.
+  const queryGeneration = useRef(0);
 
+  const isGroup = (payment.client_phone || '').endsWith('@g.us');
+
+  // Catálogo de grupos: no depende del pago que se esté vinculando, así que se pide una sola
+  // vez al montar el cajón en vez de repetirlo cada vez que cambia de comprobante.
+  useEffect(() => {
+    fundService.getGroups().then((res) => {
+      if (res.success && res.data) setGroups(res.data);
+    });
+  }, []);
+
+  // Al cambiar de comprobante: vuelve a foja cero (selección, buscador, alcance, pestaña,
+  // orden) y dispara lo que solo depende del PAGO, no del alcance/búsqueda/orden que elija
+  // el operador después — la operación ya vinculada, y a qué teléfono apunta el filtro por
+  // cliente. Las candidatas puntuadas ahora dependen también del filtro/orden, así que esa
+  // consulta vive en el efecto de más abajo, no aquí.
   useEffect(() => {
     setSelected(payment.operation_uuid);
     setSearch('');
+    setDebouncedSearch('');
     setScope('auto');
     setStatusView('active');
     setSortMode('suggested');
     autoPickedFor.current = null;
+    setLinkedOp(null);
     let active = true;
-    setLoading(true);
-    setMatch(null);
-    // La puntuación viaja en paralelo con el listado: si falla, el selector sigue usable
-    // (sin sugerencia y ordenado por recencia, como antes de existir el scoring).
-    operationService.matchForPayment(payment.id, table).then((res) => {
-      if (active && res.success && res.data) setMatch(res.data);
-    });
-    Promise.all([
-      operationService.getOperations({ limit: 500 }),
-      table === 'outgoing'
-        ? operationService.getOperations({ status: 'COMPLETED', limit: 500 })
-        : Promise.resolve(null),
-      fundService.getGroups(),
-    ]).then(
-      ([opsRes, completedRes, groupsRes]) => {
-        if (!active) return;
-        const loaded = new Map<string, OperationData>();
-        if (opsRes.success && opsRes.data) {
-          for (const op of opsRes.data.operations || []) loaded.set(op.uuid, op);
-        }
-        if (completedRes?.success && completedRes.data) {
-          for (const op of completedRes.data.operations || []) loaded.set(op.uuid, op);
-        }
-        if (loaded.size > 0) setOperations(Array.from(loaded.values()));
-        else toast.error(opsRes.error || completedRes?.error || 'No se pudieron cargar las operaciones');
-        if (groupsRes.success && groupsRes.data) setGroups(groupsRes.data);
-        setLoading(false);
-      },
-    );
+
+    if (payment.operation_uuid) {
+      operationService.getOperation(payment.operation_uuid).then((res) => {
+        if (active && res.success && res.data) setLinkedOp(res.data);
+      });
+    }
+
+    if (isGroup) {
+      setQueryPhone(null);
+    } else {
+      // Primer intento: el remitente del comprobante — responde al toque y acierta salvo en
+      // el caso de una transferencia. Si `client_uuid` apunta a OTRO cliente (pago
+      // transferido con "Transferir a otro cliente", que siempre deja el pago sin operación
+      // — `paymentTransfer.ts:transferUnlinksOperation`), se corrige por el teléfono real del
+      // dueño en cuanto responde `clientService`: como `queryPhone` es una dependencia de la
+      // consulta principal (más abajo), corregirlo dispara sola una segunda consulta.
+      setQueryPhone(payment.client_phone || null);
+      if (payment.client_uuid) {
+        clientService.getClient(payment.client_uuid).then((res) => {
+          if (active && res.success && res.data?.phone) setQueryPhone(res.data.phone);
+        });
+      }
+    }
+
     return () => {
       active = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isGroup sale de payment.client_phone
   }, [payment, table]);
 
-  const isGroup = (payment.client_phone || '').endsWith('@g.us');
+  // Debounce del buscador: la búsqueda ahora la resuelve el servidor (`search` de
+  // `POST /operations/match`), así que cada tecla dispararía una consulta nueva sin este
+  // retraso.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // La consulta de verdad: cambiar de alcance, de teléfono resuelto, de búsqueda (con
+  // retraso), de pestaña de estado o de orden arma una petición nueva a
+  // `POST /operations/match` — filtro, puntuación Y orden en un solo viaje, siempre desde la
+  // página 1. `queryGeneration` descarta tanto una respuesta tardía de ESTA consulta como
+  // cualquier "Cargar más" que hubiera quedado en vuelo de la consulta anterior.
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setPage(1);
+    const generation = ++queryGeneration.current;
+    const query = buildMatchQuery({
+      paymentId: payment.id,
+      table,
+      isGroup,
+      scope,
+      clientPhone: queryPhone,
+      search: debouncedSearch,
+      statusView,
+      sortMode,
+      page: 1,
+    });
+    operationService.rankForPayment(query).then((res) => {
+      if (!active || queryGeneration.current !== generation) return;
+      if (res.success && res.data) {
+        setItems(res.data.items);
+        setTotal(res.data.total);
+        setSuggestion(res.data.suggestion);
+      } else {
+        setItems([]);
+        setTotal(0);
+        setSuggestion(null);
+        toast.error(res.error || 'No se pudieron cargar las operaciones');
+      }
+      setLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [isGroup, scope, queryPhone, debouncedSearch, table, statusView, sortMode, payment.id]);
+
+  // Pide la página siguiente del MISMO filtro/orden y la agrega al final — no reemplaza lo ya
+  // pintado. Paginar así (en vez de números de página) porque el operador está en móvil a
+  // menudo: un botón "Cargar más" al fondo de una lista que ya se scrollea es el patrón que
+  // menos fricción agrega, y no exige calcular ni tocar controles de paginación en pantallas
+  // angostas.
+  const loadMore = () => {
+    if (loadingMore || !hasMore) return;
+    const nextPage = page + 1;
+    const generation = queryGeneration.current;
+    setLoadingMore(true);
+    const query = buildMatchQuery({
+      paymentId: payment.id,
+      table,
+      isGroup,
+      scope,
+      clientPhone: queryPhone,
+      search: debouncedSearch,
+      statusView,
+      sortMode,
+      page: nextPage,
+    });
+    operationService.rankForPayment(query).then((res) => {
+      setLoadingMore(false);
+      // El filtro pudo cambiar mientras esta página viajaba: esa respuesta ya no aplica.
+      if (queryGeneration.current !== generation) return;
+      if (res.success && res.data) {
+        setItems((prev) => [...prev, ...res.data!.items]);
+        setTotal(res.data.total);
+        setPage(nextPage);
+      } else {
+        toast.error(res.error || 'No se pudieron cargar más operaciones');
+      }
+    });
+  };
+
   const matchedGroup = useMemo(
     () => (isGroup ? groups.find((g) => g.whatsapp_group_jid === payment.client_phone) : undefined),
     [isGroup, groups, payment.client_phone],
   );
 
-  // Operaciones según el alcance: por defecto las del cliente (o las del grupo si el pago es
-  // a un grupo); con "Ver todas" se muestran todas. La operación ya vinculada siempre se incluye.
+  // Las operaciones de la última respuesta, sin su puntuación (la puntuación se consulta
+  // aparte más abajo, en `scores`, porque `linkedOp` no trae score propio y hay que poder
+  // mezclarla igual).
+  const operations = useMemo(() => items.map((item) => item.operation), [items]);
+
+  // La respuesta del servidor más la operación ya vinculada, que siempre tiene que estar —
+  // sin importar si el filtro de turno (búsqueda, pestaña, alcance) la habría dejado fuera.
+  const operationsWithLinked = useMemo(() => {
+    if (!linkedOp) return operations;
+    return operations.some((op) => op.uuid === linkedOp.uuid) ? operations : [linkedOp, ...operations];
+  }, [operations, linkedOp]);
+
+  // Lo único que queda por acotar en el navegador: la membresía de grupo (el servidor no
+  // sabe qué operaciones son "del grupo" — se resuelven por `fund_group_uuid`, por el socio
+  // que las recibió, o por el teléfono de un socio, y mezclar esas tres reglas en un filtro
+  // de servidor no tiene una forma limpia hoy) y qué operaciones ya están tomadas de este
+  // lado (el backend tampoco expone eso como filtro). Para el cliente individual y para "Ver
+  // todas" el servidor YA filtró por completo — aquí solo se excluye lo tomado.
   const scoped = useMemo(() => {
     // Del lado saliente una operación admite varios comprobantes (cada uno cubre una parte
     // del valor): se ocultan solo las que ya están cubiertas del todo. Del lado entrante sigue
@@ -206,59 +344,49 @@ export function LinkOperationPanel({
       return !op.has_outgoing_payment;
     };
 
-    if (scope === 'global') return operations.filter(notTaken);
+    if (scope === 'global' || !isGroup) {
+      return operationsWithLinked.filter(notTaken);
+    }
 
-    let list: OperationData[];
-    if (isGroup) {
-      if (matchedGroup) {
-        // Ops del grupo: las etiquetadas con el fund_group, o las de sus miembros
-        // (recibidas por un miembro, o cuyo cliente es el número de un miembro/socio).
-        const memberUserUuids = new Set((matchedGroup.members ?? []).map((m) => m.user_uuid));
-        const memberPhones = new Set(
-          (matchedGroup.members ?? [])
-            .map((m) => stripPhone(m.whatsapp_phone ?? null).replace(/\D/g, ''))
-            .filter(Boolean),
-        );
-        list = operations.filter(
-          (op) =>
-            op.fund_group_uuid === matchedGroup.uuid ||
-            (op.received_by_user_uuid && memberUserUuids.has(op.received_by_user_uuid)) ||
-            (op.client_phone && memberPhones.has(stripPhone(op.client_phone).replace(/\D/g, ''))),
-        );
-      } else {
-        list = [];
-      }
-    } else {
-      list = operations.filter(
+    if (!matchedGroup) return [];
+    // Ops del grupo: las etiquetadas con el fund_group, o las de sus miembros (recibidas por
+    // un miembro, o cuyo cliente es el número de un miembro/socio). La operación ya vinculada
+    // pasa siempre, aunque no calce con la membresía actual del grupo.
+    const memberUserUuids = new Set((matchedGroup.members ?? []).map((m) => m.user_uuid));
+    const memberPhones = new Set(
+      (matchedGroup.members ?? [])
+        .map((m) => stripPhone(m.whatsapp_phone ?? null).replace(/\D/g, ''))
+        .filter(Boolean),
+    );
+    return operationsWithLinked
+      .filter(
         (op) =>
-          (payment.client_uuid && op.client_uuid === payment.client_uuid) ||
-          samePhone(op.client_phone, payment.client_phone),
-      );
-    }
-
-    if (payment.operation_uuid && !list.some((op) => op.uuid === payment.operation_uuid)) {
-      const linked = operations.find((op) => op.uuid === payment.operation_uuid);
-      if (linked) list = [linked, ...list];
-    }
-    return list.filter(notTaken);
-  }, [payment, operations, scope, isGroup, matchedGroup, table]);
+          op.uuid === payment.operation_uuid ||
+          op.fund_group_uuid === matchedGroup.uuid ||
+          (op.received_by_user_uuid && memberUserUuids.has(op.received_by_user_uuid)) ||
+          (op.client_phone && memberPhones.has(stripPhone(op.client_phone).replace(/\D/g, ''))),
+      )
+      .filter(notTaken);
+  }, [payment.operation_uuid, operationsWithLinked, scope, isGroup, matchedGroup, table]);
 
   const availableByStatus = useMemo(() => {
-    if (table !== 'outgoing') return scoped;
+    // "Completadas" ya llegó filtrada del servidor (`status=COMPLETED` en `buildMatchQuery`).
+    // "Activas" no —QUOTED-o-PENDING no es un solo `status`— así que esa mitad sigue aquí.
+    if (table !== 'outgoing' || statusView === 'completed') return scoped;
     return scoped.filter((op) => {
       if (op.uuid === payment.operation_uuid) return true;
-      return statusView === 'completed'
-        ? op.status === 'COMPLETED'
-        : op.status === 'QUOTED' || op.status === 'PENDING';
+      return op.status === 'QUOTED' || op.status === 'PENDING';
     });
   }, [payment.operation_uuid, scoped, statusView, table]);
 
   // ¿Se puede comparar? Sin monto en el comprobante no hay sugerencia ni orden por cercanía.
   const scorable = payment.amount != null && payment.amount > 0;
 
+  // Puntuación de cada candidata contra este comprobante: ya viene calculada en la MISMA
+  // respuesta que trajo `items` (antes salía de una consulta aparte y se cruzaba por uuid).
   const scores = useMemo(
-    () => new Map((match?.candidates ?? []).map((c) => [c.uuid, c])),
-    [match],
+    () => new Map(items.map((item) => [item.operation.uuid, item.score])),
+    [items],
   );
 
   const scored = useMemo<ScoredOperation[]>(
@@ -266,59 +394,29 @@ export function LinkOperationPanel({
     [availableByStatus, scores],
   );
 
-  // La sugerencia la decide el backend sobre TODAS las operaciones recientes; aquí solo se
-  // respeta si además está a la vista (pestaña y alcance actuales).
-  const suggestion = useMemo(() => {
-    if (!match?.suggestion) return null;
-    return availableByStatus.some((op) => op.uuid === match.suggestion!.uuid)
-      ? match.suggestion
-      : null;
-  }, [match, availableByStatus]);
+  // La sugerencia la decide el backend sobre el mismo lote filtrado que `items`; aquí solo se
+  // respeta si además está a la vista (la pestaña "Activas" puede esconderla del lado del
+  // cliente, ya que el servidor no filtra QUOTED-o-PENDING como un único `status`).
+  const visibleSuggestion = useMemo(() => {
+    if (!suggestion) return null;
+    return availableByStatus.some((op) => op.uuid === suggestion.uuid) ? suggestion : null;
+  }, [suggestion, availableByStatus]);
 
   // Si la sugerencia es inequívoca, queda preseleccionada — el operador todavía tiene que
   // confirmar con Continuar/Vincular, así que nunca se vincula nada solo.
   useEffect(() => {
     if (payment.operation_uuid) return;
     if (autoPickedFor.current === payment.id) return;
-    if (!suggestion?.confident) return;
+    if (!visibleSuggestion?.confident) return;
     autoPickedFor.current = payment.id;
-    setSelected(suggestion.uuid);
-  }, [payment.id, payment.operation_uuid, suggestion]);
+    setSelected(visibleSuggestion.uuid);
+  }, [payment.id, payment.operation_uuid, visibleSuggestion]);
 
-  const ranked = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const list = !q
-      ? [...scored]
-      : scored.filter(({ op }) => {
-          const amounts = `${op.from_amount} ${op.to_amount}`;
-          return (
-            (op.client_display_name || '').toLowerCase().includes(q) ||
-            (op.client_phone || '').toLowerCase().includes(q) ||
-            (op.pair_symbol || '').toLowerCase().includes(q) ||
-            op.uuid.toLowerCase().includes(q) ||
-            amounts.includes(q)
-          );
-        });
-
-    if (sortMode === 'time') {
-      list.sort(byCreatedAtDesc);
-    } else if (sortMode === 'amount') {
-      // Por cercanía al monto del comprobante; las que no se pueden comparar, al final.
-      list.sort((a, b) => {
-        const ra = a.score?.relative ?? Number.POSITIVE_INFINITY;
-        const rb = b.score?.relative ?? Number.POSITIVE_INFINITY;
-        return ra !== rb ? ra - rb : byCreatedAtDesc(a, b);
-      });
-    } else {
-      // Sin puntuación (o si el backend falló) todas valen 0 y manda la recencia: el orden
-      // de siempre, que es exactamente el comportamiento previo al scoring.
-      list.sort((a, b) => (b.score?.score ?? 0) - (a.score?.score ?? 0) || byCreatedAtDesc(a, b));
-      const i = suggestion ? list.findIndex((s) => s.op.uuid === suggestion.uuid) : -1;
-      if (i > 0) list.unshift(...list.splice(i, 1));
-    }
-    // El corte va DESPUÉS de ordenar: al revés la sugerida podía quedar fuera de la lista.
-    return list.slice(0, 60);
-  }, [scored, search, sortMode, suggestion]);
+  // Cuántas quedan detrás de lo ya cargado: el pie de la lista ofrece "Cargar más" mientras
+  // esto sea cierto. `total` es del backend, con el mismo filtro que `items` (antes de
+  // recortar por grupo/estado en el navegador) — sigue siendo correcto aunque la lista visible
+  // (`scored`) sea más corta por esos filtros locales.
+  const hasMore = items.length < total;
 
   const scopeLabel = (() => {
     if (scope === 'global') return 'Todas las operaciones';
@@ -332,8 +430,8 @@ export function LinkOperationPanel({
   })();
 
   const selectedOp = useMemo(
-    () => operations.find((op) => op.uuid === selected) ?? null,
-    [operations, selected],
+    () => operationsWithLinked.find((op) => op.uuid === selected) ?? null,
+    [operationsWithLinked, selected],
   );
 
   /**
@@ -410,7 +508,7 @@ export function LinkOperationPanel({
   const submitPick = () => {
     if (submitting || !selected) return;
     if (onPick) {
-      const op = operations.find((o) => o.uuid === selected);
+      const op = operationsWithLinked.find((o) => o.uuid === selected);
       if (op) onPick(op);
       return;
     }
@@ -604,7 +702,7 @@ export function LinkOperationPanel({
       >
         {loading ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Cargando operaciones…</p>
-        ) : ranked.length === 0 ? (
+        ) : scored.length === 0 && !hasMore ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
             {table === 'outgoing' && statusView === 'completed'
               ? 'No hay operaciones completadas con saldo por cubrir en este alcance.'
@@ -613,9 +711,10 @@ export function LinkOperationPanel({
               : 'Sin cotizaciones en este alcance. Prueba "Ver todas".'}
           </p>
         ) : (
-          ranked.map(({ op, score }) => {
+          <>
+          {scored.map(({ op, score }) => {
             const isSel = selected === op.uuid;
-            const isSuggested = suggestion?.uuid === op.uuid;
+            const isSuggested = visibleSuggestion?.uuid === op.uuid;
             const client = op.client_display_name || stripPhone(op.client_phone) || 'Cliente';
             const statusMeta = getStatusMeta(op.status);
             // El par ya nombra las dos monedas: repetirlas junto a cada importe alarga la
@@ -699,7 +798,7 @@ export function LinkOperationPanel({
                       {/* El argumento de la sugerencia, no solo el sello. */}
                       {isSuggested && score ? (
                         <span className="mt-0.5 block text-xs text-muted-foreground">
-                          {describeMatchReason(op, score, payment, suggestion?.confident ?? false)}
+                          {describeMatchReason(op, score, payment, visibleSuggestion?.confident ?? false)}
                         </span>
                       ) : null}
                     </span>
@@ -707,7 +806,21 @@ export function LinkOperationPanel({
                 </span>
               </button>
             );
-          })
+          })}
+          {hasMore ? (
+            <div className="flex justify-center pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 text-xs"
+                onClick={loadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore ? 'Cargando…' : 'Cargar más'}
+              </Button>
+            </div>
+          ) : null}
+          </>
         )}
       </div>
 
