@@ -19,7 +19,8 @@ import {
 import { FundChips } from './FundChips';
 import { FundManagerField } from './FundManagerField';
 import { FundStep } from './FundStep';
-import { PairPicker } from './PairPicker';
+// Vive en shared/: la ficha del cliente también lo usa, para editar su par por defecto.
+import { PairPicker } from '@/components/shared/PairPicker';
 import { adminService } from '@/services/adminService';
 import { clientService } from '@/services/clientService';
 import { fundService } from '@/services/fundService';

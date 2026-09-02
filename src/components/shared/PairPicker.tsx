@@ -7,19 +7,23 @@ import { cn } from '@/lib/utils';
 import type { CurrencyPairData } from '@/types/admin';
 
 /**
- * Selector de par para «Vincular a operación».
- *
- * El `<select>` nativo obligaba a leer dos docenas de pares en orden alfabético, sin nada
- * que dijera cuál era el correcto. Este abre ya resuelto: primero el par por defecto del
- * cliente —preseleccionado, así el caso normal se resuelve sin tocar el campo—, después los
- * que ese cliente sí usa con cuántas operaciones lleva en cada uno, y sólo al final el resto.
- *
- * Cada fila trae la tasa vigente y su antigüedad para no tener que abrir otra pantalla a
- * comprobarla, y marca la que está vieja: vincular a una tasa rancia es un error caro y
+ * Selector de par, compartido por dos pantallas con la misma necesidad: elegir un par entre
+ * dos docenas sin obligar a leerlas en orden alfabético. Abre ya resuelto: primero los pares
+ * que ESTE cliente sí usa —con cuántas operaciones lleva en cada uno—, y sólo al final el
+ * resto. Cada fila trae la tasa vigente y su antigüedad para no tener que abrir otra pantalla
+ * a comprobarla, y marca la que está vieja: cotizar con una tasa rancia es un error caro y
  * silencioso.
  *
  * El listado se despliega en el mismo sitio en vez de flotar: se consulta mientras se mira
  * el resto del formulario, y un popover encima taparía justo los montos.
+ *
+ * Los dos consumidores difieren en un punto: «Vincular a operación» tiene un par de
+ * REFERENCIA (el por defecto del cliente, que no se está tocando ahí) y por eso se separa
+ * arriba con estrella y encabezado «Por defecto de {cliente}». La ficha del cliente en cambio
+ * edita justo ESE campo — no hay a qué apuntar, y un encabezado «por defecto de X» sería
+ * circular mientras el operador decide cuál es la X. Por eso `preferredUuid` es opcional:
+ * quien no tiene un par de referencia (la ficha del cliente) simplemente no lo pasa, y el
+ * componente se queda con dos secciones — favoritos y el resto — sin estrella ni encabezado.
  */
 
 export interface PairUsage {
@@ -37,7 +41,8 @@ interface Props {
   pairs: CurrencyPairData[];
   value: string;
   onChange: (uuid: string) => void;
-  /** Par por defecto del cliente: va arriba y se marca con estrella. */
+  /** Par por defecto del cliente: va arriba y se marca con estrella. Omitir cuando el campo
+   *  que se está editando ES el par por defecto (ver docstring de arriba). */
   preferredUuid?: string | null;
   /** Nombre del cliente para el encabezado; si falta, se usa un rótulo genérico. */
   clientName?: string | null;
@@ -46,6 +51,15 @@ interface Props {
   totalOperations: number;
   disabled?: boolean;
   id?: string;
+  /**
+   * Ofrece una fila fija «sin par» al principio de la lista, y `value=''` pasa a ser un
+   * estado elegido a propósito (se muestra igual que una selección normal) en vez de «todavía
+   * no se eligió nada». Sólo lo necesita la ficha del cliente: ahí «sin par preferido» es un
+   * valor válido y tiene que poder elegirse desde la lista, no sólo heredarse por defecto.
+   */
+  clearable?: boolean;
+  /** Rótulo de la fila y del botón cuando `value === ''` con `clearable`. */
+  clearLabel?: string;
 }
 
 /** Más de esto y la tasa se muestra como vieja: hay que mirarla antes de cotizar. */
@@ -84,6 +98,8 @@ export function PairPicker({
   totalOperations,
   disabled,
   id,
+  clearable,
+  clearLabel = 'Sin par preferido',
 }: Props) {
   const [open, setOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -92,6 +108,7 @@ export function PairPicker({
 
   const selected = pairs.find((p) => p.uuid === value);
   const isPreferred = value !== '' && value === preferredUuid;
+  const isCleared = clearable && value === '';
 
   const { preferred, favourites, rest } = useMemo(() => {
     const preferredPair = pairs.find((p) => p.uuid === preferredUuid) ?? null;
@@ -217,6 +234,10 @@ export function PairPicker({
             <span className="font-medium text-foreground">{selected.pair_symbol}</span>
             <span className="truncate text-xs text-muted-foreground">{routeLabel(selected)}</span>
           </span>
+        ) : isCleared ? (
+          // Con `clearable`, value === '' es una elección tan válida como cualquier par: se
+          // ve igual de "resuelta" que una fila seleccionada, no como un campo vacío pendiente.
+          <span className="font-medium text-foreground">{clearLabel}</span>
         ) : (
           <span className="text-muted-foreground">Selecciona el par</span>
         )}
@@ -259,6 +280,21 @@ export function PairPicker({
               )
             ) : (
               <>
+                {/* Fuera de la búsqueda: no es un par, es la ausencia de uno. Va primero
+                    porque "quitar el par" es tan legítimo como elegir uno de la lista. */}
+                {clearable ? (
+                  <button
+                    type="button"
+                    onClick={() => pick('')}
+                    className={cn(
+                      'flex min-h-11 w-full items-center rounded-md px-2.5 py-2 text-left text-sm transition-colors',
+                      isCleared ? 'bg-primary/10 font-medium text-foreground' : 'text-muted-foreground hover:bg-muted',
+                    )}
+                  >
+                    {clearLabel}
+                  </button>
+                ) : null}
+
                 {preferred ? (
                   <>
                     <SectionLabel icon>
