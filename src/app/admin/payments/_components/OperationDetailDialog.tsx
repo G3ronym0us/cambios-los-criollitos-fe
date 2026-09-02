@@ -95,7 +95,9 @@ function PayRow({ p, incoming }: { p: PaymentData; incoming: boolean }) {
         {!incoming && p.is_personal_expense ? (
           <StatusBadge tone="warning" icon={Tag}>Personal</StatusBadge>
         ) : null}
-        {!incoming && p.is_irrelevant ? (
+        {/* Ya no es exclusivo del saliente: el entrante también puede marcarse irrelevante
+            (un comprobante que llegó al chat sin ser en realidad un pago al negocio). */}
+        {p.is_irrelevant ? (
           <StatusBadge tone="neutral" icon={Tag}>Irrelevante</StatusBadge>
         ) : null}
       </div>
