@@ -66,7 +66,11 @@ export const LoginForm: React.FC = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (): Promise<void> => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    e.preventDefault();
+
+    // Evita un segundo envío (por Enter u otro click) mientras el primero sigue en vuelo.
+    if (loading) return;
     if (!validateForm()) return;
 
     setMessage({ type: '', text: '' });
@@ -150,7 +154,7 @@ export const LoginForm: React.FC = () => {
             </div>
           )}
 
-          <div className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
             {/* Email */}
             <InputField
               label="Email"
@@ -175,11 +179,11 @@ export const LoginForm: React.FC = () => {
               required
             />
 
-            {/* Botón de envío */}
-            <LoadingButton loading={loading} onClick={handleSubmit}>
+            {/* Botón de envío: type="submit" para que Enter en cualquier campo del form lo dispare */}
+            <LoadingButton type="submit" loading={loading}>
               Iniciar Sesión
             </LoadingButton>
-          </div>
+          </form>
 
         </div>
 
