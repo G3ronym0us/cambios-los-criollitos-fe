@@ -74,7 +74,8 @@ export function PaymentsFilters({
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Cliente, banco, referencia"
           aria-label="Buscar pagos"
-          className="h-10 pl-9"
+          // 44px: es el operador atendiendo la bandeja con el pulgar, no un clic de mouse.
+          className="h-11 pl-9"
         />
       </div>
 
@@ -82,7 +83,7 @@ export function PaymentsFilters({
       <div
         role="group"
         aria-label="Estado de conciliación"
-        className="flex h-10 items-center gap-0.5 rounded-lg border border-border bg-muted p-0.5"
+        className="flex h-11 items-center gap-0.5 rounded-lg border border-border bg-muted p-0.5"
       >
         {ATTENTION_TABS.map((t) => (
           <button
@@ -106,7 +107,7 @@ export function PaymentsFilters({
 
       {showClassification ? (
         <Select value={outClass} onValueChange={(value) => onClassChange((value as OutgoingClass) ?? 'ALL')}>
-          <SelectTrigger aria-label="Clasificación" className="h-10 w-full sm:w-[180px]">
+          <SelectTrigger aria-label="Clasificación" className="h-11 w-full sm:w-[180px]">
             <SelectValue>{OUT_CLASS_LABELS[outClass] ?? 'Todos'}</SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -120,7 +121,7 @@ export function PaymentsFilters({
       ) : null}
 
       {hasActiveFilters ? (
-        <Button variant="ghost" size="lg" onClick={onReset} className="h-10">
+        <Button variant="ghost" size="lg" onClick={onReset} className="h-11">
           <RotateCcw className="h-4 w-4" />
           Limpiar
         </Button>
