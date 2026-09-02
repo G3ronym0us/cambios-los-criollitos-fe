@@ -16,6 +16,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { FundChips } from './FundChips';
+import { FundManagerField } from './FundManagerField';
+import { FundStep } from './FundStep';
 import { PairPicker } from './PairPicker';
 import { adminService } from '@/services/adminService';
 import { clientService } from '@/services/clientService';
@@ -27,6 +30,7 @@ import type { CurrencyPairData } from '@/types/admin';
 import type { ExchangeRateResponse } from '@/types/currency';
 import type { FundGroup } from '@/types/fund';
 import type { PaymentData, PaymentTable } from '@/types/payment';
+import { defaultManagerFor, fundCandidatesForPair, fundFieldMode, settleCurrency } from '../_lib/fundManagerField';
 import { formatAmountForInput, sanitizeAmountInput } from '@/utils/functions';
 import {
   applyRounding,
@@ -148,6 +152,9 @@ export function CreateOperationForm({
   // Mientras haya diferencia, el cuerpo del cajón es el paso de revisión y no el formulario.
   const [difference, setDifference] = useState<ValueDifference | null>(null);
   const [choice, setChoice] = useState<DifferenceChoice>('raise');
+  // Mientras dura, el cuerpo del cajón es el paso de elegir fondo (`FundStep`) — solo con 4
+  // fondos candidatos o más; con menos, el campo o los chips ya resuelven sin abrir nada.
+  const [showFundStep, setShowFundStep] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   // La tasa siempre está a la vista; lo que se pliega es el EDITOR. En la mayoría de las
   // cotizaciones nadie lo toca —el par ya trae su tasa, ya redondeada— y ocupaba ~230 px
@@ -162,18 +169,22 @@ export function CreateOperationForm({
   const headerRef = useRef(onHeaderChange);
   headerRef.current = onHeaderChange;
 
-  // La cabecera del cajón sigue al paso: mientras dura la revisión el título es el monto que
-  // sobra, y al volver —o al cerrar— el cajón recupera el suyo.
+  // La cabecera del cajón sigue al paso activo: mientras dura la revisión de la diferencia o
+  // la elección de fondo el título es el de ese paso, y al volver —o al cerrar— el cajón
+  // recupera el suyo. La diferencia manda si las dos coincidieran, aunque en la práctica no
+  // se solapan: el fondo se elige antes de enviar, la diferencia se revisa después.
   useEffect(() => {
     const notify = headerRef.current;
     if (!notify) return;
-    notify(
-      difference
-        ? { title: differenceTitle(difference), eyebrow: 'Nueva cotización · paso 2 de 2' }
-        : null,
-    );
+    if (difference) {
+      notify({ title: differenceTitle(difference), eyebrow: 'Nueva cotización · paso 2 de 2' });
+    } else if (showFundStep) {
+      notify({ title: 'Fondo del movimiento', eyebrow: 'Nueva cotización · elegir fondo' });
+    } else {
+      notify(null);
+    }
     return () => notify(null);
-  }, [difference]);
+  }, [difference, showFundStep]);
 
   useEffect(() => {
     setLoadingData(true);
@@ -188,10 +199,15 @@ export function CreateOperationForm({
         setGroups(active);
 
         // Prefill: el fondo donde ya se contabilizó el comprobante (ej. reenviado al grupo
-        // y convertido a entrante). Sin esto la op nacía huérfana del fondo que el pago
-        // ya tenía y había que volver a elegirlo a mano.
-        if (payment.fund_group_uuid && active.some((g) => g.uuid === payment.fund_group_uuid)) {
-          setFundGroupUuid((current) => current || payment.fund_group_uuid!);
+        // y convertido a entrante), con su gestor por defecto. Sin esto la op nacía huérfana
+        // del fondo que el pago ya tenía y había que volver a elegirlo a mano. El campo está
+        // deshabilitado mientras `loadingData` es true, así que no hay nada que pisar aquí.
+        const prefillGroup = payment.fund_group_uuid
+          ? active.find((g) => g.uuid === payment.fund_group_uuid)
+          : undefined;
+        if (prefillGroup) {
+          setFundGroupUuid(prefillGroup.uuid);
+          setExchangeUserUuid(defaultManagerFor(prefillGroup)?.user_uuid ?? '');
         }
       }
 
@@ -597,31 +613,25 @@ export function CreateOperationForm({
   };
 
   const withFund = direction === 'SEND';
-  // ZELLE/PAYPAL son métodos de pago en USD: para elegir fondo se liquidan como USD.
-  const settle = (c: string) => (c?.toUpperCase() === 'ZELLE' || c?.toUpperCase() === 'PAYPAL' ? 'USD' : c?.toUpperCase());
+  // Fondos que puede elegir esta cotización (más el que el pago ya traía, aunque no case).
   const fundOptions = useMemo(
-    () =>
-      groups.filter(
-        (g) =>
-          // El fondo que el pago ya traía siempre es opción, aunque el par elegido todavía
-          // no case con su moneda: si no, el select se vería vacío con un valor puesto.
-          g.uuid === fundGroupUuid ||
-          (g.currency && (settle(g.currency) === settle(fromCur) || settle(g.currency) === settle(toCur))),
-      ),
+    () => fundCandidatesForPair(groups, fromCur, toCur, fundGroupUuid),
     [groups, fromCur, toCur, fundGroupUuid],
   );
   const selectedGroup = useMemo(() => groups.find((g) => g.uuid === fundGroupUuid), [groups, fundGroupUuid]);
-  const members = selectedGroup?.members ?? [];
 
-  // Al elegir fondo: default gestor = el is_fund_manager (o el primero).
-  useEffect(() => {
-    if (!selectedGroup) {
-      setExchangeUserUuid('');
-      return;
-    }
-    const mgr = members.find((m) => m.is_fund_manager) ?? members[0];
-    setExchangeUserUuid(mgr?.user_uuid ?? '');
-  }, [selectedGroup]); // eslint-disable-line react-hooks/exhaustive-deps
+  /**
+   * Elige fondo y, con él, su gestor por defecto (el `is_fund_manager`, o el primero). Se
+   * llama explícitamente desde donde cambia el fondo —chips, el toggle de un solo
+   * candidato— en vez de vivir en un efecto: `FundStep` ya manda el gestor exacto que se
+   * eligió ahí, y un efecto disparado por `selectedGroup` se lo pisaría de vuelta al
+   * confirmar un gestor que no es el del fondo.
+   */
+  const selectFund = (groupUuid: string) => {
+    setFundGroupUuid(groupUuid);
+    const group = groups.find((g) => g.uuid === groupUuid);
+    setExchangeUserUuid(defaultManagerFor(group)?.user_uuid ?? '');
+  };
 
   /**
    * Cuánto del sobrante puede irse al saldo del cliente. Solo con comprobante ENTRANTE: ahí
@@ -631,7 +641,7 @@ export function CreateOperationForm({
    */
   const creditableUsd = (_diffValue: number, diffPayment: number) => {
     if (table !== 'incoming') return null;
-    if (settle(payment.currency || '') !== 'USD') return null;
+    if (settleCurrency(payment.currency || '') !== 'USD') return null;
     const amount = Math.round(diffPayment * 100) / 100;
     return amount > 0 ? amount : null;
   };
@@ -808,6 +818,23 @@ export function CreateOperationForm({
           </Button>
         </SidePanelFooter>
       </>
+    );
+  }
+
+  if (showFundStep) {
+    return (
+      <FundStep
+        candidates={fundOptions}
+        initialGroupUuid={fundGroupUuid}
+        initialManagerUuid={exchangeUserUuid}
+        paymentFundGroupUuid={payment.fund_group_uuid}
+        onBack={() => setShowFundStep(false)}
+        onConfirm={(groupUuid, managerUuid) => {
+          setFundGroupUuid(groupUuid);
+          setExchangeUserUuid(managerUuid);
+          setShowFundStep(false);
+        }}
+      />
     );
   }
 
@@ -1078,50 +1105,27 @@ export function CreateOperationForm({
         ) : null}
 
         {withFund ? (
-          <>
-            <div className="space-y-1.5">
-              <Label htmlFor="op-fund">Fondo (opcional)</Label>
-              <Select value={fundGroupUuid} onValueChange={(v) => setFundGroupUuid(v ?? '')} disabled={!pair}>
-                <SelectTrigger id="op-fund" className="h-10 w-full">
-                  <SelectValue>
-                    {selectedGroup
-                      ? `${selectedGroup.name}${selectedGroup.currency ? ` · ${selectedGroup.currency}` : ''}`
-                      : pair ? 'Sin fondo' : 'Elige un par primero'}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {fundOptions.map((g) => (
-                    <SelectItem key={g.uuid} value={g.uuid}>
-                      {g.name}{g.currency ? ` · ${g.currency}` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {pair && fundOptions.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No hay fondos para {fromCur}/{toCur}.</p>
-              ) : null}
-            </div>
-
-            {fundGroupUuid ? (
-              <div className="space-y-1.5">
-                <Label htmlFor="op-gestor">Gestor (movimiento del fondo)</Label>
-                <Select value={exchangeUserUuid} onValueChange={(v) => setExchangeUserUuid(v ?? '')}>
-                  <SelectTrigger id="op-gestor" className="h-10 w-full">
-                    <SelectValue>
-                      {members.find((m) => m.user_uuid === exchangeUserUuid)?.username ?? 'Selecciona el gestor'}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {members.map((m) => (
-                      <SelectItem key={m.user_uuid} value={m.user_uuid}>
-                        {m.username || m.user_uuid}{m.is_fund_manager ? ' · gestor' : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null}
-          </>
+          fundFieldMode(fundOptions.length) === 'chips' ? (
+            <FundChips
+              candidates={fundOptions}
+              selectedGroupUuid={fundGroupUuid}
+              selectedManagerUuid={exchangeUserUuid}
+              onSelectGroup={selectFund}
+              onSelectManager={setExchangeUserUuid}
+            />
+          ) : (
+            <FundManagerField
+              pairSelected={!!pair}
+              candidates={fundOptions}
+              selectedGroup={selectedGroup}
+              selectedManagerUuid={exchangeUserUuid}
+              fromCur={fromCur}
+              toCur={toCur}
+              paymentFundGroupUuid={payment.fund_group_uuid}
+              onOpenStep={() => setShowFundStep(true)}
+              onToggleSingle={() => selectFund(fundGroupUuid ? '' : (fundOptions[0]?.uuid ?? ''))}
+            />
+          )
         ) : null}
 
         <div className="border-t border-border pt-3">
