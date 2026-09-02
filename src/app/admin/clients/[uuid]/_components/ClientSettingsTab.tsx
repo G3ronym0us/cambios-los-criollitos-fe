@@ -1,18 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Drawer,
   DrawerClose,
@@ -22,12 +15,36 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@/components/ui/drawer';
+import { PairPicker, type PairRate, type PairUsage } from '@/components/shared/PairPicker';
+import { ratesService } from '@/services/ratesService';
+import {
+  applyRounding,
+  effectiveRate as toEffectiveRate,
+  pairRoundingFrom,
+} from '@/utils/rounding';
 import type { CurrencyPairData } from '@/types/admin';
+import type { ExchangeRateResponse } from '@/types/currency';
 import type { ClientData, ClientUpdate } from '@/types/client';
+import type { OperationData } from '@/types/operation';
 import { ClientAccountsCard } from './ClientAccountsCard';
 
-// Centinela para "sin par preferido" (el Select no admite value="").
-const NO_PAIR = '__none__';
+/**
+ * La tasa que se muestra junto a cada par: la misma cuenta que hace `CreateOperationForm` al
+ * cotizar. Si el par redondea la tasa (modo RATE) se muestra ya redondeada —USD-VES a 915, no
+ * a los 919,005 crudos del scraper—; el resto de modos usan la del par tal cual. Se duplica en
+ * vez de importarse porque cada pantalla la aplica sobre datos propios (aquí no hay tasa "de
+ * la operación", sólo la vigente de cada par).
+ */
+function quotedRateOf(rate: ExchangeRateResponse): number {
+  const rounding = pairRoundingFrom(rate);
+  if (rounding?.mode !== 'RATE') return rate.rate;
+  const rounded = applyRounding(
+    toEffectiveRate(rate.rate, rate.inverse_percentage),
+    rounding.step,
+    rounding.direction,
+  );
+  return rounded > 0 ? rounded : rate.rate;
+}
 
 interface PendingChange {
   title: string;
@@ -41,29 +58,33 @@ interface PendingChange {
 interface ClientSettingsTabProps {
   client: ClientData;
   pairs: CurrencyPairData[];
+  /** Operaciones del cliente, ya cargadas por la página: de aquí sale con cuántas de ellas
+   *  usó cada par, para que el selector los ordene sin pedir nada nuevo. */
+  operations: OperationData[];
   saving: boolean;
   onSave: (data: ClientUpdate, successMessage?: string) => Promise<boolean>;
 }
 
-export function ClientSettingsTab({ client, pairs, saving, onSave }: ClientSettingsTabProps) {
-  // Datos (nombre + par) → edición agrupada con un solo "Guardar cambios".
+export function ClientSettingsTab({ client, pairs, operations, saving, onSave }: ClientSettingsTabProps) {
+  // Datos (nombre + par) → edición agrupada con un solo "Guardar cambios". '' es "sin par
+  // preferido" — mismo centinela que usa el propio PairPicker para "nada elegido".
   const [name, setName] = useState(client.display_name ?? '');
-  const [pair, setPair] = useState(client.preferred_pair_uuid ?? NO_PAIR);
+  const [pair, setPair] = useState(client.preferred_pair_uuid ?? '');
   const [pending, setPending] = useState<PendingChange | null>(null);
 
   // Re-sincroniza el formulario de datos cuando el cliente cambia (tras guardar).
   useEffect(() => {
     setName(client.display_name ?? '');
-    setPair(client.preferred_pair_uuid ?? NO_PAIR);
+    setPair(client.preferred_pair_uuid ?? '');
   }, [client.display_name, client.preferred_pair_uuid]);
 
-  const savedPair = client.preferred_pair_uuid ?? NO_PAIR;
+  const savedPair = client.preferred_pair_uuid ?? '';
   const nameDirty = name.trim() !== (client.display_name ?? '');
   const pairDirty = pair !== savedPair;
   const dataDirty = nameDirty || pairDirty;
 
   const pairLabel = (value: string) => {
-    if (value === NO_PAIR) return 'Sin par preferido';
+    if (!value) return 'Sin par preferido';
     return pairs.find((p) => p.uuid === value)?.pair_symbol ?? client.preferred_pair_symbol ?? value;
   };
 
@@ -71,6 +92,38 @@ export function ClientSettingsTab({ client, pairs, saving, onSave }: ClientSetti
     setName(client.display_name ?? '');
     setPair(savedPair);
   };
+
+  // Cuántas operaciones lleva este cliente en cada par: se calcula de las que la página ya
+  // tiene cargadas (hasta 200), sin pedir nada nuevo al backend.
+  const usage = useMemo(() => {
+    const counts = new Map<string, PairUsage>();
+    for (const op of operations) {
+      if (!op.currency_pair_uuid) continue;
+      counts.set(op.currency_pair_uuid, { count: (counts.get(op.currency_pair_uuid)?.count ?? 0) + 1 });
+    }
+    return counts;
+  }, [operations]);
+
+  // La tasa vigente de cada par, para que el selector la muestre sin obligar a otra pantalla.
+  // Aparte del resto de la carga: si tarda o falla, el selector simplemente no la muestra.
+  const [pairRates, setPairRates] = useState<Map<string, PairRate>>(new Map());
+  useEffect(() => {
+    let active = true;
+    ratesService.getAllActiveRates().then((res) => {
+      if (!active || !res.success || !res.data) return;
+      setPairRates(
+        new Map(
+          res.data.map((r) => [
+            r.currency_pair_uuid,
+            { rate: quotedRateOf(r), updatedAt: r.updated_at ?? r.created_at ?? null },
+          ]),
+        ),
+      );
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const confirmPending = async () => {
     if (!pending) return;
@@ -88,7 +141,7 @@ export function ClientSettingsTab({ client, pairs, saving, onSave }: ClientSetti
       changes.push(value ? `Nombre → "${value}"` : 'Nombre → (sin nombre, usa el número)');
     }
     if (pairDirty) {
-      payload.preferred_pair_uuid = pair === NO_PAIR ? null : pair;
+      payload.preferred_pair_uuid = pair || null;
       changes.push(`Par por defecto → ${pairLabel(pair)}`);
     }
     if (changes.length === 0) return;
@@ -182,21 +235,26 @@ export function ClientSettingsTab({ client, pairs, saving, onSave }: ClientSetti
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="client-pair">Par por defecto</Label>
-            <Select value={pair} disabled={saving} onValueChange={(v) => setPair(v ?? NO_PAIR)}>
-              <SelectTrigger id="client-pair" className="h-11 w-full">
-                <SelectValue placeholder="Sin par preferido">
-                  {(value: string | null) => pairLabel(value ?? NO_PAIR)}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_PAIR}>Sin par preferido</SelectItem>
-                {pairs.map((p) => (
-                  <SelectItem key={p.uuid} value={p.uuid}>
-                    {p.pair_symbol}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/*
+              Sin `preferredUuid`: aquí no hay un par de referencia distinto del que se está
+              editando — sería el propio campo marcándose con su propia estrella y anunciando
+              "por defecto de X" mientras X es justo lo que el operador está por cambiar. Sin
+              ese prop, el `PairPicker` se queda con dos secciones (favoritos del cliente + el
+              resto) y ninguna estrella; ver su docstring para el porqué completo.
+              `clearable`: "sin par preferido" es un estado tan válido como cualquier par, y
+              tiene que poder elegirse desde la lista — no sólo heredarse porque no se tocó.
+            */}
+            <PairPicker
+              id="client-pair"
+              pairs={pairs}
+              value={pair}
+              onChange={setPair}
+              usage={usage}
+              rates={pairRates}
+              totalOperations={operations.length}
+              disabled={saving}
+              clearable
+            />
             <p className="text-xs text-muted-foreground">
               El bot usa este par cuando el cliente cotiza sin especificar uno.
             </p>

@@ -151,6 +151,7 @@ export default function ClientProfilePage() {
           <ClientSettingsTab
             client={client}
             pairs={pairs}
+            operations={operations}
             saving={saving}
             onSave={actions.updateFields}
           />
