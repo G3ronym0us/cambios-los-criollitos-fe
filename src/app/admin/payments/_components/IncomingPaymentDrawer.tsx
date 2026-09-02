@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   ArrowLeft,
   ArrowRightLeft,
+  Ban,
   ChevronRight,
   IdCard,
   Lock,
@@ -19,6 +20,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   SidePanel,
   SidePanelBody,
@@ -32,6 +34,7 @@ import { paymentService } from '@/services/paymentService';
 import { formatNumber } from '@/utils/functions';
 import { canBeDefaultAccount } from '@/utils/paymentBlock';
 import type { PaymentData, PaymentSuggestion } from '@/types/payment';
+import type { OrphanAction, UnlinkPreview } from '@/types/operation';
 import { CorrectReceiptDialog } from './CorrectReceiptDialog';
 import { LinkOperationPanel } from './LinkOperationPanel';
 import { FundDepositStep, fundDepositLabel } from './FundDepositStep';
@@ -39,6 +42,7 @@ import { PaymentAllocationsPanel } from './PaymentAllocationsPanel';
 import { PaymentTimeline, TransferOriginChip } from './PaymentTransferTrail';
 import { TransferClientStep } from './TransferClientStep';
 import { canTransferPayment, canTransferPayments } from './paymentTransfer';
+import { UnlinkOrphanDialog } from './UnlinkOrphanDialog';
 import { describeCorrection, describeCoverage, describePayment, describeSuggestion } from './paymentRowData';
 
 interface IncomingPaymentDrawerProps {
@@ -49,7 +53,7 @@ interface IncomingPaymentDrawerProps {
   onSaveClientData: (payment: PaymentData) => void;
 }
 
-type Step = 'detail' | 'operation' | 'allocations' | 'balance' | 'fundDeposit' | 'transfer';
+type Step = 'detail' | 'operation' | 'allocations' | 'balance' | 'fundDeposit' | 'transfer' | 'irrelevant';
 
 /**
  * Título y subtítulo de cada paso. Viven en la CABECERA, no como un encabezado más dentro
@@ -79,6 +83,11 @@ const STEP_META: Record<Exclude<Step, 'detail'>, { title: string; subtitle: stri
     title: 'Transferir a otro cliente',
     subtitle:
       'El comprobante y el monto se mudan de perfil, con su fecha original. El pago no se duplica ni se anula, y la mudanza queda escrita en los dos perfiles.',
+  },
+  irrelevant: {
+    title: 'Marcar como irrelevante',
+    subtitle:
+      'El comprobante llegó al chat pero no es en realidad un pago al negocio: un reenvío por error, el duplicado de otro Zelle, plata que era para otra cosa.',
   },
 };
 
@@ -165,6 +174,10 @@ export function IncomingPaymentDrawer({
   const [suggestion, setSuggestion] = useState<PaymentSuggestion | null>(null);
   const [showRawText, setShowRawText] = useState(false);
   const [correcting, setCorrecting] = useState(false);
+  const [irrelevantDesc, setIrrelevantDesc] = useState('');
+  // Marcar irrelevante desvincula: si era el único comprobante de la operación, este cuadro
+  // decide qué pasa con ella (mismo camino que el saliente).
+  const [orphan, setOrphan] = useState<UnlinkPreview | null>(null);
 
   useEffect(() => {
     if (!payment) return;
@@ -176,6 +189,8 @@ export function IncomingPaymentDrawer({
     setBalanceNotes('');
     setSuggestion(null);
     setShowRawText(false);
+    setIrrelevantDesc(payment.irrelevant_description ?? '');
+    setOrphan(null);
     if (payment.operation_uuid) return; // ya vinculado: no hay nada que sugerir
     let active = true;
     paymentService.getSuggestions('incoming', [payment.id]).then((res) => {
@@ -244,6 +259,46 @@ export function IncomingPaymentDrawer({
       onClose();
     } else {
       toast.error(res.error || 'No se pudo convertir el pago en saliente');
+    }
+  };
+
+  // Si el pago está vinculado, hay que preguntar antes: la operación podría quedarse sin
+  // NINGÚN comprobante (ni entrante ni saliente) al perder este. No aplica cuando ya tiene un
+  // saliente que la sostiene — un cambio de socio o de un par en efectivo nunca tuvo entrante
+  // y eso es normal, así que el backend no dispara la pregunta en ese caso.
+  const needsOrphanDecision = async () => {
+    if (!p.operation_uuid) return false;
+    const preview = await paymentService.unlinkPreview('incoming', p.id);
+    if (preview.success && preview.data?.would_orphan) {
+      setOrphan(preview.data);
+      return true;
+    }
+    return false;
+  };
+
+  const saveIrrelevant = async (
+    isIrrelevant: boolean,
+    orphanDecision?: { action: OrphanAction; note: string | null },
+  ) => {
+    setSubmitting(true);
+    if (isIrrelevant && !orphanDecision && (await needsOrphanDecision())) {
+      setSubmitting(false);
+      return;
+    }
+    const res = await paymentService.markIrrelevant(
+      'incoming',
+      p.id,
+      isIrrelevant,
+      isIrrelevant ? irrelevantDesc.trim() || null : null,
+      orphanDecision ?? undefined,
+    );
+    setSubmitting(false);
+    if (res.success) {
+      toast.success(isIrrelevant ? 'Pago marcado como irrelevante' : 'Se quitó la marca de irrelevante');
+      setOrphan(null);
+      finish();
+    } else {
+      toast.error(res.error || 'No se pudo actualizar el pago');
     }
   };
 
@@ -508,6 +563,20 @@ export function IncomingPaymentDrawer({
             ) : null}
 
             <ActionRow
+              icon={Ban}
+              title={p.is_irrelevant ? 'Ya marcado como irrelevante' : 'Marcar como irrelevante'}
+              description={
+                (p.credited_to_balance ?? 0) > 0 && !p.is_irrelevant
+                  ? 'Ya se acreditó al saldo a favor del cliente; resuelve el saldo antes de marcarlo.'
+                  : p.is_irrelevant
+                    ? p.irrelevant_description || 'Sin descripción — toca para editarla o quitar la marca.'
+                    : 'Llegó al chat pero no es en realidad un pago al negocio (duplicado, reenvío por error).'
+              }
+              onClick={() => setStep('irrelevant')}
+              disabled={(p.credited_to_balance ?? 0) > 0 && !p.is_irrelevant}
+            />
+
+            <ActionRow
               icon={PiggyBank}
               title="Depósito al fondo"
               // `highlight` es ámbar y aquí significa «esto te reclama algo» (lo usa el dinero
@@ -598,7 +667,7 @@ export function IncomingPaymentDrawer({
           cancelLabel="Volver"
           onHeaderChange={setStepHeader}
         />
-      ) : (
+      ) : step === 'balance' ? (
         <>
           <SidePanelBody>
             <div className="space-y-1.5">
@@ -635,7 +704,57 @@ export function IncomingPaymentDrawer({
             </Button>
           </SidePanelFooter>
         </>
-      )}
+      ) : step === 'irrelevant' ? (
+        <>
+          <SidePanelBody>
+            <div className="space-y-2">
+              <Label htmlFor="irrelevant-desc">Descripción (opcional)</Label>
+              <Textarea
+                id="irrelevant-desc"
+                value={irrelevantDesc}
+                onChange={(e) => setIrrelevantDesc(e.target.value)}
+                placeholder="Ej.: captura duplicada, no corresponde a un pago…"
+                rows={3}
+                autoFocus
+              />
+            </div>
+            {p.operation_uuid ? (
+              <p className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
+                <Ban className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span className="text-pretty">
+                  Está vinculado a una operación: marcarlo irrelevante lo desvincula. Si es su
+                  único comprobante, se preguntará qué hacer con ella.
+                </span>
+              </p>
+            ) : null}
+          </SidePanelBody>
+
+          <SidePanelFooter>
+            <Button variant="ghost" onClick={() => setStep('detail')} disabled={submitting}>
+              <ArrowLeft className="h-4 w-4" />
+              Volver
+            </Button>
+            <div className="flex gap-2">
+              {p.is_irrelevant ? (
+                <Button variant="outline" onClick={() => saveIrrelevant(false)} disabled={submitting}>
+                  Quitar la marca
+                </Button>
+              ) : null}
+              <Button onClick={() => saveIrrelevant(true)} disabled={submitting}>
+                <Ban className="h-4 w-4" />
+                {submitting ? 'Guardando…' : p.is_irrelevant ? 'Actualizar' : 'Marcar como irrelevante'}
+              </Button>
+            </div>
+          </SidePanelFooter>
+        </>
+      ) : null}
+
+      <UnlinkOrphanDialog
+        preview={orphan}
+        submitting={submitting}
+        onCancel={() => setOrphan(null)}
+        onDecide={(action, note) => saveIrrelevant(true, { action, note })}
+      />
 
       <CorrectReceiptDialog
         payment={correcting ? p : null}

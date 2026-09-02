@@ -235,15 +235,18 @@ export class PaymentService {
     return { success: result.success, data: result.data, error: result.error };
   }
 
-  // Marca/desmarca un pago saliente como irrelevante (descripción opcional).
+  // Marca/desmarca un pago —de cualquier lado— como irrelevante (descripción opcional).
+  // En saliente es dinero nuestro que salió por algo que no es un cambio; en entrante es un
+  // comprobante que llegó al chat sin ser en realidad un pago al negocio.
   async markIrrelevant(
+    table: PaymentTable,
     paymentId: number,
     isIrrelevant: boolean,
     description: string | null,
     orphan?: { action: OrphanAction; note?: string | null },
   ): Promise<ApiResponse<PaymentData>> {
     const result = await httpClient.patch<PaymentData>(
-      `/payments/outgoing/${paymentId}/irrelevant`,
+      `/payments/${table}/${paymentId}/irrelevant`,
       {
         is_irrelevant: isIrrelevant,
         irrelevant_description: description,

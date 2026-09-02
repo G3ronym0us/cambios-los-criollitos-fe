@@ -263,7 +263,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
       setSubmitting(true);
       const res = isPersonal
         ? await paymentService.markPersonalExpense(payment.id, false, null)
-        : await paymentService.markIrrelevant(payment.id, false, null);
+        : await paymentService.markIrrelevant('outgoing', payment.id, false, null);
       setSubmitting(false);
       if (!res.success) {
         toast.error(res.error || 'No se pudo actualizar el pago');
@@ -378,6 +378,7 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
       return;
     }
     const res = await paymentService.markIrrelevant(
+      'outgoing',
       payment.id,
       true,
       desc.trim() || null,
