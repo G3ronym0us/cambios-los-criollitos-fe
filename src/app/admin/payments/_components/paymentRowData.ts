@@ -185,22 +185,3 @@ export function describeSuggestion(s: PaymentSuggestion): string {
     .filter(Boolean)
     .join(' · ');
 }
-
-/**
- * El botón "Vincular" de la tarjeta de mobile se pinta relleno —como "Vincular sugerida"—
- * cuando el matcher ya propone una operación: es el atajo que el diseño de la bandeja
- * destaca (fondo naranja, no solo el borde). Sin sugerencia sigue siendo un botón
- * secundario más entre los que puede tomar el operador.
- *
- * Aparte de `getPaymentAction` (en `utils/paymentStatus.ts`) porque esa función no conoce
- * la sugerencia —la calcula una llamada al matcher aparte— y cambiar su firma movería
- * también la fila de escritorio, donde la sugerencia ya se muestra por su cuenta en la
- * columna de operación y no debe convertir el botón en relleno.
- */
-export function resolveLinkButtonVariant(
-  action: { label: string; variant: 'primary' | 'outline' | 'danger' },
-  hasSuggestion: boolean,
-): 'primary' | 'outline' | 'danger' {
-  if (action.label === 'Vincular' && hasSuggestion) return 'primary';
-  return action.variant;
-}

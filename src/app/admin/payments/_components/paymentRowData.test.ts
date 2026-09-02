@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PaymentData } from '@/types/payment';
-import { describePayment, resolveLinkButtonVariant } from './paymentRowData';
+import { describePayment } from './paymentRowData';
 
 // Un entrante mínimo: lo único que importa para estas pruebas es `created_at`.
 function payment(overrides: Partial<PaymentData> = {}): PaymentData {
@@ -63,20 +63,5 @@ describe('describePayment · when (el caso que le faltaba a la tarjeta de mobile
     const d = describePayment(payment({ created_at: null }), NOW);
     expect(d.time).toBe('—');
     expect(d.when).toBe('—');
-  });
-});
-
-describe('resolveLinkButtonVariant (la tarjeta de mobile: "Vincular sugerida" se pinta relleno)', () => {
-  it('con sugerencia, "Vincular" pasa a relleno aunque getPaymentAction diga outline', () => {
-    expect(resolveLinkButtonVariant({ label: 'Vincular', variant: 'outline' }, true)).toBe('primary');
-  });
-
-  it('sin sugerencia, "Vincular" se queda como venía (outline)', () => {
-    expect(resolveLinkButtonVariant({ label: 'Vincular', variant: 'outline' }, false)).toBe('outline');
-  });
-
-  it('otras acciones no se ven afectadas por la sugerencia (p. ej. "Gestionar" o "Corregir")', () => {
-    expect(resolveLinkButtonVariant({ label: 'Gestionar', variant: 'outline' }, true)).toBe('outline');
-    expect(resolveLinkButtonVariant({ label: 'Corregir', variant: 'danger' }, true)).toBe('danger');
   });
 });

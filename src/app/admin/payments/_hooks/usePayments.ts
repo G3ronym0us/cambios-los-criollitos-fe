@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { paymentService } from '@/services/paymentService';
 import type { DateRange } from '@/lib/dateRange';
+import { getAttentionCounts } from '../_lib/attentionCounts';
 import {
   AttentionFilter,
   PaymentData,
@@ -62,6 +63,10 @@ export function usePayments() {
   // Totales sin filtrar por tabla (para los badges de las pestañas).
   const [totalIncoming, setTotalIncoming] = useState(0);
   const [totalOutgoing, setTotalOutgoing] = useState(0);
+
+  // Total de la bandeja bajo los filtros actuales PERO sin el segmento de atención: es el
+  // denominador de las cifras que el segmentado lleva entre paréntesis en móvil.
+  const [scopeTotal, setScopeTotal] = useState(0);
 
   // Agregados de la franja de atención y sugerencias de las filas cargadas.
   const [stats, setStats] = useState<PaymentStats | null>(null);
@@ -162,6 +167,21 @@ export function usePayments() {
   useEffect(() => {
     loadStats();
   }, [loadStats]);
+
+  // ── Total del ámbito (cifras del segmentado) ──────────────────────────────
+  // Tampoco depende de `attention`, por lo mismo que la franja. Pide una sola fila: lo
+  // único que interesa de la respuesta es `total`.
+  const scopeReqId = useRef(0);
+  const loadScopeTotal = useCallback(async () => {
+    const id = ++scopeReqId.current;
+    const res = await paymentService.getPayments(tab, { limit: 1, attention: 'ALL', ...filters });
+    if (id !== scopeReqId.current) return;
+    setScopeTotal(res.success && res.data ? res.data.total : 0);
+  }, [tab, filters]);
+
+  useEffect(() => {
+    loadScopeTotal();
+  }, [loadScopeTotal]);
 
   // ── Sugerencias de las filas visibles ─────────────────────────────────────
   // Solo para lo que no tiene destino: en una fila ya vinculada la sugerencia sobra.
@@ -276,6 +296,7 @@ export function usePayments() {
   const refreshInPlace = useCallback(async () => {
     loadTotals();
     loadStats();
+    loadScopeTotal();
     const count = Math.min(Math.max(items.length, PAGE_SIZE), 1000);
     const id = ++reqId.current;
     const requests = [];
@@ -297,13 +318,14 @@ export function usePayments() {
     } else {
       toast.error('No se pudo refrescar la lista de pagos');
     }
-  }, [items.length, tab, attention, filters, loadTotals, loadStats]);
+  }, [items.length, tab, attention, filters, loadTotals, loadStats, loadScopeTotal]);
 
   const reload = useCallback(() => {
     loadTotals();
     loadStats();
+    loadScopeTotal();
     fetchFirstPage();
-  }, [loadTotals, loadStats, fetchFirstPage]);
+  }, [loadTotals, loadStats, loadScopeTotal, fetchFirstPage]);
 
   const hasActiveFilters =
     search.trim() !== '' || outClass !== 'ALL' || attention !== 'ALL' || !!range.from || !!range.to;
@@ -322,6 +344,7 @@ export function usePayments() {
       totalIncoming,
       totalOutgoing,
       stats,
+      attentionCounts: getAttentionCounts(stats, scopeTotal),
       suggestions,
       loading,
       loadingMore,

@@ -55,66 +55,15 @@ function Tile({ value, label, hint, emphasis, active, onClick }: TileProps) {
   );
 }
 
-interface MiniStatProps {
-  value: string;
-  label: string;
-  emphasis?: boolean;
-  active?: boolean;
-  onClick?: () => void;
-}
-
-/**
- * Versión de bolsillo de `Tile` para móvil: en 375 px no caben cuatro tarjetas con su
- * pista secundaria (el diseño lo deja claro — ahí solo van dos cifras lado a lado), así
- * que esto es solo número + etiqueta. La primera sigue siendo el filtro de "por atender",
- * igual que en escritorio.
- */
-function MiniStat({ value, label, emphasis, active, onClick }: MiniStatProps) {
-  const content = (
-    <>
-      <span
-        className={cn(
-          'text-sm font-bold tabular-nums',
-          emphasis ? 'text-amber-700 dark:text-amber-400' : 'text-foreground',
-        )}
-      >
-        {value}
-      </span>
-      <span
-        className={cn(
-          'text-[10.5px] leading-none',
-          emphasis ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground',
-        )}
-      >
-        {label}
-      </span>
-    </>
-  );
-
-  const className = cn(
-    'flex min-h-11 flex-1 flex-col items-start justify-center gap-0.5 rounded-lg px-2.5 py-1.5 text-left transition-colors',
-    emphasis ? 'bg-amber-500/10' : 'bg-muted',
-    onClick && 'cursor-pointer',
-    active && 'ring-2 ring-primary/50',
-  );
-
-  if (!onClick) return <div className={className}>{content}</div>;
-  return (
-    <button type="button" onClick={onClick} aria-pressed={active} className={className}>
-      {content}
-    </button>
-  );
-}
-
 /**
  * Lo que hay que atender, arriba del todo: cuántos comprobantes esperan decisión, cuánto
  * dinero de ellos no respalda nada, y el ritmo del día. La primera tarjeta es además el
  * acceso al filtro — la cifra y el filtro que la aísla son lo mismo, así que se pulsan juntos.
  *
- * El diseño solo le da sitio a esto en escritorio: en móvil (bajo `lg`, mismo corte que usa
- * el resto de la bandeja) lo reemplaza una línea compacta de dos datos — por atender y
- * conciliados — porque cuatro tarjetas con pista secundaria no caben en 375 px sin empujar
- * el resto de la pantalla fuera de vista.
+ * El diseño solo le da sitio a esto en escritorio. En móvil la franja no se dibuja: su
+ * cifra de «por atender» ya es el segmento del filtro, así que viaja entre paréntesis
+ * dentro del segmentado (ver `_lib/attentionCounts.ts`); lo que sí es métrica —dinero sin
+ * asignar, recibidos hoy— es del panel principal, no de esta pantalla.
  */
 export function PaymentsAttentionStrip({
   stats,
@@ -129,56 +78,39 @@ export function PaymentsAttentionStrip({
   const filtering = attention === 'ATTENTION';
 
   return (
-    <>
-      <div className="hidden flex-wrap gap-2.5 lg:flex">
+    <div className="hidden flex-wrap gap-2.5 lg:flex">
+      <Tile
+        value={String(stats.needs_attention)}
+        label="por atender"
+        hint={outgoing ? 'sin clasificar ni vincular' : 'sin vincular o incompletos'}
+        emphasis={stats.needs_attention > 0}
+        active={filtering}
+        onClick={
+          stats.needs_attention > 0
+            ? () => onAttentionChange(filtering ? 'ALL' : 'ATTENTION')
+            : undefined
+        }
+      />
+
+      {top ? (
         <Tile
-          value={String(stats.needs_attention)}
-          label="por atender"
-          hint={outgoing ? 'sin clasificar ni vincular' : 'sin vincular o incompletos'}
-          emphasis={stats.needs_attention > 0}
-          active={filtering}
-          onClick={
-            stats.needs_attention > 0
-              ? () => onAttentionChange(filtering ? 'ALL' : 'ATTENTION')
-              : undefined
+          value={formatNumber(top.amount)}
+          label={`${top.currency} sin asignar`}
+          hint={
+            others > 0
+              ? `en ${top.count} comprobantes · y ${others} moneda${others > 1 ? 's' : ''} más`
+              : `en ${top.count} comprobante${top.count === 1 ? '' : 's'}${
+                  stats.unassigned_truncated ? ' o más' : ''
+                }`
           }
         />
+      ) : null}
 
-        {top ? (
-          <Tile
-            value={formatNumber(top.amount)}
-            label={`${top.currency} sin asignar`}
-            hint={
-              others > 0
-                ? `en ${top.count} comprobantes · y ${others} moneda${others > 1 ? 's' : ''} más`
-                : `en ${top.count} comprobante${top.count === 1 ? '' : 's'}${
-                    stats.unassigned_truncated ? ' o más' : ''
-                  }`
-            }
-          />
-        ) : null}
-
-        <Tile
-          value={String(stats.received_today)}
-          label="recibidos hoy"
-          hint={`${stats.reconciled_today} ya conciliados`}
-        />
-      </div>
-
-      <div className="flex gap-1.5 lg:hidden">
-        <MiniStat
-          value={String(stats.needs_attention)}
-          label="por atender"
-          emphasis={stats.needs_attention > 0}
-          active={filtering}
-          onClick={
-            stats.needs_attention > 0
-              ? () => onAttentionChange(filtering ? 'ALL' : 'ATTENTION')
-              : undefined
-          }
-        />
-        <MiniStat value={String(stats.reconciled_today)} label="conciliados" />
-      </div>
-    </>
+      <Tile
+        value={String(stats.received_today)}
+        label="recibidos hoy"
+        hint={`${stats.reconciled_today} ya conciliados`}
+      />
+    </div>
   );
 }
