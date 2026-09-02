@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { getPaymentAction, getPaymentStatusMeta, getPaymentTag } from '@/utils/paymentStatus';
 import type { PaymentData, PaymentSuggestion } from '@/types/payment';
 import { rememberFocus } from './PaymentRow';
-import { describePayment, describeSuggestion } from './paymentRowData';
+import { describePayment, describeSuggestion, resolveLinkButtonVariant } from './paymentRowData';
 
 interface PaymentItemProps {
   payment: PaymentData;
@@ -45,12 +45,15 @@ export function PaymentItem({ payment: p, outgoing, suggestion, onManage }: Paym
           {p.client_uuid ? (
             <Link
               href={`/admin/clients/${p.client_uuid}`}
-              className="block truncate text-sm font-semibold text-foreground hover:underline"
+              // 13.5px como en el diseño de la bandeja: el resto de la tarjeta (monto, hora,
+              // origen) ya usa sus tamaños exactos y el nombre se había quedado en la escala
+              // genérica de Tailwind (14px).
+              className="block truncate text-[13.5px] font-semibold text-foreground hover:underline"
             >
               {d.client}
             </Link>
           ) : (
-            <div className="truncate text-sm font-semibold text-foreground">{d.client}</div>
+            <div className="truncate text-[13.5px] font-semibold text-foreground">{d.client}</div>
           )}
           <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground">
             {p.operation_uuid && d.operation ? d.operation : d.source}
@@ -96,13 +99,18 @@ export function PaymentItem({ payment: p, outgoing, suggestion, onManage }: Paym
       <div className="mt-2.5 flex items-center gap-2">
         {onManage ? (
           <Button
-            variant={action.variant === 'primary' ? 'default' : 'outline'}
+            // Con sugerencia, "Vincular" se pinta relleno ("Vincular sugerida"): es el atajo
+            // que la bandeja del diseño destaca con fondo naranja, no un botón secundario más.
+            variant={resolveLinkButtonVariant(action, Boolean(suggestedLabel)) === 'primary' ? 'default' : 'outline'}
             size="lg"
             onClick={() => onManage(p)}
             className={cn(
               'h-11 flex-1',
               action.variant === 'danger' && 'border-destructive/40 text-destructive',
-              action.variant === 'outline' && action.label === 'Vincular' && 'border-primary/40 text-primary',
+              action.variant === 'outline' &&
+                action.label === 'Vincular' &&
+                !suggestedLabel &&
+                'border-primary/40 text-primary',
             )}
           >
             {suggestedLabel && action.label === 'Vincular' ? 'Vincular sugerida' : action.label}

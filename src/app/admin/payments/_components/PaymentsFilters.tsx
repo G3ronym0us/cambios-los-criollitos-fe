@@ -79,11 +79,14 @@ export function PaymentsFilters({
         />
       </div>
 
-      {/* Segmentado: es el mismo eje que la franja de atención de arriba. */}
+      {/* Segmentado: es el mismo eje que la franja de atención de arriba. En móvil ocupa la
+          fila entera y las tres pestañas se reparten el ancho en partes iguales, como en el
+          diseño de la bandeja; a partir de `sm` vuelve a ser tan ancho como su contenido para
+          convivir con el resto de filtros en una sola fila. */}
       <div
         role="group"
         aria-label="Estado de conciliación"
-        className="flex h-11 items-center gap-0.5 rounded-lg border border-border bg-muted p-0.5"
+        className="flex h-11 w-full items-center gap-0.5 rounded-lg border border-border bg-muted p-0.5 sm:w-auto"
       >
         {ATTENTION_TABS.map((t) => (
           <button
@@ -92,7 +95,7 @@ export function PaymentsFilters({
             onClick={() => onAttentionChange(t.value)}
             aria-pressed={attention === t.value}
             className={cn(
-              'h-full rounded-md px-3 text-xs font-medium transition-colors',
+              'h-full flex-1 rounded-md px-3 text-xs font-medium transition-colors sm:flex-none',
               attention === t.value
                 ? 'bg-card font-semibold text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground',
