@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { getPaymentAction, getPaymentStatusMeta, getPaymentTag } from '@/utils/paymentStatus';
 import type { PaymentData, PaymentSuggestion } from '@/types/payment';
 import { rememberFocus } from './PaymentRow';
-import { describePayment, describeSuggestion, resolveLinkButtonVariant } from './paymentRowData';
+import { describePayment, describeSuggestion } from './paymentRowData';
 
 interface PaymentItemProps {
   payment: PaymentData;
@@ -99,18 +99,17 @@ export function PaymentItem({ payment: p, outgoing, suggestion, onManage }: Paym
       <div className="mt-2.5 flex items-center gap-2">
         {onManage ? (
           <Button
-            // Con sugerencia, "Vincular" se pinta relleno ("Vincular sugerida"): es el atajo
-            // que la bandeja del diseño destaca con fondo naranja, no un botón secundario más.
-            variant={resolveLinkButtonVariant(action, Boolean(suggestedLabel)) === 'primary' ? 'default' : 'outline'}
+            // El relleno naranja está reservado a "Gestionar" cuando el pago espera decisión
+            // (`getPaymentAction` → 'primary'). "Vincular sugerida" NO es relleno: la bandeja
+            // del diseño lo dibuja con el mismo borde naranja que "Vincular" a secas — lo que
+            // cambia con la sugerencia es la etiqueta y la insignia de arriba, no el peso.
+            variant={action.variant === 'primary' ? 'default' : 'outline'}
             size="lg"
             onClick={() => onManage(p)}
             className={cn(
               'h-11 flex-1',
               action.variant === 'danger' && 'border-destructive/40 text-destructive',
-              action.variant === 'outline' &&
-                action.label === 'Vincular' &&
-                !suggestedLabel &&
-                'border-primary/40 text-primary',
+              action.label === 'Vincular' && 'border-primary/40 text-primary',
             )}
           >
             {suggestedLabel && action.label === 'Vincular' ? 'Vincular sugerida' : action.label}

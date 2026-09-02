@@ -51,6 +51,17 @@ const navigation = [
   { name: 'Alertas', href: '/admin/alerts', icon: Bell },
 ];
 
+/**
+ * Título de la sección activa: el enlace del menú que mejor case con la ruta (gana el más
+ * largo, así `/admin/clients/<uuid>` sigue diciendo «Clientes» y no «Dashboard»).
+ */
+function sectionTitleFor(pathname: string): string {
+  const match = navigation
+    .filter((i) => i.href !== '/' && (pathname === i.href || pathname.startsWith(`${i.href}/`)))
+    .sort((a, b) => b.href.length - a.href.length)[0];
+  return match?.name ?? 'Panel';
+}
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, initializing, logout } = useAuth();
   const router = useRouter();
@@ -186,6 +197,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               >
                 <Menu className="h-5 w-5" />
               </Button>
+
+              {/* En móvil la barra es el único sitio donde cabe el título de la sección: el
+                  diseño de la bandeja de pagos se lo lleva ahí y quita el encabezado del
+                  cuerpo, que en 375 px se comía media pantalla antes de la primera fila. */}
+              <span className="truncate text-base font-bold text-foreground lg:hidden">
+                {sectionTitleFor(pathname)}
+              </span>
 
               <div className="hidden text-sm text-muted-foreground lg:block">
                 Panel de Administración

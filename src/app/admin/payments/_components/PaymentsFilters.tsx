@@ -14,6 +14,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { DateRange } from '@/lib/dateRange';
 import type { AttentionFilter } from '@/types/payment';
+import type { AttentionCounts } from '../_lib/attentionCounts';
 import type { OutgoingClass } from '../_hooks/usePayments';
 
 const OUT_CLASS_LABELS: Record<OutgoingClass, string> = {
@@ -45,6 +46,8 @@ interface PaymentsFiltersProps {
   onReset: () => void;
   shown: number;
   total: number;
+  // Cifras del segmentado (solo móvil). Null mientras la franja no ha contestado.
+  counts?: AttentionCounts | null;
 }
 
 export function PaymentsFilters({
@@ -61,6 +64,7 @@ export function PaymentsFilters({
   onReset,
   shown,
   total,
+  counts,
 }: PaymentsFiltersProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -95,13 +99,16 @@ export function PaymentsFilters({
             onClick={() => onAttentionChange(t.value)}
             aria-pressed={attention === t.value}
             className={cn(
-              'h-full flex-1 rounded-md px-3 text-xs font-medium transition-colors sm:flex-none',
+              'h-full flex-1 whitespace-nowrap rounded-md px-1.5 text-[11.5px] font-medium transition-colors sm:flex-none sm:px-3 sm:text-xs',
               attention === t.value
                 ? 'bg-card font-semibold text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground',
             )}
           >
             {t.label}
+            {/* La cifra solo en móvil: ahí sustituye a la franja de atención, que en
+                escritorio sigue arriba con su desglose. */}
+            {counts ? <span className="lg:hidden"> ({counts[t.value]})</span> : null}
           </button>
         ))}
       </div>
@@ -124,15 +131,18 @@ export function PaymentsFilters({
       ) : null}
 
       {hasActiveFilters ? (
-        <Button variant="ghost" size="lg" onClick={onReset} className="h-11">
-          <RotateCcw className="h-4 w-4" />
+        <Button variant="ghost" size="lg" onClick={onReset} className="h-11 px-2 text-primary sm:px-4">
+          <RotateCcw className="hidden h-4 w-4 sm:block" />
           Limpiar
         </Button>
       ) : null}
 
       {total > 0 ? (
         <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-          Mostrando {shown} de {total}
+          {/* En 375 px la fila comparte sitio con el rango de fechas y «Limpiar»:
+              «Mostrando» sobra, la cifra se entiende sola. */}
+          <span className="hidden sm:inline">Mostrando </span>
+          {shown} de {total}
         </span>
       ) : null}
     </div>

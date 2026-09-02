@@ -50,6 +50,7 @@ function PaymentsAdminContent() {
       onReset={actions.resetFilters}
       shown={state.payments.length}
       total={state.total}
+      counts={state.attentionCounts}
     />
   );
 
@@ -75,9 +76,12 @@ function PaymentsAdminContent() {
 
   return (
     <div className="space-y-5">
+      {/* En móvil el título vive en la barra superior (ver `admin/layout.tsx`): repetirlo
+          aquí gastaba el primer tercio de la pantalla antes de la primera fila. */}
       <PageHeader
         title="Pagos"
         description="Comprobantes de WhatsApp leídos por el bot. Entrantes y salientes."
+        className="hidden lg:flex"
       />
 
       <PaymentsAttentionStrip
