@@ -64,7 +64,10 @@ function CardsSkeleton() {
               <Skeleton className="h-3.5 w-40" />
               <Skeleton className="h-2.5 w-32" />
             </div>
-            <div className="space-y-1.5">
+            {/* items-end: en la tarjeta real el monto va alineado a la derecha (ver
+                PaymentItem), y el esqueleto debe imitar esa silueta, no quedarse pegado
+                a la izquierda de su columna. */}
+            <div className="flex flex-col items-end space-y-1.5">
               <Skeleton className="h-3.5 w-16" />
               <Skeleton className="h-2.5 w-12" />
             </div>
@@ -143,19 +146,23 @@ export function PaymentsList({
   }
 
   // El fallo de la consulta no es una bandeja vacía: los comprobantes siguen guardados.
+  // Por eso NO usa EmptyState (que pinta todo neutro, centrado, con un ícono en un
+  // círculo gris) — el diseño de "Estados de la lista" lo distingue con una tarjeta
+  // teñida de rojo, sin ese círculo. Reconstruida aquí, local a esta pantalla, en vez
+  // de tocar EmptyState.tsx (lo usan 20+ pantallas más).
   if (listState === 'error') {
     return (
-      <EmptyState
-        icon={AlertTriangle}
-        title="No se pudieron cargar los pagos"
-        description={`${error}. Los comprobantes siguen guardados; solo falló la consulta.`}
-        actions={
-          <Button size="lg" onClick={onRetry}>
-            <RotateCcw className="h-4 w-4" />
-            Reintentar
-          </Button>
-        }
-      />
+      <div className="flex flex-col items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-4">
+        <AlertTriangle className="h-5 w-5 text-destructive" aria-hidden />
+        <p className="text-[13.5px] font-bold text-destructive">No se pudieron cargar los pagos</p>
+        <p className="text-[11.5px] text-destructive">
+          {error}. Los comprobantes siguen guardados; solo falló la consulta.
+        </p>
+        <Button size="lg" onClick={onRetry} className="mt-1 h-10">
+          <RotateCcw className="h-4 w-4" />
+          Reintentar
+        </Button>
+      </div>
     );
   }
 
@@ -167,7 +174,7 @@ export function PaymentsList({
         title="Todo conciliado"
         description="No queda ningún comprobante por atender. Los nuevos aparecerán aquí en cuanto el bot los procese."
         actions={
-          <Button variant="outline" size="lg" onClick={onResetFilters}>
+          <Button variant="outline" size="lg" onClick={onResetFilters} className="h-10">
             Ver todos los pagos
           </Button>
         }
@@ -188,7 +195,7 @@ export function PaymentsList({
         }
         actions={
           hasFilters ? (
-            <Button variant="outline" size="lg" onClick={onResetFilters}>
+            <Button variant="outline" size="lg" onClick={onResetFilters} className="h-10">
               <RotateCcw className="h-4 w-4" />
               Limpiar filtros
             </Button>
