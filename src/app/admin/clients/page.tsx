@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { LoadingState } from '@/components/shared/LoadingState';
 import { ClientsFilters } from './_components/ClientsFilters';
 import { ClientsList } from './_components/ClientsList';
 import { ClientsPendingSummary } from './_components/ClientsPendingSummary';
@@ -18,7 +19,7 @@ import { useClients } from './_hooks/useClients';
  * bloqueados y seguidos que había arriba tampoco cambiaba lo que haces: cada cliente lleva
  * su insignia en la fila.
  */
-export default function ClientsAdminPage() {
+function ClientsAdminContent() {
   const { state, actions } = useClients();
   const [entityOpen, setEntityOpen] = useState(false);
 
@@ -74,5 +75,15 @@ export default function ClientsAdminPage() {
         />
       </Card>
     </div>
+  );
+}
+
+// useSearchParams (el `?pending=1` que llega desde la home) exige un boundary de Suspense
+// al prerenderizar.
+export default function ClientsAdminPage() {
+  return (
+    <Suspense fallback={<LoadingState label="Cargando clientes..." fullHeight />}>
+      <ClientsAdminContent />
+    </Suspense>
   );
 }

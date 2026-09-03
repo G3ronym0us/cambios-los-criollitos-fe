@@ -55,6 +55,14 @@ export interface OperationData {
    */
   first_incoming_payment_at: string | null;
   /**
+   * Cuándo llegó el ÚLTIMO comprobante ENTRANTE del cliente — el más reciente, no el
+   * primero. Distinto a propósito de `first_incoming_payment_at`: ese mide antigüedad
+   * (desde cuándo espera la operación); este es el hecho más reciente, lo que hay que
+   * enseñar como «fecha del pago» cuando el cliente pagó en varias partes. `null` en los
+   * mismos casos que el anterior (sin entrante, p.ej. `VIA_PARTNER` o un par en efectivo).
+   */
+  last_incoming_payment_at: string | null;
+  /**
    * Su par se cambia en efectivo (`CurrencyPair.settles_in_cash`).
    *
    * Entonces `first_incoming_payment_at` vacío NO dice que el cliente no haya pagado: dice

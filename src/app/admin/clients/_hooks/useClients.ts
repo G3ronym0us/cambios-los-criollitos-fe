@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { clientService } from '@/services/clientService';
 import { ClientData } from '@/types/client';
@@ -22,12 +23,21 @@ export interface ClientsFilters {
 const emptyFilters: ClientsFilters = { search: '', pending: 'ALL', pair: '' };
 
 export function useClients() {
+  const searchParams = useSearchParams();
   const [clients, setClients] = useState<ClientData[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<ClientsFilters>(emptyFilters);
-  const [sort, setSort] = useState<ClientsSort>('name');
+  // La home enlaza aquí con `?pending=1`: la tarjeta de «por entregar» pulsada allá debe
+  // llegar con el filtro ya puesto, no obligar a un segundo toque sobre el desplegable.
+  const [filters, setFilters] = useState<ClientsFilters>(() =>
+    searchParams.get('pending') === '1' ? { ...emptyFilters, pending: 'YES' } : emptyFilters,
+  );
+  // Con el filtro ya aplicado desde la home, el orden por defecto es el de deuda: igual
+  // que al tocar «Con pendiente» a mano (ver `applyFilters` más abajo).
+  const [sort, setSort] = useState<ClientsSort>(() =>
+    searchParams.get('pending') === '1' ? 'amount' : 'name',
+  );
 
 
   const loadClients = useCallback(async () => {

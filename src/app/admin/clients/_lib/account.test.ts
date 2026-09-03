@@ -175,18 +175,34 @@ describe('accountThread', () => {
     ]);
   });
 
-  it('ordena por la fecha del comprobante, no por la de la operación', () => {
-    // «nueva» se registró la última, pero su dinero entró antes que todo lo demás.
-    const reordenadas = operations.map((operation) =>
-      operation.uuid === 'nueva'
-        ? { ...operation, first_incoming_payment_at: '2026-07-01T00:00:00Z' }
+  it('«por entregar» ordena por antigüedad (primer pago), no por el pago más reciente', () => {
+    // «vieja» pagó dos veces: su primer pago sigue siendo el más antiguo del lote, así
+    // que sigue de primera en la cola aunque su último abono sea recentísimo. Cambiarla
+    // de sitio por eso «rejuvenecería» una deuda vieja.
+    const conAbonoReciente = operations.map((operation) =>
+      operation.uuid === 'vieja'
+        ? { ...operation, last_incoming_payment_at: '2026-08-31T00:00:00Z' }
         : operation,
     );
-    expect(keys(accountThread(reordenadas, entries, 'all'))).toEqual([
-      'bal:e1',
+    expect(keys(accountThread(conAbonoReciente, entries, 'pending'))).toEqual([
+      'op:vieja',
       'op:otro-par',
+    ]);
+  });
+
+  it('el resto del hilo ordena por el pago MÁS RECIENTE, la misma fecha que la fila enseña', () => {
+    // «vieja» se registró y cobró primero, pero su último abono es el hecho más reciente
+    // del lote: en una vista de lectura (no la cola de «por entregar») debe subir arriba.
+    const conAbonoReciente = operations.map((operation) =>
+      operation.uuid === 'vieja'
+        ? { ...operation, last_incoming_payment_at: '2026-08-31T00:00:00Z' }
+        : operation,
+    );
+    expect(keys(accountThread(conAbonoReciente, entries, 'all'))).toEqual([
       'op:vieja',
       'op:nueva',
+      'bal:e1',
+      'op:otro-par',
     ]);
   });
 });

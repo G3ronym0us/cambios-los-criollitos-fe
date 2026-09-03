@@ -10,7 +10,6 @@ import type { ClientData, ClientPendingByPair } from '@/types/client';
 import {
   formatPending,
   formatPendingBreakdown,
-  isCashDebt,
   pendingTone,
   type PendingTotals,
 } from '../_lib/pending';
@@ -37,6 +36,11 @@ function formatPhone(phone: string) {
  * La cifra es la exacta, en la moneda del valor del trato. El equivalente en la moneda con
  * la que se paga se quitó: salía de la tasa cotizada y no de la
  * fijan los comprobantes.
+ *
+ * Dos líneas de texto, sin caja ni rótulo: la caja con borde envolvía en 390 px y dejaba el
+ * directorio a dos alturas de fila distintas según quién debiera. El rótulo «Por entregar»
+ * tampoco hace falta —la franja de arriba ya dice que la lista va de eso— y el color hace
+ * el trabajo que hacía el texto: rojo pasados `PENDING_ALERT_DAYS`, ámbar antes.
  */
 function PendingBlock({
   pending,
@@ -49,25 +53,9 @@ function PendingBlock({
   // Con más de una moneda no hay una cifra que enseñar: `pendingTotals` deja el total sin
   // moneda justo para esto, y sumarlas igual sería mezclar dólares con bolívares.
   const mixed = pending.currency == null;
-  // En un par de efectivo la cifra es la misma pero significa lo contrario: los bolívares
-  // ya salieron y lo que falta es lo que el cliente tiene que traer.
-  const cash = isCashDebt(entries);
 
   return (
-    <div
-      className={cn(
-        'shrink-0 rounded-lg border px-3 py-1.5 text-right sm:min-w-[168px]',
-        alert ? 'border-destructive/30 bg-destructive/10' : 'border-amber-500/30 bg-amber-500/10',
-      )}
-    >
-      <p
-        className={cn(
-          'text-[10px] font-bold uppercase tracking-wider',
-          alert ? 'text-destructive' : 'text-amber-700 dark:text-amber-400',
-        )}
-      >
-        {cash ? 'Nos debe' : 'Por entregar'}
-      </p>
+    <div className="ml-auto shrink-0 text-right">
       <p
         className={cn(
           'font-bold leading-tight tabular-nums',
@@ -78,7 +66,9 @@ function PendingBlock({
         {mixed ? formatPendingBreakdown(entries) : formatPending(pending.amount, pending.currency)}
       </p>
       <p className="text-xs text-muted-foreground tabular-nums">
-        {pending.operations} {pending.operations === 1 ? 'operación' : 'operaciones'}
+        {mixed
+          ? `${pending.operations} ${pending.operations === 1 ? 'operación' : 'operaciones'}`
+          : `${pending.currency} · ${pending.operations} ${pending.operations === 1 ? 'op' : 'ops'}`}
       </p>
     </div>
   );
