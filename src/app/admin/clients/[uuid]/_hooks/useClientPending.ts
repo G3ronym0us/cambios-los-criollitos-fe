@@ -10,6 +10,7 @@ import type { OperationData } from '@/types/operation';
 import {
   formatPending,
   isPendingOperation,
+  outstandingAmount,
   pendingByPair,
   pendingSince,
   pendingTotals,
@@ -274,7 +275,7 @@ export function useClientPending(
       toNumber(amount),
       splittable.map((op) => ({
         uuid: op.uuid,
-        pending: op.pending_amount ?? 0,
+        pending: outstandingAmount(op),
         since: pendingSince(op),
       })),
     );
@@ -313,7 +314,7 @@ export function useClientPending(
           0,
         );
         const free = round2(toNumber(amount) - placed);
-        const give = Math.min(op.pending_amount ?? 0, Math.max(0, free));
+        const give = Math.min(outstandingAmount(op), Math.max(0, free));
         if (give <= EPSILON) return prev;
         return { ...prev, [uuid]: formatAmountForInput(round2(give)) };
       });
@@ -385,7 +386,7 @@ export function useClientPending(
       if (!op) return false;
 
       const cash = op.settles_in_cash;
-      const amount = formatPending(op.pending_amount ?? 0, valueCurrency(op));
+      const amount = formatPending(outstandingAmount(op), valueCurrency(op));
       const when = formatCaracasShortDateTime(pendingSince(op));
 
       const ok = await confirm({

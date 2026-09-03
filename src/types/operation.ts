@@ -30,6 +30,18 @@ export interface OperationData {
   uncovered_amount: number | null;
   uncovered_reason: string | null;
   pending_amount: number | null;
+  /**
+   * La OTRA pata, y sólo dice algo si `settles_in_cash`: cuánto del efectivo del cliente ya
+   * está recogido, y cuánto falta.
+   *
+   * `pending_amount` mide lo NUESTRO —lo que no hemos cubierto— y en un par de efectivo
+   * llega a cero en cuanto se vincula el comprobante en bolívares, sin que nadie haya
+   * recogido un dólar. Sin estos dos campos la pantalla no puede distinguir «ya está
+   * pagada» de «ya está cobrada», que es lo que la hacía dar por saldado lo que no lo está.
+   * Léelos siempre por `outstandingAmount()`, nunca a mano.
+   */
+  collected_amount: number | null;
+  to_collect: number | null;
   /** Cuántos comprobantes de salida cubren la operación. */
   payments_count: number;
   /**

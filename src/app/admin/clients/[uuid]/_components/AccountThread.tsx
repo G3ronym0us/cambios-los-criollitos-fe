@@ -10,7 +10,13 @@ import { formatCaracasShortDateTime } from '@/utils/functions';
 import type { BalanceEntry } from '@/types/client';
 import type { OperationData } from '@/types/operation';
 import { STATE_LABEL, operationState, type AccountItem, type OperationState } from '../../_lib/account';
-import { coveredAmount, formatPending, valueAmount, valueCurrency } from '../../_lib/pending';
+import {
+  coveredAmount,
+  formatPending,
+  outstandingAmount,
+  valueAmount,
+  valueCurrency,
+} from '../../_lib/pending';
 import { ACCOUNT_COL as COL, ACCOUNT_GRID as GRID, ACCOUNT_TABLE_MIN as TABLE_MIN } from './accountTable';
 
 interface AccountThreadProps {
@@ -70,7 +76,7 @@ function ThreadHeader() {
  */
 function OperationRow({ operation, at }: { operation: OperationData; at: string | null }) {
   const state = operationState(operation);
-  const pending = operation.pending_amount ?? 0;
+  const pending = outstandingAmount(operation);
   const value = valueAmount(operation);
   const covered = coveredAmount(operation);
   const currency = valueCurrency(operation);

@@ -12,7 +12,13 @@ import {
   sanitizeAmountInput,
 } from '@/utils/functions';
 import { type useClientPending } from '../_hooks/useClientPending';
-import { formatPending, formatPendingBreakdown, pendingSince } from '../../_lib/pending';
+import {
+  formatPending,
+  formatPendingBreakdown,
+  isCashDebt,
+  outstandingAmount,
+  pendingSince,
+} from '../../_lib/pending';
 
 type PendingHook = ReturnType<typeof useClientPending>;
 
@@ -39,6 +45,10 @@ interface DistributeAmountPanelProps {
  */
 export function DistributeAmountPanel({ state, actions }: DistributeAmountPanelProps) {
   const currency = state.distributeCurrency;
+  // En un par de efectivo el gesto está invertido: el monto no es lo que se le entregó
+  // sino lo que él trajo. Es la misma pantalla, pero llamarlo «entregado» ahí es decir lo
+  // contrario de lo que pasó.
+  const cobro = isCashDebt(state.entries);
 
   // Un monto entregado está en una sola moneda. Si el cliente debe en varias, repartirlo
   // sería restar bolívares de una deuda en dólares: primero hay que elegir un par.
@@ -51,9 +61,9 @@ export function DistributeAmountPanel({ state, actions }: DistributeAmountPanelP
               Elige un par para repartir un monto
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Se le debe {formatPendingBreakdown(state.entries)} en monedas distintas, y un monto
-              entregado está en una sola. Elige el par de arriba y el reparto se hace sobre esa
-              moneda.
+              {cobro ? 'Debe' : 'Se le debe'} {formatPendingBreakdown(state.entries)} en monedas
+              distintas, y un monto está en una sola. Elige el par de arriba y el reparto se
+              hace sobre esa moneda.
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={() => actions.setMode('select')}>
@@ -73,8 +83,12 @@ export function DistributeAmountPanel({ state, actions }: DistributeAmountPanelP
       <div className="space-y-4">
         <PanelHeader
           onBack={() => actions.setMode('select')}
-          title="Repartir un monto entregado"
-          hint="Escribe cuánto te entregó. En el paso siguiente eliges entre qué operaciones se coloca."
+          title={cobro ? 'Repartir un monto cobrado' : 'Repartir un monto entregado'}
+          hint={
+            cobro
+              ? 'Escribe cuánto te pagó. En el paso siguiente eliges entre qué operaciones se coloca.'
+              : 'Escribe cuánto te entregó. En el paso siguiente eliges entre qué operaciones se coloca.'
+          }
         />
 
         <Card>
@@ -85,7 +99,7 @@ export function DistributeAmountPanel({ state, actions }: DistributeAmountPanelP
                   htmlFor="distribute-amount"
                   className="text-xs uppercase tracking-wide text-muted-foreground"
                 >
-                  Monto entregado
+                  {cobro ? 'Monto cobrado' : 'Monto entregado'}
                 </Label>
                 <div className="relative">
                   <Input
@@ -204,7 +218,7 @@ export function DistributeAmountPanel({ state, actions }: DistributeAmountPanelP
           {state.splittable.map((operation) => {
             const text = state.allocations[operation.uuid] ?? '';
             const given = Number(text.replace(',', '.')) || 0;
-            const pending = operation.pending_amount ?? 0;
+            const pending = outstandingAmount(operation);
             const checked = given > 0.01;
             const tooMuch = given - pending > 0.01;
 

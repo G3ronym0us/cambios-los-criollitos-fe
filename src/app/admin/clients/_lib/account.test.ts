@@ -67,16 +67,33 @@ describe('operationState', () => {
     );
   });
 
-  it('en un par de efectivo el comprobante que falta no cambia nada', () => {
-    // Nadie fotografía un billete: exigirlo aquí rotulaba «Entregado» lo que está sin pagar.
+  it('en un par de efectivo lo que se debe es el efectivo del cliente', () => {
+    // Nadie fotografía un billete, así que el comprobante entrante no filtra nada. Y lo
+    // que falta es `to_collect`: la operación está CUBIERTA —los bolívares ya salieron— y
+    // aun así el cliente no ha traído un dólar.
     const efectivo = op({
-      pending_amount: 50,
+      pending_amount: 0,
+      to_collect: 50,
       first_incoming_payment_at: null,
       settles_in_cash: true,
     });
 
     expect(operationState(efectivo)).toBe('pending');
     expect(accountCounts([efectivo], [])).toMatchObject({ pending: 1, delivered: 0 });
+  });
+
+  it('cobrado el efectivo entero, la operación queda cerrada y se lee «Cobrada»', () => {
+    // El backend la cierra al recoger el último dólar, así que aquí llega COMPLETED: sin
+    // eso se quedaba en PENDING para siempre y la fila decía «Pendiente» tras marcarla.
+    const cobrada = op({
+      status: 'COMPLETED',
+      pending_amount: 0,
+      to_collect: 0,
+      first_incoming_payment_at: null,
+      settles_in_cash: true,
+    });
+
+    expect(operationState(cobrada)).toBe('delivered');
   });
 });
 
