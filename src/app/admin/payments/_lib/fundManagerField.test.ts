@@ -4,13 +4,13 @@ import {
   defaultManagerFor,
   filterFundCandidates,
   fundBadge,
-  fundCandidatesForPair,
   fundFieldMode,
   isFundFromPayment,
   isManagerOverridden,
   matchesPairCurrency,
   personInitials,
   settleCurrency,
+  splitFundOptions,
 } from './fundManagerField';
 
 function group(overrides: Partial<FundGroup>): FundGroup {
@@ -54,18 +54,35 @@ describe('matchesPairCurrency', () => {
   });
 });
 
-describe('fundCandidatesForPair', () => {
+describe('splitFundOptions', () => {
   const ve = group({ uuid: 've', currency: 'VES' });
   const co = group({ uuid: 'co', currency: 'COP' });
+  const br = group({ uuid: 'br', currency: 'BRL' });
 
-  it('filtra por la moneda del par', () => {
-    expect(fundCandidatesForPair([ve, co], 'USD', 'VES')).toEqual([ve]);
+  it('sugiere los de la moneda del par y deja el resto elegible', () => {
+    // Lo que rompía «Cambiar»: `others` no se descarta, así que con un solo sugerido el paso
+    // sigue teniendo qué ofrecer.
+    expect(splitFundOptions([ve, co, br], 'USD', 'VES')).toEqual({ suggested: [ve], others: [co, br] });
   });
 
-  it('conserva el fondo del pago aunque no case con el par', () => {
+  it('sube el fondo del pago a los sugeridos, y de primero', () => {
     // El caso real: el comprobante llegó por «Efectivo Caracas» en COP y el operador eligió
     // USD/VES. Sin esto el campo se vería vacío con un valor puesto.
-    expect(fundCandidatesForPair([ve, co], 'USD', 'VES', 'co')).toEqual([ve, co]);
+    expect(splitFundOptions([ve, co, br], 'USD', 'VES', 'co')).toEqual({
+      suggested: [co, ve],
+      others: [br],
+    });
+  });
+
+  it('sube también el ya elegido, aunque no case', () => {
+    expect(splitFundOptions([ve, co, br], 'USD', 'VES', null, 'br')).toEqual({
+      suggested: [ve, br],
+      others: [co],
+    });
+  });
+
+  it('sin fondos que casen, todos quedan como otros', () => {
+    expect(splitFundOptions([co, br], 'USD', 'VES')).toEqual({ suggested: [], others: [co, br] });
   });
 });
 
@@ -112,7 +129,7 @@ describe('isFundFromPayment', () => {
 });
 
 describe('fundFieldMode', () => {
-  it('2 o 3 candidatos caben como chips', () => {
+  it('2 o 3 sugeridos caben como chips', () => {
     expect(fundFieldMode(2)).toBe('chips');
     expect(fundFieldMode(3)).toBe('chips');
   });

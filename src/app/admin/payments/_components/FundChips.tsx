@@ -1,29 +1,39 @@
 'use client';
 
+import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FundGroup } from '@/types/fund';
 import { personInitials } from '../_lib/fundManagerField';
 
 interface FundChipsProps {
-  /** 2 o 3 fondos candidatos — con 1 o con 4+ se usa `FundManagerField` en su lugar. */
+  /** 2 o 3 fondos sugeridos por el par — con 1 o con 4+ se usa `FundManagerField`. */
   candidates: FundGroup[];
   selectedGroupUuid: string;
   selectedManagerUuid: string;
+  /** Cuántos fondos más hay fuera de los sugeridos: si hay, se ofrece «Otro fondo». */
+  otherCount: number;
   onSelectGroup: (uuid: string) => void;
   onSelectManager: (uuid: string) => void;
+  /** Abre `FundStep` con la lista completa. */
+  onOpenStep: () => void;
 }
 
 /**
- * Alternativa a `FundManagerField` cuando el par deja 2 o 3 fondos candidatos: con tan pocos,
- * abrir un paso del cajón es de más. Caben como chips en el propio formulario, y el gestor
- * vive dentro del chip elegido — nunca como campo aparte que nace al elegir fondo.
+ * Alternativa a `FundManagerField` cuando el par sugiere 2 o 3 fondos: con tan pocos, abrir un
+ * paso del cajón es de más. Caben como chips en el propio formulario, y el gestor vive dentro
+ * del chip elegido — nunca como campo aparte que nace al elegir fondo.
+ *
+ * Los sugeridos no son todos: el chip «Otro fondo» abre `FundStep` con la lista completa, para
+ * que elegir un fondo que el par no sugiere no dependa de cambiar antes el par.
  */
 export function FundChips({
   candidates,
   selectedGroupUuid,
   selectedManagerUuid,
+  otherCount,
   onSelectGroup,
   onSelectManager,
+  onOpenStep,
 }: FundChipsProps) {
   const selectedGroup = candidates.find((g) => g.uuid === selectedGroupUuid);
   const members = selectedGroup?.members ?? [];
@@ -62,6 +72,16 @@ export function FundChips({
         >
           Sin fondo
         </button>
+        {otherCount > 0 ? (
+          <button
+            type="button"
+            onClick={onOpenStep}
+            className="flex min-h-11 items-center gap-1 rounded-lg border border-dashed border-border bg-card px-3 text-sm text-muted-foreground transition-colors hover:bg-muted/30"
+          >
+            Otro fondo
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
       </div>
 
       {selectedGroup && members.length > 1 ? (
@@ -91,10 +111,6 @@ export function FundChips({
           Gestiona <span className="font-medium text-foreground/80">{members[0].username || members[0].user_uuid}</span>
         </p>
       ) : null}
-
-      <p className="text-[11px] text-pretty text-muted-foreground">
-        Cero aperturas, cero saltos: solo el nombre del fondo y, debajo, quién lo gestiona.
-      </p>
     </div>
   );
 }
