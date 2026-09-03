@@ -31,7 +31,7 @@ import type { CurrencyPairData } from '@/types/admin';
 import type { ExchangeRateResponse } from '@/types/currency';
 import type { FundGroup } from '@/types/fund';
 import type { PaymentData, PaymentTable } from '@/types/payment';
-import { defaultManagerFor, fundCandidatesForPair, fundFieldMode, settleCurrency } from '../_lib/fundManagerField';
+import { defaultManagerFor, fundFieldMode, settleCurrency, splitFundOptions } from '../_lib/fundManagerField';
 import { formatAmountForInput, sanitizeAmountInput } from '@/utils/functions';
 import {
   applyRounding,
@@ -153,8 +153,8 @@ export function CreateOperationForm({
   // Mientras haya diferencia, el cuerpo del cajón es el paso de revisión y no el formulario.
   const [difference, setDifference] = useState<ValueDifference | null>(null);
   const [choice, setChoice] = useState<DifferenceChoice>('raise');
-  // Mientras dura, el cuerpo del cajón es el paso de elegir fondo (`FundStep`) — solo con 4
-  // fondos candidatos o más; con menos, el campo o los chips ya resuelven sin abrir nada.
+  // Mientras dura, el cuerpo del cajón es el paso de elegir fondo (`FundStep`): la lista
+  // completa de fondos, sugeridos primero. Lo abre «Cambiar» del campo, o el chip «Otro fondo».
   const [showFundStep, setShowFundStep] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   // La tasa siempre está a la vista; lo que se pliega es el EDITOR. En la mayoría de las
@@ -614,19 +614,19 @@ export function CreateOperationForm({
   };
 
   const withFund = direction === 'SEND';
-  // Fondos que puede elegir esta cotización (más el que el pago ya traía, aunque no case).
-  const fundOptions = useMemo(
-    () => fundCandidatesForPair(groups, fromCur, toCur, fundGroupUuid),
-    [groups, fromCur, toCur, fundGroupUuid],
+  // Los fondos que el par sugiere y —aparte, no descartados— todos los demás: el paso los
+  // lista en dos secciones y así «Cambiar» siempre tiene algo que ofrecer.
+  const { suggested: fundOptions, others: otherFunds } = useMemo(
+    () => splitFundOptions(groups, fromCur, toCur, payment.fund_group_uuid, fundGroupUuid),
+    [groups, fromCur, toCur, payment.fund_group_uuid, fundGroupUuid],
   );
   const selectedGroup = useMemo(() => groups.find((g) => g.uuid === fundGroupUuid), [groups, fundGroupUuid]);
 
   /**
-   * Elige fondo y, con él, su gestor por defecto (el `is_fund_manager`, o el primero). Se
-   * llama explícitamente desde donde cambia el fondo —chips, el toggle de un solo
-   * candidato— en vez de vivir en un efecto: `FundStep` ya manda el gestor exacto que se
-   * eligió ahí, y un efecto disparado por `selectedGroup` se lo pisaría de vuelta al
-   * confirmar un gestor que no es el del fondo.
+   * Elige fondo y, con él, su gestor por defecto (el `is_fund_manager`, o el primero). Lo
+   * llaman los chips, explícitamente, en vez de vivir en un efecto: `FundStep` ya manda el
+   * gestor exacto que se eligió ahí, y un efecto disparado por `selectedGroup` se lo pisaría
+   * de vuelta al confirmar un gestor que no es el del fondo.
    */
   const selectFund = (groupUuid: string) => {
     setFundGroupUuid(groupUuid);
@@ -825,10 +825,13 @@ export function CreateOperationForm({
   if (showFundStep) {
     return (
       <FundStep
-        candidates={fundOptions}
+        suggested={fundOptions}
+        others={otherFunds}
         initialGroupUuid={fundGroupUuid}
         initialManagerUuid={exchangeUserUuid}
         paymentFundGroupUuid={payment.fund_group_uuid}
+        fromCur={fromCur}
+        toCur={toCur}
         onBack={() => setShowFundStep(false)}
         onConfirm={(groupUuid, managerUuid) => {
           setFundGroupUuid(groupUuid);
@@ -1111,20 +1114,22 @@ export function CreateOperationForm({
               candidates={fundOptions}
               selectedGroupUuid={fundGroupUuid}
               selectedManagerUuid={exchangeUserUuid}
+              otherCount={otherFunds.length}
               onSelectGroup={selectFund}
               onSelectManager={setExchangeUserUuid}
+              onOpenStep={() => setShowFundStep(true)}
             />
           ) : (
             <FundManagerField
               pairSelected={!!pair}
-              candidates={fundOptions}
+              suggested={fundOptions}
+              others={otherFunds}
               selectedGroup={selectedGroup}
               selectedManagerUuid={exchangeUserUuid}
               fromCur={fromCur}
               toCur={toCur}
               paymentFundGroupUuid={payment.fund_group_uuid}
               onOpenStep={() => setShowFundStep(true)}
-              onToggleSingle={() => selectFund(fundGroupUuid ? '' : (fundOptions[0]?.uuid ?? ''))}
             />
           )
         ) : null}

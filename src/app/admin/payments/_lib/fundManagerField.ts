@@ -16,18 +16,43 @@ export function matchesPairCurrency(group: FundGroup, fromCur: string, toCur: st
   return settled === settleCurrency(fromCur) || settled === settleCurrency(toCur);
 }
 
+export interface FundOptions {
+  /** Los que el par sugiere: liquidan en su moneda, más el del pago y el ya elegido. */
+  suggested: FundGroup[];
+  /** El resto de los fondos activos. Elegibles igual — el par no los sugiere, no los prohíbe. */
+  others: FundGroup[];
+}
+
 /**
- * Fondos que puede elegir esta cotización: los que liquidan en la moneda del par, más el que
- * el pago ya traía aunque no case (`keepUuid`) — si no, el campo se vería vacío con un valor
- * puesto (ej. el comprobante llegó por «Efectivo Caracas», en COP, y el par es USD/VES).
+ * Reparte los fondos activos en los que el par sugiere y todos los demás.
+ *
+ * El sugerido es el que liquida en la moneda de origen o de destino del par, más dos que se
+ * quedan arriba aunque no casen: el que el pago ya traía (`paymentFundGroupUuid` — ej. el
+ * comprobante llegó por «Efectivo Caracas», en COP, y el par es USD/VES) y el que ya está
+ * elegido, para que el campo nunca se vea vacío con un valor puesto. El del pago va primero.
+ *
+ * `others` NO se descarta: antes el campo solo ofrecía los sugeridos, así que con un único
+ * fondo candidato «Cambiar» no tenía nada que ofrecer y se quedaba en quitar y poner el mismo.
  */
-export function fundCandidatesForPair(
+export function splitFundOptions(
   groups: FundGroup[],
   fromCur: string,
   toCur: string,
-  keepUuid?: string | null,
-): FundGroup[] {
-  return groups.filter((g) => g.uuid === keepUuid || matchesPairCurrency(g, fromCur, toCur));
+  paymentFundGroupUuid?: string | null,
+  selectedGroupUuid?: string | null,
+): FundOptions {
+  const suggested: FundGroup[] = [];
+  const others: FundGroup[] = [];
+  for (const g of groups) {
+    const pinned =
+      (!!paymentFundGroupUuid && g.uuid === paymentFundGroupUuid) ||
+      (!!selectedGroupUuid && g.uuid === selectedGroupUuid);
+    if (pinned || matchesPairCurrency(g, fromCur, toCur)) suggested.push(g);
+    else others.push(g);
+  }
+  const fromPayment = suggested.findIndex((g) => g.uuid === paymentFundGroupUuid);
+  if (fromPayment > 0) suggested.unshift(suggested.splice(fromPayment, 1)[0]);
+  return { suggested, others };
 }
 
 /** Gestor por defecto de un fondo: el marcado `is_fund_manager`, o el primero si no hay ninguno. */
@@ -54,12 +79,13 @@ export function isFundFromPayment(
 export type FundFieldMode = 'chips' | 'field';
 
 /**
- * Regla de conmutación del diseño: con 2 o 3 fondos candidatos caben como chips en el propio
- * formulario — abrir un paso del cajón sería de más. Con uno solo o con cuatro o más, el
- * campo cerrado (que abre el paso cuando hace falta elegir) explica mejor la decisión.
+ * Regla de conmutación del diseño, sobre los fondos SUGERIDOS: con 2 o 3 caben como chips en
+ * el propio formulario — abrir un paso del cajón sería de más. Con uno solo o con cuatro o
+ * más, el campo cerrado (que abre el paso) explica mejor la decisión. En los dos casos el
+ * resto de los fondos sigue a un clic: los chips llevan «Otros fondos» y el campo, el paso.
  */
-export function fundFieldMode(candidateCount: number): FundFieldMode {
-  return candidateCount >= 2 && candidateCount <= 3 ? 'chips' : 'field';
+export function fundFieldMode(suggestedCount: number): FundFieldMode {
+  return suggestedCount >= 2 && suggestedCount <= 3 ? 'chips' : 'field';
 }
 
 /**
@@ -85,7 +111,7 @@ export function personInitials(name: string | null | undefined): string {
   return (words[0][0] + words[words.length - 1][0]).toUpperCase();
 }
 
-/** Filtro del buscador cuando hay más de ocho fondos candidatos: por nombre, sin mayúsculas. */
+/** Filtro del buscador cuando el paso lista más de ocho fondos: por nombre, sin mayúsculas. */
 export function filterFundCandidates(candidates: FundGroup[], query: string): FundGroup[] {
   const q = query.trim().toLowerCase();
   if (!q) return candidates;
