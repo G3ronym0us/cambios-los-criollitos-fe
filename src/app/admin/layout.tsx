@@ -51,6 +51,12 @@ const navigation = [
   { name: 'Alertas', href: '/admin/alerts', icon: Bell },
 ];
 
+/** Mismo mapeo que la lista de Usuarios: acá sólo llegan ROOT y MODERATOR (USER se redirige). */
+const ROLE_LABEL: Record<string, string> = {
+  ROOT: 'Administrador',
+  MODERATOR: 'Moderador',
+};
+
 /**
  * Título de la sección activa: el enlace del menú que mejor case con la ruta (gana el más
  * largo, así `/admin/clients/<uuid>` sigue diciendo «Clientes» y no «Dashboard»).
@@ -168,7 +174,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   <p className="truncate text-sm font-medium text-foreground">
                     {user.full_name || user.username}
                   </p>
-                  <p className="truncate text-xs text-muted-foreground">{user.role}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {ROLE_LABEL[user.role] ?? user.role}
+                  </p>
                 </div>
               </div>
 

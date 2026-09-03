@@ -95,11 +95,22 @@ export function formatDailyAverage(value: number): string {
 
 /**
  * Los tres mayores pendientes por entregar son qué fracción del total: "los 3 mayores
- * son el 71 %". `null` cuando no hay total con qué dividir (evita el NaN%).
+ * son el 71 %". `null` cuando no hay total con qué dividir (evita el NaN%) — y también
+ * cuando el total o los mayores mezclan más de una moneda: sumar USD con VES sin
+ * convertir da un porcentaje que no significa nada, así que mejor no mostrarlo.
  */
-export function topShareOfTotal(topAmounts: number[], total: number): number | null {
+export function topShareOfTotal(
+  topAmounts: { amount: number; currency?: string | null }[],
+  totals: { amount: number; currency: string }[]
+): number | null {
+  const currencies = new Set([
+    ...totals.map((t) => t.currency),
+    ...topAmounts.map((t) => t.currency ?? ''),
+  ]);
+  if (currencies.size !== 1) return null;
+  const total = totals.reduce((acc, t) => acc + t.amount, 0);
   if (!total || total <= 0) return null;
-  const sum = topAmounts.reduce((acc, v) => acc + v, 0);
+  const sum = topAmounts.reduce((acc, v) => acc + v.amount, 0);
   const pct = Math.round((sum / total) * 100);
   return Number.isFinite(pct) ? pct : null;
 }

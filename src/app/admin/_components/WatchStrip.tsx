@@ -38,9 +38,9 @@ export function WatchStrip({ alerts, clients, errors, loading, onRetry }: WatchS
   const alertsFailed = errors.includes('alerts');
   const clientsFailed = errors.includes('clients');
 
-  const totalPending = clients ? clients.totals.reduce((acc, t) => acc + t.amount, 0) : 0;
-  const topAmounts = clients ? clients.oldest.map((o) => o.amount) : [];
-  const topShare = clients ? topShareOfTotal(topAmounts, totalPending) : null;
+  // `topShareOfTotal` ya se cuida de no calcular nada si `oldest`/`totals` mezclan más
+  // de una moneda (sumar USD con VES sin convertir mentiría).
+  const topShare = clients ? topShareOfTotal(clients.oldest, clients.totals) : null;
 
   return (
     <div className="space-y-3">
