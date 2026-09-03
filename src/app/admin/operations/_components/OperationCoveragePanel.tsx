@@ -282,7 +282,7 @@ export function OperationCoveragePanel({
                     key={m.value}
                     type="button"
                     onClick={() => setMotivo(m.value)}
-                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                    className={`h-9 rounded-full px-3 text-[11px] font-medium transition-colors ${
                       motivo === m.value
                         ? 'bg-amber-600 text-white'
                         : 'border border-amber-500/40 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400'
@@ -296,11 +296,11 @@ export function OperationCoveragePanel({
           ) : null}
         </div>
 
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={onCancel} disabled={submitting}>
+        <div className="flex gap-2">
+          <Button variant="outline" className="h-11" onClick={onCancel} disabled={submitting}>
             Cancelar
           </Button>
-          <Button size="sm" onClick={guardar} disabled={!puedeGuardar || submitting}>
+          <Button className="h-11 flex-1" onClick={guardar} disabled={!puedeGuardar || submitting}>
             {submitting ? 'Guardando…' : 'Guardar cobertura'}
           </Button>
         </div>

@@ -1,6 +1,6 @@
 import type { BalanceEntry } from '@/types/client';
 import type { OperationData } from '@/types/operation';
-import { isPendingOperation, pendingSince } from './pending';
+import { isPendingOperation, lastPaymentAt, pendingSince } from './pending';
 
 /**
  * La pestaña «Cuenta»: Transacciones + Por entregar + Saldo en un solo hilo.
@@ -15,9 +15,23 @@ import { isPendingOperation, pendingSince } from './pending';
 
 export type AccountFilter = 'all' | 'pending' | 'delivered' | 'balance';
 
-/** Una línea del hilo: o una operación, o un movimiento del saldo. */
+/**
+ * Una línea del hilo: o una operación, o un movimiento del saldo.
+ *
+ * Una operación lleva DOS fechas y no una porque miden cosas distintas: `at` es la
+ * antigüedad (primer pago) que usa la cola de «por entregar» para ordenar y repartir, y
+ * `displayAt` es la fecha que la fila ENSEÑA (el pago más reciente). Un movimiento de saldo
+ * no tiene esa dualidad — `entry.created_at` es a la vez lo uno y lo otro — así que sólo
+ * lleva `at`.
+ */
 export type AccountItem =
-  | { kind: 'operation'; key: string; at: string | null; operation: OperationData }
+  | {
+      kind: 'operation';
+      key: string;
+      at: string | null;
+      displayAt: string | null;
+      operation: OperationData;
+    }
   | { kind: 'balance'; key: string; at: string | null; entry: BalanceEntry };
 
 /** El estado de una operación dentro de la cuenta, con el vocabulario de esta pantalla. */
@@ -90,12 +104,17 @@ export function accountCounts(
 /**
  * Funde operaciones y movimientos de saldo en un hilo ordenado.
  *
- * Ordena por la fecha del comprobante entrante, la misma que ordena la cola de «por
- * entregar», para que una operación no salte de sitio al cambiar de filtro.
- *
  * El orden es del más nuevo al más viejo salvo en «Por entregar», que deja de ser un
- * histórico que se consulta y pasa a ser una cola de trabajo: ahí manda la antigüedad,
- * que es el orden en que el cliente reclama y en el que se reparte un monto.
+ * histórico que se consulta y pasa a ser una cola de trabajo: ahí manda la antigüedad
+ * (`pendingSince`, el PRIMER pago), que es el orden en que el cliente reclama y en el que
+ * se reparte un monto — un abono nuevo no puede «rejuvenecer» una deuda vieja ni saltarla
+ * en la cola.
+ *
+ * En el resto de vistas («todo», «entregado», «saldo») el hilo es lectura, no cola de
+ * trabajo, y ahí se ordena por la MISMA fecha que cada fila enseña — el pago más reciente
+ * (`lastPaymentAt`) en las operaciones. Ordenar por una fecha y enseñar otra en la misma
+ * fila confunde a quien lee la lista; es una elección deliberada y distinta de «por
+ * entregar», no una inconsistencia.
  */
 export function accountThread(
   operations: OperationData[],
@@ -119,6 +138,7 @@ export function accountThread(
         kind: 'operation',
         key: `op:${operation.uuid}`,
         at: pendingSince(operation),
+        displayAt: lastPaymentAt(operation),
         operation,
       });
     }
@@ -133,9 +153,17 @@ export function accountThread(
   }
 
   const oldestFirst = filter === 'pending';
+  // «Por entregar» ordena por antigüedad (`at`, primer pago); el resto ordena por lo que
+  // la fila enseña — `displayAt` en una operación, que en un movimiento de saldo es el
+  // mismo `at` (no hay dos fechas que fundir ahí).
+  const sortValue = (item: AccountItem): string | null =>
+    oldestFirst || item.kind === 'balance' ? item.at : item.displayAt;
+
   return items.sort((a, b) => {
-    const left = a.at ? new Date(a.at).getTime() : null;
-    const right = b.at ? new Date(b.at).getTime() : null;
+    const aValue = sortValue(a);
+    const bValue = sortValue(b);
+    const left = aValue ? new Date(aValue).getTime() : null;
+    const right = bValue ? new Date(bValue).getTime() : null;
     // Las que no traen fecha van al final, se ordene como se ordene.
     if (left == null) return right == null ? 0 : 1;
     if (right == null) return -1;

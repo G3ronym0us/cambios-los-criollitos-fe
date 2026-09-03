@@ -165,6 +165,28 @@ export function pendingSince(op: OperationData): string | null {
   return op.first_incoming_payment_at ?? op.created_at ?? op.quoted_at ?? null;
 }
 
+/**
+ * Cuándo se pagó el trato, para ENSEÑAR en una fila: la fecha del comprobante entrante MÁS
+ * RECIENTE, no la del primero.
+ *
+ * A propósito NO es `pendingSince`, aunque las dos se calculen sobre los mismos
+ * comprobantes. `pendingSince` mide antigüedad —desde cuándo espera la operación, con el
+ * PRIMER pago— y de ahí sale el orden de la cola de «por entregar» y el reparto por
+ * antigüedad: eso no puede cambiar aunque lleguen más pagos después, o un abono nuevo
+ * "rejuvenecería" una deuda vieja. Esta función es lo contrario: cuánto hace que pasó el
+ * ÚLTIMO hecho — si el cliente pagó en dos partes, la fecha que tiene sentido enseñar en el
+ * hilo es la del último abono, no la del primero. Una operación con dos comprobantes
+ * necesita las dos fechas a la vez, así que no se pueden fundir en una sola función sin
+ * perder una de las dos.
+ *
+ * Mismo respaldo que `pendingSince` cuando no hay ningún entrante (`VIA_PARTNER` sin
+ * comprobante propio, o un par `settles_in_cash`): la fecha de la operación es lo mejor que
+ * hay.
+ */
+export function lastPaymentAt(op: OperationData): string | null {
+  return op.last_incoming_payment_at ?? op.created_at ?? op.quoted_at ?? null;
+}
+
 function pairKey(op: OperationData): string {
   return op.pair_symbol ?? `${op.from_currency ?? '?'}/${op.to_currency ?? '?'}`;
 }

@@ -82,7 +82,7 @@ function Chip({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        'min-h-9 rounded-full border px-3 text-xs font-semibold transition-colors',
+        'min-h-9 shrink-0 rounded-full border px-3 text-xs font-semibold transition-colors',
         active
           ? 'border-primary bg-primary text-primary-foreground'
           : 'border-border bg-card text-muted-foreground hover:bg-muted',
@@ -320,7 +320,12 @@ export function ClientAccountTab({
         </CardContent>
       </Card>
 
-      <div className="flex flex-wrap items-center gap-2">
+      {/* Los chips no envuelven: ruedan. Cuatro chips con su contador más el selector de
+          par de sobra en 390 px — envolver los saltaba a dos líneas con el selector
+          colgando solo en la segunda. En «Por entregar» el selector además baja a la fila
+          de «Repartir un monto» en móvil (ver `PendingWorkList`), que es donde el diseño
+          lo acota; aquí se queda oculto para ese filtro y sigue disponible en ≥lg. */}
+      <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
         {ORDER.map((option) => (
           <Chip
             key={option}
@@ -345,7 +350,10 @@ export function ClientAccountTab({
           >
             <SelectTrigger
               aria-label="Par de monedas"
-              className="ml-auto h-9 w-auto min-w-36 rounded-full"
+              className={cn(
+                'ml-auto h-9 w-auto min-w-36 shrink-0 rounded-full',
+                filter === 'pending' && 'hidden lg:flex',
+              )}
             >
               <SelectValue placeholder="Todos los pares" />
             </SelectTrigger>
@@ -372,7 +380,14 @@ export function ClientAccountTab({
           desmontaba la cola de trabajo en cada clic de chip, y con ella lo seleccionado, el
           monto escrito y lo que se podía deshacer. */}
       <div hidden={filter !== 'pending'}>
-        <PendingWorkList state={pending.state} actions={pending.actions} onChanged={onChanged} />
+        <PendingWorkList
+          state={pending.state}
+          actions={pending.actions}
+          onChanged={onChanged}
+          pairs={pairs}
+          pair={pair}
+          onPairChange={setPair}
+        />
       </div>
       <div hidden={filter === 'pending'}>
         <AccountThread items={items} emptyLabel={EMPTY_LABEL[filter]} />

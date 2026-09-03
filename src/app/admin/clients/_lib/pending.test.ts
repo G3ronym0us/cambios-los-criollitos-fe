@@ -6,6 +6,7 @@ import {
   formatPendingBreakdown,
   isCashDebt,
   isPendingOperation,
+  lastPaymentAt,
   outstandingAmount,
   pendingByPair,
   pendingSince,
@@ -86,6 +87,43 @@ describe('pendingSince', () => {
     ];
 
     expect(pendingByPair(operations)[0].oldest_at).toBe('2026-08-01T00:00:00Z');
+  });
+});
+
+describe('lastPaymentAt', () => {
+  it('sin ningún comprobante entrante se cae a la fecha de la operación', () => {
+    // El caso `VIA_PARTNER` sin comprobante propio, o un par `settles_in_cash`.
+    const sinComprobantes = op({
+      uuid: 'sin-comprobantes',
+      first_incoming_payment_at: null,
+      last_incoming_payment_at: null,
+      created_at: '2026-08-20T00:00:00Z',
+    });
+
+    expect(lastPaymentAt(sinComprobantes)).toBe('2026-08-20T00:00:00Z');
+  });
+
+  it('con un solo comprobante usa su fecha', () => {
+    const unSoloPago = op({
+      uuid: 'un-pago',
+      first_incoming_payment_at: '2026-08-24T00:00:00Z',
+      last_incoming_payment_at: '2026-08-24T00:00:00Z',
+    });
+
+    expect(lastPaymentAt(unSoloPago)).toBe('2026-08-24T00:00:00Z');
+  });
+
+  it('con varios comprobantes gana el MÁS RECIENTE, no el primero', () => {
+    // Lo contrario de `pendingSince`, que en el mismo caso devuelve el primero: las dos
+    // miden cosas distintas sobre la misma operación.
+    const variosPagos = op({
+      uuid: 'varios-pagos',
+      first_incoming_payment_at: '2026-08-01T00:00:00Z',
+      last_incoming_payment_at: '2026-08-24T00:00:00Z',
+    });
+
+    expect(lastPaymentAt(variosPagos)).toBe('2026-08-24T00:00:00Z');
+    expect(pendingSince(variosPagos)).toBe('2026-08-01T00:00:00Z');
   });
 });
 
