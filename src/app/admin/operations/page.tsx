@@ -1,12 +1,14 @@
 'use client';
 
+import { Suspense } from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { LoadingState } from '@/components/shared/LoadingState';
 import { OperationsStats } from './_components/OperationsStats';
 import { OperationsFilters } from './_components/OperationsFilters';
 import { OperationsList } from './_components/OperationsList';
 import { useOperations } from './_hooks/useOperations';
 
-export default function OperationsAdminPage() {
+function OperationsAdminContent() {
   const { state, actions } = useOperations();
 
   return (
@@ -44,5 +46,15 @@ export default function OperationsAdminPage() {
         onPageSizeChange={actions.setPageSize}
       />
     </div>
+  );
+}
+
+// useSearchParams (el `?needs=` que llega desde la home) exige un boundary de Suspense
+// al prerenderizar.
+export default function OperationsAdminPage() {
+  return (
+    <Suspense fallback={<LoadingState label="Cargando operaciones..." fullHeight />}>
+      <OperationsAdminContent />
+    </Suspense>
   );
 }

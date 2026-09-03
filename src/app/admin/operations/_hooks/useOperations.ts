@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { operationService } from '@/services/operationService';
 import { OperationData, OperationScenario, OperationStats, OperationStatus } from '@/types/operation';
@@ -60,11 +61,20 @@ function needsParam(filters: OperationsFilters): string | undefined {
   return undefined;
 }
 
+const NEEDS_VALUES: NonNullable<NeedsFilter>[] = ['settle', 'deliver', 'client', 'expiring'];
+
 export function useOperations() {
+  const searchParams = useSearchParams();
   const [operations, setOperations] = useState<OperationData[]>([]);
   const [stats, setStats] = useState<OperationStats>(emptyStats);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<OperationsFilters>(emptyFilters);
+  // La home enlaza aquí con `?needs=settle|deliver|expiring`: la tarjeta pulsada allá
+  // debe llegar ya aplicada, no obligar a un segundo clic sobre la de esta pantalla.
+  const [filters, setFilters] = useState<OperationsFilters>(() => {
+    const needsParam = searchParams.get('needs') as NeedsFilter | null;
+    const needs = needsParam && NEEDS_VALUES.includes(needsParam) ? needsParam : null;
+    return needs ? { ...emptyFilters, needs } : emptyFilters;
+  });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZES[0]);
   const [total, setTotal] = useState(0);

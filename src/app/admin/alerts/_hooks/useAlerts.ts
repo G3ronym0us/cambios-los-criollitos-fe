@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { notificationsService } from '@/services/notificationsService';
 import { useNotifications } from '@/contexts/NotificationContext';
@@ -9,10 +10,13 @@ import type { RateAlert } from '@/types/notifications';
 const PAGE_LIMIT = 50;
 
 export function useAlerts() {
+  const searchParams = useSearchParams();
   const { acknowledge: ackFromContext } = useNotifications();
   const [alerts, setAlerts] = useState<RateAlert[]>([]);
   const [total, setTotal] = useState(0);
-  const [unackedOnly, setUnackedOnly] = useState(false);
+  // La home enlaza aquí con `?unacked=1`: la franja de vigilancia debe abrir ya filtrada
+  // a las sin ver, no a la lista completa.
+  const [unackedOnly, setUnackedOnly] = useState(() => searchParams.get('unacked') === '1');
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {

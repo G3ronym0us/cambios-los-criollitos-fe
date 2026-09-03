@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { ProfitStats } from '../_shared/ProfitStats';
@@ -7,7 +8,7 @@ import { ProfitTransactionsList } from '../_shared/ProfitTransactionsList';
 import { MyProfitsFilters } from './_components/MyProfitsFilters';
 import { useMyProfits } from './_hooks/useMyProfits';
 
-export default function MyProfitsPage() {
+function MyProfitsContent() {
   const { state, actions } = useMyProfits();
 
   return (
@@ -41,5 +42,15 @@ export default function MyProfitsPage() {
         </>
       ) : null}
     </div>
+  );
+}
+
+// useSearchParams (el `?desde=hoy` que llega desde la home) exige un boundary de
+// Suspense al prerenderizar.
+export default function MyProfitsPage() {
+  return (
+    <Suspense fallback={<LoadingState label="Cargando ganancias..." fullHeight />}>
+      <MyProfitsContent />
+    </Suspense>
   );
 }
