@@ -21,16 +21,38 @@ export type AccountItem =
   | { kind: 'balance'; key: string; at: string | null; entry: BalanceEntry };
 
 /** El estado de una operación dentro de la cuenta, con el vocabulario de esta pantalla. */
-export type OperationState = 'pending' | 'delivered' | 'quoted' | 'cancelled';
+export type OperationState = 'pending' | 'open' | 'delivered' | 'quoted' | 'cancelled';
 
+/**
+ * En qué estado está la operación para esta pantalla.
+ *
+ * Son DOS preguntas distintas y hay que hacer las dos, porque no siempre responden igual:
+ *
+ * 1. ¿Está en la cola de trabajo? — `isPendingOperation`, que mide lo que falta por cubrir
+ *    (`pending_amount`) y es la misma regla que aplica el backend al agregado por cliente.
+ * 2. ¿Está cerrada? — `status`, que es lo único que dice si la operación terminó.
+ *
+ * Contestar sólo la primera —«no hay nada por cubrir, luego está entregada»— era el bug:
+ * una USD-VES nacida de su comprobante de salida se crea CUBIERTA y en PENDING a la vez
+ * (`create_operation_from_payment` sólo la completa si la moneda que entrega el cliente no
+ * es USD efectivo; los billetes se reciben después, con `receive_delivery`). El hilo la
+ * rotulaba «Completado · Cobrada» mientras la bandeja de Pagos, que lee `status`, la
+ * rotulaba «Pendiente» — el mismo trato con dos estados opuestos en dos pantallas.
+ *
+ * `open` es justo ese hueco: fuera de la cola —no le debemos nada— pero sin cerrar. Se
+ * rotula «Pendiente», la misma palabra que usan Pagos y el listado de Operaciones para
+ * `status = PENDING`, que es de donde sale.
+ */
 export function operationState(op: OperationData): OperationState {
   if (op.status === 'CANCELLED') return 'cancelled';
   if (op.status === 'QUOTED') return 'quoted';
-  return isPendingOperation(op) ? 'pending' : 'delivered';
+  if (isPendingOperation(op)) return 'pending';
+  return op.status === 'COMPLETED' ? 'delivered' : 'open';
 }
 
 export const STATE_LABEL: Record<OperationState, string> = {
   pending: 'Por entregar',
+  open: 'Pendiente',
   delivered: 'Entregado',
   quoted: 'Cotizada',
   cancelled: 'Cancelada',

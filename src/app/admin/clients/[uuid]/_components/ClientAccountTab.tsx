@@ -328,7 +328,10 @@ export function ClientAccountTab({
             count={counts[option]}
             onClick={() => setFilter(option)}
           >
-            {FILTER_LABEL[option]}
+            {/* En un par de efectivo la cola no es de entregas sino de cobros: los
+                bolívares ya salieron y lo que falta es el efectivo del cliente. Mismo
+                filtro, rótulo opuesto — igual que la cifra de arriba. */}
+            {option === 'pending' && cashDebt ? 'Por cobrar' : FILTER_LABEL[option]}
           </Chip>
         ))}
 

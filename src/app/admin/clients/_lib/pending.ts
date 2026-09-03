@@ -42,9 +42,13 @@ const EPSILON = 0.01;
  * armar, y ahí el que debe es él, no nosotros. Contar sólo `pending_amount` mezclaba las
  * dos patas del cambio y ponía bajo «Le debemos» operaciones que nadie había pagado.
  *
- * **Salvo en los pares que se cambian en efectivo** (`settles_in_cash`). Ahí no hay
- * comprobante entrante ni lo habrá —nadie fotografía un billete—, así que exigirlo borra
- * el par entero de la pantalla. En esos pares manda lo que falta por cuadrar, a secas.
+ * **En los pares que se cambian en efectivo** (`settles_in_cash`) la pregunta es la
+ * contraria y por eso se mide otra columna. Ahí los bolívares ya salieron y lo que falta es
+ * el efectivo del CLIENTE: `to_collect`, el valor menos lo que ya se le recogió. Mirar
+ * `pending_amount` sacaba de la lista justo lo que hay que ir a cobrar — una operación
+ * creada desde su propio comprobante en bolívares nace cubierta, así que salía el mismo día
+ * en que empezaba a deberse. El comprobante entrante tampoco filtra: no hay ni habrá, nadie
+ * fotografía un billete.
  *
  * Es la misma regla que aplica el backend en `ClientPendingService` para el agregado que
  * ya consume la lista de clientes; vive aquí para que el perfil no diga otra cosa que la
@@ -52,8 +56,23 @@ const EPSILON = 0.01;
  */
 export function isPendingOperation(op: OperationData): boolean {
   if (op.status === 'CANCELLED' || op.status === 'QUOTED') return false;
-  if (!op.first_incoming_payment_at && !op.settles_in_cash) return false;
-  return (op.pending_amount ?? 0) > EPSILON;
+  if (op.settles_in_cash) return outstandingAmount(op) > EPSILON;
+  if (!op.first_incoming_payment_at) return false;
+  return outstandingAmount(op) > EPSILON;
+}
+
+/**
+ * Lo que falta de esta operación, en la moneda del valor — y de qué lado está.
+ *
+ * En un par normal es lo que NOSOTROS no hemos cubierto (`pending_amount`); en uno de
+ * efectivo, lo que el CLIENTE no ha traído (`to_collect`). Las dos cifras existen a la vez
+ * en la misma operación y no significan lo mismo, así que toda la pantalla —la cola, el
+ * reparto, el hilo, los totales— tiene que pasar por aquí para no leer la columna del otro
+ * lado. Es lo que hacía que una USD-VES ya pagada en bolívares saliera como saldada.
+ */
+export function outstandingAmount(op: OperationData): number {
+  if (op.settles_in_cash) return op.to_collect ?? 0;
+  return op.pending_amount ?? 0;
 }
 
 /**
@@ -90,6 +109,10 @@ export function valueCurrency(op: OperationData): string {
  * ningún sitio de la pantalla.
  */
 export function coveredAmount(op: OperationData): number {
+  // En efectivo la parte «ya resuelta» de la fila es lo que el cliente ya trajo: sumar ahí
+  // los comprobantes de salida daba el valor entero —los bolívares ya salieron— y pintaba
+  // como saldada una operación de la que no se ha recogido nada.
+  if (op.settles_in_cash) return op.collected_amount ?? 0;
   return (op.delivered_amount ?? 0) + (op.uncovered_amount ?? 0);
 }
 
@@ -101,7 +124,7 @@ export function coveredAmount(op: OperationData): number {
  */
 export function valueAmount(op: OperationData): number {
   if (op.amount != null) return op.amount;
-  return coveredAmount(op) + (op.pending_amount ?? 0);
+  return coveredAmount(op) + outstandingAmount(op);
 }
 
 /** La moneda con la que se le paga al cliente. */
@@ -118,7 +141,7 @@ export function payoutCurrency(op: OperationData): string | null {
  * mejor no enseñar número que enseñar uno inventado.
  */
 export function payoutEquivalent(op: OperationData): number | null {
-  const pending = op.pending_amount ?? 0;
+  const pending = outstandingAmount(op);
   if (!op.from_amount || op.from_amount <= 0) return null;
   const converted = pending * (op.to_amount / op.from_amount);
   return Number.isFinite(converted) ? converted : null;
@@ -162,7 +185,7 @@ export function pendingByPair(operations: OperationData[]): ClientPendingByPair[
   for (const op of operations) {
     if (!isPendingOperation(op)) continue;
     const key = pairKey(op);
-    const amount = op.pending_amount ?? 0;
+    const amount = outstandingAmount(op);
     const payout = payoutEquivalent(op);
     const current = groups.get(key);
 

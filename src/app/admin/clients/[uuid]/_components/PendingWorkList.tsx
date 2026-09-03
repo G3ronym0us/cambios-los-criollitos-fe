@@ -16,6 +16,7 @@ import {
   formatPending,
   formatPendingBreakdown,
   isPendingOperation,
+  outstandingAmount,
   pendingSince,
   pendingTone,
   valueAmount,
@@ -182,7 +183,7 @@ function PendingRow({
 }) {
   const blocked = blockedReason(operation);
   const currency = valueCurrency(operation);
-  const pending = operation.pending_amount ?? 0;
+  const pending = outstandingAmount(operation);
   const covered = coveredAmount(operation);
   const value = valueAmount(operation);
   // Ya no debe nada: sigue en la cola sólo para poder deshacerla.

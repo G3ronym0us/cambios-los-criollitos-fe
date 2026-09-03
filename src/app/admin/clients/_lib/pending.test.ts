@@ -6,6 +6,7 @@ import {
   formatPendingBreakdown,
   isCashDebt,
   isPendingOperation,
+  outstandingAmount,
   pendingByPair,
   pendingSince,
   pendingTotals,
@@ -144,15 +145,53 @@ describe('valueAmount', () => {
 });
 
 describe('pares que se cambian en efectivo', () => {
-  /** El USD-VES de producción: el cliente llega con billetes y no hay nada que fotografiar. */
+  /**
+   * El USD-VES de producción: el cliente llega con billetes y no hay nada que fotografiar.
+   *
+   * Nace CUBIERTA —el comprobante en bolívares ya salió y no queda nada por cuadrar— y sin
+   * cobrar. Es justo la combinación que se caía de la cola: mirando `pending_amount` no
+   * debía nada, cuando lo que debe es el efectivo entero.
+   */
   function efectivo(overrides: Partial<OperationData> = {}): OperationData {
     return op({
       uuid: 'efectivo',
       settles_in_cash: true,
       first_incoming_payment_at: null,
+      amount: 100,
+      delivered_amount: 100,
+      pending_amount: 0,
+      collected_amount: null,
+      to_collect: 100,
       ...overrides,
     });
   }
+
+  it('lo que se debe es el efectivo del cliente, no lo que nos falte por cubrir', () => {
+    // El corazón del asunto: cubrir la operación con el comprobante en bolívares es
+    // NUESTRA pata. Medir por ahí la sacaba de la lista el mismo día en que se pagaba.
+    const op = efectivo();
+
+    expect(op.pending_amount).toBe(0);
+    expect(outstandingAmount(op)).toBe(100);
+    expect(isPendingOperation(op)).toBe(true);
+    expect(pendingByPair([op])[0].amount).toBe(100);
+  });
+
+  it('un cobro parcial deja en la cola lo que falta, no el valor entero', () => {
+    const media = efectivo({ collected_amount: 60, to_collect: 40 });
+
+    expect(outstandingAmount(media)).toBe(40);
+    expect(coveredAmount(media)).toBe(60);
+    expect(pendingByPair([media])[0].amount).toBe(40);
+  });
+
+  it('cobrada del todo sale de la cola', () => {
+    expect(isPendingOperation(efectivo({ collected_amount: 100, to_collect: 0 }))).toBe(false);
+  });
+
+  it('en un par normal se sigue mirando lo que no hemos cubierto', () => {
+    expect(outstandingAmount(op({ uuid: 'normal', pending_amount: 70 }))).toBe(70);
+  });
 
   it('sin comprobante entrante sigue siendo deuda', () => {
     // Exigirlo aquí borraba el par entero: en producción eran 134 operaciones sin cuadrar

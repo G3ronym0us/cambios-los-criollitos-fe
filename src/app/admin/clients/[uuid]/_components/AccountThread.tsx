@@ -10,7 +10,13 @@ import { formatCaracasShortDateTime } from '@/utils/functions';
 import type { BalanceEntry } from '@/types/client';
 import type { OperationData } from '@/types/operation';
 import { STATE_LABEL, operationState, type AccountItem, type OperationState } from '../../_lib/account';
-import { coveredAmount, formatPending, valueAmount, valueCurrency } from '../../_lib/pending';
+import {
+  coveredAmount,
+  formatPending,
+  outstandingAmount,
+  valueAmount,
+  valueCurrency,
+} from '../../_lib/pending';
 import { ACCOUNT_COL as COL, ACCOUNT_GRID as GRID, ACCOUNT_TABLE_MIN as TABLE_MIN } from './accountTable';
 
 interface AccountThreadProps {
@@ -20,10 +26,16 @@ interface AccountThreadProps {
 
 const STATE_TONE: Record<OperationState, string> = {
   pending: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  // El mismo ámbar que le pone la bandeja de Pagos a `status = PENDING`: es el mismo
+  // estado, leído del mismo campo, y en dos pantallas tiene que verse igual.
+  open: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
   delivered: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
   quoted: 'border-border bg-muted text-muted-foreground',
   cancelled: 'border-border bg-muted text-muted-foreground',
 };
+
+/** Debajo de esto es ruido de redondeo, no dinero. Igual que en el backend y en `pending`. */
+const EPSILON = 0.01;
 
 function formatUsd(value: number) {
   return `$${value.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -64,11 +76,15 @@ function ThreadHeader() {
  */
 function OperationRow({ operation, at }: { operation: OperationData; at: string | null }) {
   const state = operationState(operation);
-  const pending = operation.pending_amount ?? 0;
+  const pending = outstandingAmount(operation);
   const value = valueAmount(operation);
   const covered = coveredAmount(operation);
   const currency = valueCurrency(operation);
-  const partial = state === 'pending' && covered > 0.01;
+  const partial = state === 'pending' && covered > EPSILON;
+  // El tachón dice «no queda nada por cubrir», y eso lo decide el pendiente y nada más.
+  // Atarlo al estado tachaba el valor de una operación con 50 sin cubrir sólo porque su
+  // dinero todavía no había entrado y por eso no estaba en la cola.
+  const settled = pending <= EPSILON;
 
   return (
     <div className={cn(GRID, 'border-b border-border px-2 py-2 last:border-b-0 sm:px-3')}>
@@ -104,15 +120,20 @@ function OperationRow({ operation, at }: { operation: OperationData; at: string 
               {formatPending(value, currency)}
             </p>
           )
-        ) : (
+        ) : settled ? (
           <p className="text-sm">
             <s className="text-muted-foreground">{formatPending(value, currency)}</s>{' '}
+            {/* «Completado» sólo cuando la operación está cerrada de verdad. Una cubierta
+                pero en PENDING —una USD-VES esperando los billetes— se queda con el valor
+                tachado y su chip: cubierta no es completada. */}
             {state === 'delivered' ? (
               <span className="font-semibold text-emerald-700 dark:text-emerald-400">
                 Completado
               </span>
             ) : null}
           </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">{formatPending(value, currency)}</p>
         )}
       </div>
 
