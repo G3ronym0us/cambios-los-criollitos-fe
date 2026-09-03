@@ -1,13 +1,15 @@
 'use client';
 
+import { Suspense } from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { LoadingState } from '@/components/shared/LoadingState';
 import { AlertsStats } from './_components/AlertsStats';
 import { AlertsFilters } from './_components/AlertsFilters';
 import { AlertsList } from './_components/AlertsList';
 import { PushToggle } from './_components/PushToggle';
 import { useAlerts } from './_hooks/useAlerts';
 
-export default function AlertsAdminPage() {
+function AlertsAdminContent() {
   const { state, actions } = useAlerts();
 
   return (
@@ -34,5 +36,15 @@ export default function AlertsAdminPage() {
         onAck={actions.handleAck}
       />
     </div>
+  );
+}
+
+// useSearchParams (el `?unacked=1` que llega desde la home) exige un boundary de
+// Suspense al prerenderizar.
+export default function AlertsAdminPage() {
+  return (
+    <Suspense fallback={<LoadingState label="Cargando alertas..." fullHeight />}>
+      <AlertsAdminContent />
+    </Suspense>
   );
 }

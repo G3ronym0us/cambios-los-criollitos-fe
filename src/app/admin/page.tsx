@@ -1,112 +1,88 @@
-"use client";
+'use client';
 
-import Link from 'next/link';
-import { Coins, Users, Settings, BarChart3, ArrowLeftRight, DollarSign, TrendingUp, FileText } from 'lucide-react';
+import { AlertCircle, RotateCw } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import { Role } from '@/utils/enums';
+import { OverviewHeader } from './_components/OverviewHeader';
+import { WorkGrid } from './_components/WorkGrid';
+import { DayGrid } from './_components/DayGrid';
+import { WatchStrip } from './_components/WatchStrip';
+import { useOverview } from './_hooks/useOverview';
 
+/**
+ * La home del panel: un tablero de estado, no un segundo menú.
+ *
+ * Cada módulo ya calcula lo accionable en el servidor (`GET /admin/overview`, recortado
+ * por rol); esta pantalla solo lee esas cifras. Un clic sobre cualquiera de ellas abre su
+ * bandeja ya filtrada — de aquí no se hace nada más.
+ */
 export default function AdminDashboard() {
-  const adminFeatures = [
-    {
-      title: 'Gestión de Monedas',
-      description: 'Administrar las monedas del sistema',
-      icon: Coins,
-      href: '/admin/currencies',
-      color: 'bg-blue-500',
-    },
-    {
-      title: 'Pares de Monedas',
-      description: 'Gestionar pares de trading y monitoreo',
-      icon: ArrowLeftRight,
-      href: '/admin/currency-pairs',
-      color: 'bg-indigo-500',
-    },
-    {
-      title: 'Transacciones',
-      description: 'Registrar y gestionar transacciones con distribución de ganancias',
-      icon: DollarSign,
-      href: '/admin/transactions',
-      color: 'bg-emerald-500',
-    },
-    {
-      title: 'Mis Ganancias',
-      description: 'Ver reporte de tus ganancias por transacciones',
-      icon: TrendingUp,
-      href: '/admin/reports/my-profits',
-      color: 'bg-green-500',
-    },
-    {
-      title: 'Resumen General',
-      description: 'Estadísticas completas del sistema (Moderadores)',
-      icon: FileText,
-      href: '/admin/reports/summary',
-      color: 'bg-teal-500',
-    },
-    {
-      title: 'Gestión de Usuarios',
-      description: 'Administrar usuarios, permisos y configuración de comisiones',
-      icon: Users,
-      href: '/admin/users',
-      color: 'bg-purple-500',
-    },
-    {
-      title: 'Configuración',
-      description: 'Configuración general del sistema',
-      icon: Settings,
-      href: '/admin/settings',
-      color: 'bg-purple-500',
-      disabled: true,
-    },
-    {
-      title: 'Estadísticas',
-      description: 'Ver estadísticas y reportes',
-      icon: BarChart3,
-      href: '/admin/analytics',
-      color: 'bg-orange-500',
-      disabled: true,
-    },
-  ];
+  const { user } = useAuth();
+  const { state, actions } = useOverview();
+  const { overview, loading, fatalError } = state;
+
+  const isRoot = user?.role === Role.ROOT;
+
+  if (fatalError && !overview) {
+    return (
+      <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed border-destructive/30 bg-destructive/5 p-6 text-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-2.5">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+          <div>
+            <p className="font-medium text-foreground">No se pudo cargar el tablero</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{fatalError}</p>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={actions.refresh}>
+          <RotateCw className="h-3.5 w-3.5" />
+          Reintentar
+        </Button>
+      </div>
+    );
+  }
+
+  const errors = overview?.errors ?? [];
+  // El rol lo resuelve el servidor: si `alerts`/`clients` llegan (aunque sea `null` por un
+  // fallo), es porque el backend ya decidió que este usuario es ROOT. No se repite el
+  // chequeo por CSS.
+  const showWatch = isRoot && overview != null && ('alerts' in overview || 'clients' in overview);
 
   return (
-    <div>
-      <div className="mb-6 sm:mb-8">
-        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Dashboard de Administración</h2>
-        <p className="text-sm sm:text-base text-gray-600">Gestiona todos los aspectos del sistema desde aquí</p>
-      </div>
+    <div className="space-y-6">
+      <OverviewHeader
+        needsAttention={overview?.payments?.needs_attention ?? null}
+        generatedAt={overview?.generated_at ?? null}
+        loading={loading}
+        onRefresh={actions.refresh}
+      />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-        {adminFeatures.map((feature) => {
-          const IconComponent = feature.icon;
-          
-          if (feature.disabled) {
-            return (
-              <div
-                key={feature.title}
-                className="bg-white rounded-lg shadow-sm border p-4 sm:p-6 opacity-50 cursor-not-allowed"
-              >
-                <div className={`${feature.color} w-10 h-10 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center mb-3 sm:mb-4`}>
-                  <IconComponent className="text-white" size={20} />
-                </div>
-                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">{feature.title}</h3>
-                <p className="text-gray-600 text-xs sm:text-sm mb-2 sm:mb-3">{feature.description}</p>
-                <span className="text-xs text-gray-400">Próximamente</span>
-              </div>
-            );
-          }
+      <WorkGrid
+        payments={overview?.payments}
+        operations={overview?.operations}
+        errors={errors}
+        loading={loading}
+        onRetry={actions.refresh}
+      />
 
-          return (
-            <Link
-              key={feature.title}
-              href={feature.href}
-              className="bg-white rounded-lg shadow-sm border p-4 sm:p-6 hover:shadow-md transition-shadow"
-            >
-              <div className={`${feature.color} w-10 h-10 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center mb-3 sm:mb-4`}>
-                <IconComponent className="text-white" size={20} />
-              </div>
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">{feature.title}</h3>
-              <p className="text-gray-600 text-xs sm:text-sm">{feature.description}</p>
-            </Link>
-          );
-        })}
-      </div>
+      <DayGrid
+        payments={overview?.payments}
+        operations={overview?.operations}
+        me={overview?.me}
+        errors={errors}
+        loading={loading}
+        onRetry={actions.refresh}
+      />
+
+      {showWatch ? (
+        <WatchStrip
+          alerts={overview?.alerts}
+          clients={overview?.clients}
+          errors={errors}
+          loading={loading}
+          onRetry={actions.refresh}
+        />
+      ) : null}
     </div>
   );
 }
