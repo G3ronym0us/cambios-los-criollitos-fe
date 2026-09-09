@@ -157,12 +157,24 @@ export function payoutEquivalent(op: OperationData): number | null {
  * la más vieja a la más nueva, eso no es sólo un orden feo — es dinero aplicado a la
  * operación equivocada.
  *
- * El respaldo a la fecha de la operación es para las ya entregadas, que se enseñan en el
- * hilo sin tener entrante: en la cola de «por entregar» no hace falta, porque sin entrante
- * no entran (ver `isPendingOperation`).
+ * **Los dos escalones son necesarios.** El entrante es el que abre la deuda en un par
+ * normal. Pero en un par de efectivo ese comprobante no existe ni existirá —de un billete
+ * no hay foto—, y ahí el único hecho fechado de la operación es la SALIDA: los bolívares
+ * que ya mandamos. Sin ese segundo escalón, «Por cobrar» caía entero a `created_at` y una
+ * tanda tecleada a mano el mismo minuto salía con la misma espera —«espera 8 d 21 h» en
+ * cinco filas seguidas— aunque los pagos fueran de días distintos.
+ *
+ * `created_at` queda de último recurso, para las que no tienen ningún comprobante de
+ * ninguno de los dos lados.
  */
 export function pendingSince(op: OperationData): string | null {
-  return op.first_incoming_payment_at ?? op.created_at ?? op.quoted_at ?? null;
+  return (
+    op.first_incoming_payment_at ??
+    op.first_outgoing_payment_at ??
+    op.created_at ??
+    op.quoted_at ??
+    null
+  );
 }
 
 /**
@@ -179,12 +191,19 @@ export function pendingSince(op: OperationData): string | null {
  * necesita las dos fechas a la vez, así que no se pueden fundir en una sola función sin
  * perder una de las dos.
  *
- * Mismo respaldo que `pendingSince` cuando no hay ningún entrante (`VIA_PARTNER` sin
- * comprobante propio, o un par `settles_in_cash`): la fecha de la operación es lo mejor que
- * hay.
+ * Mismos escalones que `pendingSince` y por los mismos motivos, pero con la fecha MÁS
+ * RECIENTE de cada lado: sin entrante (`VIA_PARTNER` sin comprobante propio, o un par
+ * `settles_in_cash`) manda el último comprobante de SALIDA, y sólo si tampoco lo hay se cae
+ * a la fecha de la operación.
  */
 export function lastPaymentAt(op: OperationData): string | null {
-  return op.last_incoming_payment_at ?? op.created_at ?? op.quoted_at ?? null;
+  return (
+    op.last_incoming_payment_at ??
+    op.last_outgoing_payment_at ??
+    op.created_at ??
+    op.quoted_at ??
+    null
+  );
 }
 
 function pairKey(op: OperationData): string {
