@@ -37,19 +37,49 @@ export interface PaymentStats {
   reconciled_today: number;
 }
 
-// Operación que el matcher propone para un comprobante del listado.
+/** Con qué par nacería la operación de este comprobante, y cuánto daría. */
+export interface CreateHint {
+  pair_uuid: string | null;
+  pair_symbol: string | null;
+  // preferred | most_used | currency — por qué se eligió ese par. El front lo redacta.
+  reason: 'preferred' | 'most_used' | 'currency' | null;
+  rate: number | null;
+  rate_at: string | null;
+  from_amount: number | null;
+  to_amount: number | null;
+  from_currency: string | null;
+  to_currency: string | null;
+}
+
+// Operación que el matcher propone para un comprobante del listado (o, si no hay ninguna
+// elegible, la pista para crear una nueva). Contrato de POST /payments/{table}/suggestions.
 export interface PaymentSuggestion {
   payment_id: number;
-  operation_uuid: string;
+  // LINK = hay una operación que la cubre. CREATE = el cliente no tiene ninguna abierta.
+  kind: 'LINK' | 'CREATE';
+  operation_uuid: string | null;
   // false = hay otra candidata igual de cerca; se muestra igual, pero sin insistir.
   confident: boolean;
-  score: number;
+  // CLOSES = deja la op sin faltante. PARTIAL = abona y queda resto.
+  coverage: 'CLOSES' | 'PARTIAL' | null;
+  client_name: string | null;
+  client_uuid: string | null;
+  // ¿La op es del mismo cliente que el chat del comprobante? En ámbar cuando es false.
+  same_client: boolean;
+  operation_created_at: string | null;
+  // Firmado: negativo significa que la operación nació DESPUÉS del comprobante.
+  hours_apart: number | null;
+  status: string | null;
+  expired: boolean;
+  score: number | null;
   delta: number | null;
   from_amount: number | null;
   from_currency: string | null;
   to_amount: number | null;
   to_currency: string | null;
-  status: string | null;
+  missing_before: number | null;
+  missing_after: number | null;
+  create_hint: CreateHint | null;
 }
 
 export interface PaymentData {

@@ -30,7 +30,7 @@ import { operationService } from '@/services/operationService';
 import type { CurrencyPairData } from '@/types/admin';
 import type { ExchangeRateResponse } from '@/types/currency';
 import type { FundGroup } from '@/types/fund';
-import type { PaymentData, PaymentTable } from '@/types/payment';
+import type { CreateHint, PaymentData, PaymentTable } from '@/types/payment';
 import { defaultManagerFor, fundFieldMode, settleCurrency, splitFundOptions } from '../_lib/fundManagerField';
 import { formatAmountForInput, sanitizeAmountInput } from '@/utils/functions';
 import {
@@ -112,6 +112,13 @@ interface CreateOperationFormProps {
    * no la implementan simplemente mantienen su cabecera.
    */
   onHeaderChange?: (header: { title: string; eyebrow: string } | null) => void;
+  /**
+   * Con qué par (y de qué tasa) nacería esta operación, según la sugerencia CREATE del
+   * comprobante. Se usa como valor inicial del selector, con la misma prioridad que el par
+   * preferido del cliente — el hint es más específico (ya sabe la moneda del comprobante),
+   * así que se intenta primero.
+   */
+  createHint?: CreateHint | null;
 }
 
 export function CreateOperationForm({
@@ -120,6 +127,7 @@ export function CreateOperationForm({
   onSuccess,
   onBack,
   onHeaderChange,
+  createHint = null,
 }: CreateOperationFormProps) {
   const [pairs, setPairs] = useState<CurrencyPairData[]>([]);
   // Cuántas operaciones lleva ESTE cliente en cada par, y la tasa vigente de todos. Las dos
@@ -212,8 +220,13 @@ export function CreateOperationForm({
         }
       }
 
-      // Prefill: par por defecto del cliente (editable). Solo si aún no se eligió
-      // uno y el par preferido está entre los pares activos.
+      // Prefill: el par que ya propuso la sugerencia CREATE (sabe la moneda del comprobante,
+      // no solo el historial del cliente), y si no hay hint, el par por defecto del cliente.
+      // Editable en los dos casos — solo se fija si aún no se eligió uno.
+      const hintPair = createHint?.pair_uuid;
+      if (hintPair && pairsRes.success && pairsRes.data?.pairs.some((p) => p.uuid === hintPair)) {
+        setPairUuid((current) => current || hintPair);
+      }
       const preferred = clientRes?.success ? clientRes.data?.preferred_pair_uuid : null;
       if (preferred && pairsRes.success && pairsRes.data?.pairs.some((p) => p.uuid === preferred)) {
         setPairUuid((current) => current || preferred);
@@ -222,7 +235,7 @@ export function CreateOperationForm({
       setClientName(clientRes?.success ? (clientRes.data?.display_name ?? null) : null);
 
     }).finally(() => setLoadingData(false));
-  }, [payment.client_uuid, payment.fund_group_uuid]);
+  }, [payment.client_uuid, payment.fund_group_uuid, createHint]);
 
   // Lo que el selector necesita para ordenarse: la tasa vigente de cada par y cuántas
   // operaciones lleva este cliente en cada uno. Va aparte del efecto de arriba porque no

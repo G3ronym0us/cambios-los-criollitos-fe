@@ -31,7 +31,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { paymentService } from '@/services/paymentService';
-import { formatNumber } from '@/utils/functions';
+import { formatCaracasShortDateTime, formatNumber } from '@/utils/functions';
 import { canBeDefaultAccount } from '@/utils/paymentBlock';
 import type { PaymentData, PaymentSuggestion } from '@/types/payment';
 import type { OrphanAction, UnlinkPreview } from '@/types/operation';
@@ -43,7 +43,14 @@ import { PaymentTimeline, TransferOriginChip } from './PaymentTransferTrail';
 import { TransferClientStep } from './TransferClientStep';
 import { canTransferPayment, canTransferPayments } from './paymentTransfer';
 import { UnlinkOrphanDialog } from './UnlinkOrphanDialog';
-import { describeCorrection, describeCoverage, describePayment, describeSuggestion } from './paymentRowData';
+import { describeCorrection, describeGap, describePayment } from './paymentRowData';
+
+// Por qué el hint propone ese par, en el idioma de la pantalla.
+const HINT_REASON: Record<string, string> = {
+  preferred: 'par preferido del cliente',
+  most_used: 'el par que más usa',
+  currency: 'deducido de la moneda del comprobante',
+};
 
 interface IncomingPaymentDrawerProps {
   payment: PaymentData | null;
@@ -478,9 +485,15 @@ export function IncomingPaymentDrawer({
             </div>
           ) : null}
 
-          {/* Operación sugerida */}
-          {suggestion && !p.operation_uuid ? (
-            <div className="rounded-xl border border-primary/40 bg-card p-3 shadow-sm">
+          {/* Operación sugerida: cierra/abona una op del cliente, ya elegible por lo que
+              le falta cobrar. */}
+          {suggestion && suggestion.kind === 'LINK' && !p.operation_uuid ? (
+            <div
+              className={cn(
+                'rounded-xl border bg-card p-3 shadow-sm',
+                suggestion.same_client ? 'border-primary/40' : 'border-amber-500/60',
+              )}
+            >
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <span className="flex items-center gap-1 rounded bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary">
                   <Sparkles className="h-3 w-3" />
@@ -490,31 +503,84 @@ export function IncomingPaymentDrawer({
                   {suggestion.confident ? 'confianza alta' : 'hay otra candidata parecida'}
                 </span>
               </div>
-              <p className="text-[13px] font-semibold text-foreground">
-                {describeSuggestion(suggestion)}
-              </p>
-              {/* La cobertura en palabras, igual que en el buscador de operaciones: el
-                  delta con signo obligaba a recordar de qué lado se restaba. */}
-              {suggestion.delta != null && p.amount != null ? (
+
+              {suggestion.client_name ? (
                 <p
                   className={cn(
-                    'mt-1 text-xs font-medium tabular-nums',
-                    Math.abs(suggestion.delta) < 0.005
-                      ? 'text-emerald-600 dark:text-emerald-400'
-                      : suggestion.delta < 0
-                        ? 'text-amber-700 dark:text-amber-400'
-                        : 'text-muted-foreground',
+                    'text-[13px] font-semibold',
+                    suggestion.same_client ? 'text-foreground' : 'text-amber-700 dark:text-amber-400',
                   )}
                 >
-                  {describeCoverage(suggestion.delta, p.amount, p.currency ?? '')}
+                  {suggestion.client_name}
+                  {suggestion.same_client ? null : ' — es de otro cliente'}
                 </p>
               ) : null}
+
+              <p className="text-[13px] text-foreground">
+                {[suggestion.from_currency, suggestion.to_currency].filter(Boolean).join('/')}
+                {' · '}
+                {formatNumber(suggestion.from_amount ?? 0)} → {formatNumber(suggestion.to_amount ?? 0)}
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                {suggestion.operation_created_at
+                  ? `cotizada ${formatCaracasShortDateTime(suggestion.operation_created_at)}`
+                  : null}
+                {suggestion.hours_apart != null ? ` — ${describeGap(suggestion.hours_apart)}` : null}
+                {suggestion.expired ? ' · cotización vencida' : null}
+              </p>
+
+              <p className="mt-1 text-xs font-medium tabular-nums">
+                {suggestion.coverage === 'CLOSES'
+                  ? `cierra el faltante: ${formatNumber(suggestion.missing_before ?? 0)} → 0`
+                  : `abona ${formatNumber((suggestion.missing_before ?? 0) - (suggestion.missing_after ?? 0))} · quedan ${formatNumber(suggestion.missing_after ?? 0)} por cubrir`}
+              </p>
+
               <div className="mt-3 flex gap-2">
                 <Button className="flex-1" onClick={linkSuggested} disabled={submitting}>
                   Vincular a esta operación
                 </Button>
                 <Button variant="outline" onClick={() => setStep('operation')} disabled={submitting}>
                   Elegir otra
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Sin operación elegible: el cliente no tiene ninguna abierta que cuadre, y el
+              panel propone crearla ya con el par que le corresponde. */}
+          {suggestion && suggestion.kind === 'CREATE' && !p.operation_uuid ? (
+            <div className="rounded-xl border border-primary/40 bg-card p-3 shadow-sm">
+              <div className="mb-2 flex items-center gap-2">
+                <span className="flex items-center gap-1 rounded bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary">
+                  <Sparkles className="h-3 w-3" />
+                  Sin operación para este pago
+                </span>
+              </div>
+              {suggestion.create_hint ? (
+                <>
+                  <p className="text-[13px] font-semibold text-foreground">
+                    Crear {suggestion.create_hint.pair_symbol} ·{' '}
+                    {formatNumber(suggestion.create_hint.from_amount ?? 0)} →{' '}
+                    {formatNumber(suggestion.create_hint.to_amount ?? 0)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    tasa {formatNumber(suggestion.create_hint.rate ?? 0)}
+                    {suggestion.create_hint.rate_at
+                      ? ` del ${formatCaracasShortDateTime(suggestion.create_hint.rate_at)}`
+                      : null}
+                    {' · '}
+                    {HINT_REASON[suggestion.create_hint.reason ?? 'currency']}
+                  </p>
+                </>
+              ) : (
+                <p className="text-[13px] text-muted-foreground">
+                  Este cliente no tiene ninguna operación abierta que cuadre.
+                </p>
+              )}
+              <div className="mt-3 flex gap-2">
+                <Button className="flex-1" onClick={() => setStep('operation')} disabled={submitting}>
+                  Crear esta operación
                 </Button>
               </div>
             </div>
@@ -666,6 +732,10 @@ export function IncomingPaymentDrawer({
           onCancel={() => setStep('detail')}
           cancelLabel="Volver"
           onHeaderChange={setStepHeader}
+          // Sin operación elegible, no tiene sentido abrir en el buscador — el cliente no
+          // tiene ninguna. Se entra directo a crear, con el par que el hint ya propuso.
+          initialMode={suggestion?.kind === 'CREATE' ? 'create' : 'pick'}
+          createHint={suggestion?.kind === 'CREATE' ? suggestion.create_hint : null}
         />
       ) : step === 'balance' ? (
         <>
