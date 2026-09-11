@@ -9,13 +9,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from '@/components/ui/drawer';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -35,6 +36,23 @@ interface ClientLoansTabProps {
 function formatAmount(value: number, currency: string) {
   const label = currency === 'USD_BCV' ? 'USD (BCV)' : currency;
   return `${value.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${label}`;
+}
+
+/**
+ * «Saldo en FIAT» no es español: sale de `preferred_value` tal cual, y ese campo enseña
+ * FIAT/USDT/BCV. Aquí se dice en qué se lleva la cuenta con palabras — la moneda fiat en
+ * la que se registró el préstamo cuando el modo es FIAT, no una tercera cosa.
+ */
+function preferredValueLabel(loan: LoanData): string {
+  if (loan.preferred_value === 'USDT') return 'Saldo en USDT';
+  if (loan.preferred_value === 'BCV') return 'Saldo a tasa BCV';
+  const FIAT_WORD: Record<string, string> = {
+    USD: 'dólares',
+    VES: 'bolívares',
+    COP: 'pesos',
+    BRL: 'reales',
+  };
+  return `Saldo en ${FIAT_WORD[loan.fiat_currency] ?? loan.fiat_currency}`;
 }
 
 function statusLabel(status: LoanData['status']) {
@@ -79,13 +97,6 @@ export function ClientLoansTab({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-end">
-        <Button variant="outline" onClick={() => setCreating(true)}>
-          <HandCoins className="h-4 w-4" />
-          Registrar préstamo
-        </Button>
-      </div>
-
       <NewLoanDialog
         clientUuid={clientUuid}
         open={creating}
@@ -93,31 +104,49 @@ export function ClientLoansTab({
         onCreate={onCreateLoan}
       />
 
+      {/* «Registrar préstamo» vive dentro de la tarjeta de deuda cuando la hay: suelto
+          arriba ocupaba una fila entera para no decir nada. Sin deuda que mostrar (cliente
+          sin préstamos, o todos pagados) se queda solo, que es su único sitio posible. */}
       {totals && totals.by_reference.length > 0 ? (
         <Card>
           <CardContent className="space-y-2 p-4 sm:p-5">
-            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <HandCoins className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-              Deuda pendiente
-            </div>
-            {totals.usdt_total != null ? (
-              <p className="text-2xl font-bold tabular-nums text-foreground">
-                {formatAmount(totals.usdt_total, 'USDT')}
-              </p>
-            ) : null}
-            <div className="flex flex-wrap gap-x-4 gap-y-1">
-              {totals.by_reference.map((row) => (
-                <span key={row.currency} className="text-sm font-semibold text-muted-foreground">
-                  {formatAmount(row.amount, row.currency)}
-                </span>
-              ))}
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <HandCoins className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                  Deuda pendiente
+                </div>
+                {totals.usdt_total != null ? (
+                  <p className="text-2xl font-bold tabular-nums text-foreground">
+                    {formatAmount(totals.usdt_total, 'USDT')}
+                  </p>
+                ) : null}
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  {totals.by_reference.map((row) => (
+                    <span key={row.currency} className="text-sm font-semibold text-muted-foreground">
+                      {formatAmount(row.amount, row.currency)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <Button variant="outline" className="h-11 shrink-0" onClick={() => setCreating(true)}>
+                <HandCoins className="h-4 w-4" />
+                Registrar préstamo
+              </Button>
             </div>
             {totals.warnings.map((warning) => (
               <p key={warning} className="text-xs text-amber-700 dark:text-amber-400">{warning}</p>
             ))}
           </CardContent>
         </Card>
-      ) : null}
+      ) : (
+        <div className="flex items-center justify-end">
+          <Button variant="outline" className="h-11" onClick={() => setCreating(true)}>
+            <HandCoins className="h-4 w-4" />
+            Registrar préstamo
+          </Button>
+        </div>
+      )}
 
       {loans.length === 0 ? (
         <EmptyState
@@ -148,27 +177,30 @@ export function ClientLoansTab({
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs text-muted-foreground">Saldo en {loan.preferred_value === 'BCV' ? 'BCV' : loan.preferred_value}</p>
+                      <p className="text-xs text-muted-foreground">{preferredValueLabel(loan)}</p>
                       <p className="text-base font-bold text-foreground">
                         {formatAmount(loan.outstanding_amount, loan.preferred_currency)}
                       </p>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-3 rounded-lg bg-muted/50 p-3 sm:grid-cols-3">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Fiat original</p>
-                      <p className="text-sm font-medium text-foreground">{formatAmount(loan.fiat_amount, loan.fiat_currency)}</p>
+                  {/* Etiqueta a la izquierda, cifra a la derecha — es como se comparan tres
+                      equivalencias del mismo monto. De bloque-encima-de-valor ocupaban el
+                      doble sin decir más. */}
+                  <div className="divide-y divide-border rounded-lg bg-muted/50 px-3">
+                    <div className="flex items-center justify-between gap-3 py-2">
+                      <span className="text-xs text-muted-foreground">Fiat original</span>
+                      <span className="text-sm font-medium text-foreground">{formatAmount(loan.fiat_amount, loan.fiat_currency)}</span>
                     </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Equivalente USDT</p>
-                      <p className="text-sm font-medium text-foreground">{formatAmount(loan.usdt_amount, 'USDT')}</p>
+                    <div className="flex items-center justify-between gap-3 py-2">
+                      <span className="text-xs text-muted-foreground">Equivalente USDT</span>
+                      <span className="text-sm font-medium text-foreground">{formatAmount(loan.usdt_amount, 'USDT')}</span>
                     </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Equivalente BCV</p>
-                      <p className="text-sm font-medium text-foreground">
+                    <div className="flex items-center justify-between gap-3 py-2">
+                      <span className="text-xs text-muted-foreground">Equivalente BCV</span>
+                      <span className="text-sm font-medium text-foreground">
                         {loan.bcv_amount != null ? formatAmount(loan.bcv_amount, 'USD_BCV') : 'No aplica'}
-                      </p>
+                      </span>
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -211,7 +243,7 @@ export function ClientLoansTab({
 
                   {active ? (
                     <div className="flex justify-end">
-                      <Button variant="outline" onClick={() => openRepayment(loan)}>
+                      <Button variant="outline" className="h-11" onClick={() => openRepayment(loan)}>
                         <ReceiptText className="h-4 w-4" />
                         Registrar abono
                       </Button>
@@ -224,15 +256,18 @@ export function ClientLoansTab({
         </div>
       )}
 
-      <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Registrar abono al préstamo</DialogTitle>
-            <DialogDescription>
+      {/* Hoja desde abajo en móvil, tarjeta centrada en ≥sm — mismo `Drawer` que el resto
+          del módulo. Era `Dialog`, y un modal centrado con teclado numérico abierto en 390
+          px deja media pantalla de fondo oscurecido sin ninguna utilidad. */}
+      <Drawer open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
+        <DrawerContent>
+          <DrawerHeader>
+            <DrawerTitle>Registrar abono al préstamo</DrawerTitle>
+            <DrawerDescription>
               Ingresa el monto en {selected?.preferred_currency === 'USD_BCV' ? 'USD a tasa BCV' : selected?.preferred_currency}.
               El valor fiat, USDT y BCV se guardará usando las tasas actuales.
-            </DialogDescription>
-          </DialogHeader>
+            </DrawerDescription>
+          </DrawerHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="loan-repayment-amount">Monto del abono</Label>
@@ -265,14 +300,20 @@ export function ClientLoansTab({
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSelected(null)} disabled={submitting}>Cancelar</Button>
-            <Button onClick={submitRepayment} disabled={submitting}>
+          <DrawerFooter>
+            <DrawerClose
+              render={
+                <Button variant="outline" className="h-11" disabled={submitting}>
+                  Cancelar
+                </Button>
+              }
+            />
+            <Button className="h-11" onClick={submitRepayment} disabled={submitting}>
               {submitting ? 'Guardando…' : 'Registrar abono'}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
     </div>
   );
 }

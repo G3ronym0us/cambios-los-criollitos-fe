@@ -170,18 +170,57 @@ function describeOperation(p: PaymentData): string | null {
 }
 
 /**
- * "USD/BRL · 200 → 1.086" para la celda de operación sugerida.
- *
- * La barra y no la flecha entre las monedas: es el `pair_symbol` del backend, y la flecha
- * queda libre para lo que sí es una conversión (los montos).
+ * Lo que la fila necesita saber de un vistazo: qué le hace este comprobante a la operación y
+ * hace cuánto se cotizó. El cliente solo se nombra cuando NO es el del chat del comprobante —
+ * repetirlo siempre es ruido, y así el caso raro salta.
  */
 export function describeSuggestion(s: PaymentSuggestion): string {
-  const pair = [s.from_currency, s.to_currency].filter(Boolean).join('/');
-  const amounts = [
-    s.from_amount != null ? formatNumber(s.from_amount) : null,
-    s.to_amount != null ? formatNumber(s.to_amount) : null,
-  ].filter(Boolean);
-  return [pair || null, amounts.length === 2 ? amounts.join(' → ') : null]
+  if (s.kind === 'CREATE') {
+    const h = s.create_hint;
+    if (!h) return 'crear operación';
+    const montos = [h.from_amount, h.to_amount]
+      .filter((n): n is number => n != null)
+      .map(formatNumber);
+    return ['crear', h.pair_symbol, montos.length === 2 ? `· ${montos.join(' → ')}` : null]
+      .filter(Boolean)
+      .join(' ');
+  }
+  const clase =
+    s.coverage === 'PARTIAL' && s.missing_before != null && s.missing_after != null
+      ? `abona ${formatNumber(s.missing_before - s.missing_after)}, quedan ${formatNumber(s.missing_after)}`
+      : 'cierra';
+  return [s.same_client ? null : s.client_name, clase, describeElapsed(s.hours_apart)]
     .filter(Boolean)
     .join(' · ');
+}
+
+/** «hace 12 min» / «hace 2 h 53» / «hace 3 d». Negativo = la op nació después del comprobante. */
+export function describeElapsed(hours: number | null): string | null {
+  if (hours == null) return null;
+  const abs = Math.abs(hours);
+  const prefijo = hours < 0 ? 'después' : 'hace';
+  if (abs < 1) return `${prefijo} ${Math.round(abs * 60)} min`;
+  if (abs < 24) {
+    const h = Math.floor(abs);
+    const m = Math.round((abs - h) * 60);
+    return m ? `${prefijo} ${h} h ${m}` : `${prefijo} ${h} h`;
+  }
+  return `${prefijo} ${Math.round(abs / 24)} d`;
+}
+
+/**
+ * Lo mismo que `describeElapsed` pero redactado contra el comprobante, para la tarjeta del
+ * cajón: «2 h 53 antes del comprobante» / «12 min después del comprobante».
+ */
+export function describeGap(hours: number | null): string | null {
+  if (hours == null) return null;
+  const abs = Math.abs(hours);
+  const sufijo = hours < 0 ? 'después del comprobante' : 'antes del comprobante';
+  if (abs < 1) return `${Math.round(abs * 60)} min ${sufijo}`;
+  if (abs < 24) {
+    const h = Math.floor(abs);
+    const m = Math.round((abs - h) * 60);
+    return `${m ? `${h} h ${m}` : `${h} h`} ${sufijo}`;
+  }
+  return `${Math.round(abs / 24)} d ${sufijo}`;
 }

@@ -260,12 +260,14 @@ export function ClientSettingsTab({ client, pairs, operations, saving, onSave }:
             </p>
           </div>
 
+          {/* Caben en una fila: los dos son cortos y `h-11` ya da el toque de 44 px sin
+              necesitar apilarlos a ancho completo como antes. */}
           {dataDirty ? (
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button variant="outline" onClick={resetData} disabled={saving}>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" className="h-11" onClick={resetData} disabled={saving}>
                 Descartar
               </Button>
-              <Button onClick={askSaveData} disabled={saving}>
+              <Button className="h-11" onClick={askSaveData} disabled={saving}>
                 Guardar cambios
               </Button>
             </div>

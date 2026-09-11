@@ -33,7 +33,7 @@ import type {
   UnlinkPreview,
 } from '@/types/operation';
 import type { FundGroup } from '@/types/fund';
-import type { PaymentData, PaymentTable } from '@/types/payment';
+import type { CreateHint, PaymentData, PaymentTable } from '@/types/payment';
 import { describeCoverage } from './paymentRowData';
 import { CreateOperationForm } from './CreateOperationForm';
 import { OutgoingCoveragePanel } from './OutgoingCoveragePanel';
@@ -60,6 +60,13 @@ interface LinkOperationPanelProps {
   pickLabel?: string;
   /** El alta de operación puede tomar la cabecera del cajón mientras revisa una diferencia. */
   onHeaderChange?: (header: { title: string; eyebrow: string } | null) => void;
+  /**
+   * Con qué paso abre el panel. `'create'` es lo que pide la sugerencia CREATE: el cliente
+   * no tiene ninguna operación elegible, así que no tiene sentido aterrizar en el buscador.
+   */
+  initialMode?: 'pick' | 'create';
+  /** El par (y montos) que la sugerencia CREATE ya propuso, para no volver a adivinarlo. */
+  createHint?: CreateHint | null;
 }
 
 function stripPhone(phone: string | null) {
@@ -125,6 +132,8 @@ export function LinkOperationPanel({
   onPick,
   pickLabel = 'Elegir',
   onHeaderChange,
+  initialMode = 'pick',
+  createHint = null,
 }: LinkOperationPanelProps) {
   // Lo que respondió la última consulta al servidor: cada candidata ya trae su puntuación
   // contra este comprobante en la MISMA respuesta (`POST /operations/match` filtra, puntúa y
@@ -158,7 +167,7 @@ export function LinkOperationPanel({
   const [queryPhone, setQueryPhone] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [mode, setMode] = useState<'pick' | 'create' | 'coverage'>('pick');
+  const [mode, setMode] = useState<'pick' | 'create' | 'coverage'>(initialMode);
   // Cuánto del valor de la operación cubre este saliente (null = lo que da la tasa).
   const [settledAmount, setSettledAmount] = useState<number | null>(null);
   // Desvincular el último comprobante de una op abre el cuadro de decisión.
@@ -494,6 +503,7 @@ export function LinkOperationPanel({
         onSuccess={onSuccess}
         onBack={() => setMode('pick')}
         onHeaderChange={onHeaderChange}
+        createHint={createHint}
       />
     );
   }

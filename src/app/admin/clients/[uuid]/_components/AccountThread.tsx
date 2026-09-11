@@ -71,8 +71,11 @@ function ThreadHeader() {
  * Una operación en el hilo. Es una lectura, no una cola de trabajo: enseña el trato y en
  * qué estado quedó, y para actuar se entra en la operación o se filtra por «Por entregar».
  *
- * Se lee EXACTAMENTE igual que una fila de la cola —mismas columnas, mismos anchos, el
- * valor tachado cuando ya está cubierto—: cambiar de chip filtra la lista, no la rehace.
+ * Se lee EXACTAMENTE igual que una fila de la cola —mismos anchos en ≥lg, el valor tachado
+ * cuando ya está cubierto—: cambiar de chip filtra la lista, no la rehace. Por debajo de
+ * `lg` comparte también la misma tarjeta de dos líneas que `PendingWorkList`: la rejilla
+ * de columnas envolvía igual de roto aquí, y el comentario de `accountTable.ts` es
+ * literal — un ancho que cambia ahí cambia las dos listas a la vez.
  */
 function OperationRow({ operation, at }: { operation: OperationData; at: string | null }) {
   const state = operationState(operation);
@@ -85,12 +88,17 @@ function OperationRow({ operation, at }: { operation: OperationData; at: string 
   // Atarlo al estado tachaba el valor de una operación con 50 sin cubrir sólo porque su
   // dinero todavía no había entrado y por eso no estaba en la cola.
   const settled = pending <= EPSILON;
+  const stateWord = partial
+    ? 'Parcial'
+    : state === 'delivered' && operation.settles_in_cash
+      ? 'Cobrada'
+      : STATE_LABEL[state];
 
   return (
     <div className={cn(GRID, 'border-b border-border px-2 py-2 last:border-b-0 sm:px-3')}>
-      <span className={COL.check} aria-hidden />
+      <span className={cn(COL.check, 'hidden lg:block')} aria-hidden />
 
-      <div className={COL.when}>
+      <div className={cn(COL.when, 'hidden lg:block')}>
         <Link
           href={`/admin/operations/${operation.uuid}`}
           className="block truncate text-sm text-foreground hover:underline"
@@ -103,10 +111,7 @@ function OperationRow({ operation, at }: { operation: OperationData; at: string 
         </p>
       </div>
 
-      <div className={cn(COL.value, 'tabular-nums')}>
-        <span className="block text-[10px] uppercase tracking-wider text-muted-foreground lg:hidden">
-          Valor
-        </span>
+      <div className={cn(COL.value, 'hidden tabular-nums lg:block')}>
         {state === 'pending' ? (
           partial ? (
             <p className="text-sm">
@@ -137,20 +142,14 @@ function OperationRow({ operation, at }: { operation: OperationData; at: string 
         )}
       </div>
 
-      <div className={COL.state}>
+      <div className={cn(COL.state, 'hidden lg:block')}>
         {/* «Parcial» y no «Por entregar»: es la misma palabra que usa la cola de trabajo
             para esta misma operación, y verla cambiar al pasar de un chip a otro hacía
             dudar de si eran la misma fila. */}
-        <Chip className={STATE_TONE[state]}>
-          {partial
-            ? 'Parcial'
-            : state === 'delivered' && operation.settles_in_cash
-              ? 'Cobrada'
-              : STATE_LABEL[state]}
-        </Chip>
+        <Chip className={STATE_TONE[state]}>{stateWord}</Chip>
       </div>
 
-      <div className={cn('flex items-center', COL.action)}>
+      <div className={cn('hidden items-center lg:flex', COL.action)}>
         <Link
           href={`/admin/operations/${operation.uuid}`}
           className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'text-xs')}
@@ -158,20 +157,74 @@ function OperationRow({ operation, at }: { operation: OperationData; at: string 
           Ver
         </Link>
       </div>
+
+      {/* La tarjeta móvil: arriba fecha y cifra, abajo beneficiario (con el estado en
+          palabras) y la acción — la misma forma que una fila de la cola. */}
+      <div className="flex w-full basis-full flex-col gap-1.5 lg:hidden">
+        <div className="flex items-baseline justify-between gap-2">
+          <Link
+            href={`/admin/operations/${operation.uuid}`}
+            className="truncate text-sm text-foreground hover:underline"
+          >
+            {formatCaracasShortDateTime(at)}
+          </Link>
+          {state === 'pending' ? (
+            <span
+              className={cn(
+                'shrink-0 text-sm font-bold tabular-nums',
+                'text-amber-700 dark:text-amber-400',
+              )}
+            >
+              {formatPending(partial ? pending : value, currency)}
+            </span>
+          ) : (
+            <span className="shrink-0 text-sm">
+              <s className="text-muted-foreground">{formatPending(value, currency)}</s>{' '}
+              {state === 'delivered' ? (
+                <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                  Completado
+                </span>
+              ) : null}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="min-w-0 truncate text-xs text-muted-foreground">
+            {operation.beneficiary_alias || 'Sin beneficiario'}
+            {operation.pair_symbol ? ` · ${operation.pair_symbol}` : ''} · {stateWord}
+          </span>
+          <Link
+            href={`/admin/operations/${operation.uuid}`}
+            className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'h-8 shrink-0 text-xs')}
+          >
+            Ver
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }
 
-/** Un movimiento del saldo a favor. Mismo hilo, mismas columnas que una operación. */
+/**
+ * Un movimiento del saldo a favor. Mismo hilo, mismos anchos que una operación en ≥lg, y
+ * la misma tarjeta de dos líneas por debajo.
+ */
 function BalanceRow({ entry }: { entry: BalanceEntry }) {
   const isCredit = entry.entry_type === 'CREDIT';
   const tone = isCredit
     ? 'text-emerald-600 dark:text-emerald-400'
     : 'text-amber-600 dark:text-amber-400';
+  const detail = [
+    entry.incoming_payment_id != null ? `Pago entrante #${entry.incoming_payment_id}` : null,
+    entry.operation_uuid ? `op ${entry.operation_uuid.slice(0, 8)}` : null,
+    entry.created_by_username || (isCredit ? 'crédito' : 'abono'),
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <div className={cn(GRID, 'border-b border-border px-2 py-2 last:border-b-0 sm:px-3')}>
-      <span className={cn(COL.check, 'flex items-center justify-center')} aria-hidden>
+      <span className={cn(COL.check, 'hidden items-center justify-center lg:flex')} aria-hidden>
         {isCredit ? (
           <ArrowDownCircle className={cn('h-4 w-4', tone)} />
         ) : (
@@ -179,21 +232,14 @@ function BalanceRow({ entry }: { entry: BalanceEntry }) {
         )}
       </span>
 
-      <div className={COL.when}>
+      <div className={cn(COL.when, 'hidden lg:block')}>
         <p className="truncate text-sm text-foreground">
           {formatCaracasShortDateTime(entry.created_at)}
         </p>
-        <p className="truncate text-xs text-muted-foreground">
-          {entry.incoming_payment_id != null ? `Pago entrante #${entry.incoming_payment_id} · ` : ''}
-          {entry.operation_uuid ? `op ${entry.operation_uuid.slice(0, 8)} · ` : ''}
-          {entry.created_by_username || (isCredit ? 'crédito' : 'abono')}
-        </p>
+        <p className="truncate text-xs text-muted-foreground">{detail}</p>
       </div>
 
-      <div className={cn(COL.value, 'tabular-nums')}>
-        <span className="block text-[10px] uppercase tracking-wider text-muted-foreground lg:hidden">
-          Valor
-        </span>
+      <div className={cn(COL.value, 'hidden tabular-nums lg:block')}>
         <p className={cn('text-sm font-semibold', tone)}>
           {isCredit ? '+' : '−'}
           {formatUsd(entry.amount)}
@@ -206,18 +252,43 @@ function BalanceRow({ entry }: { entry: BalanceEntry }) {
         ) : null}
       </div>
 
-      <div className={COL.state}>
+      <div className={cn(COL.state, 'hidden lg:block')}>
         <Chip className="border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-400">
           {isCredit ? 'Crédito' : 'Abono'}
         </Chip>
       </div>
 
-      <div className={cn('flex items-center', COL.action)}>
+      <div className={cn('hidden items-center lg:flex', COL.action)}>
         {entry.notes ? (
           <span className="truncate text-xs text-muted-foreground" title={entry.notes}>
             {entry.notes}
           </span>
         ) : null}
+      </div>
+
+      <div className="flex w-full basis-full flex-col gap-1.5 lg:hidden">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="truncate text-sm text-foreground">
+            {formatCaracasShortDateTime(entry.created_at)}
+          </span>
+          <span className={cn('shrink-0 text-sm font-semibold', tone)}>
+            {isCredit ? '+' : '−'}
+            {formatUsd(entry.amount)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="min-w-0 truncate text-xs text-muted-foreground">
+            {detail} · {isCredit ? 'crédito' : 'abono'}
+            {!isCredit && entry.operation_rate_used != null
+              ? ` · @ ${entry.operation_rate_used.toLocaleString('es-VE', { maximumFractionDigits: 4 })}`
+              : ''}
+          </span>
+          {entry.notes ? (
+            <span className="max-w-[40%] shrink-0 truncate text-xs text-muted-foreground" title={entry.notes}>
+              {entry.notes}
+            </span>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -235,7 +306,7 @@ export function AccountThread({ items, emptyLabel }: AccountThreadProps) {
           <ThreadHeader />
           {items.map((item) =>
             item.kind === 'operation' ? (
-              <OperationRow key={item.key} operation={item.operation} at={item.at} />
+              <OperationRow key={item.key} operation={item.operation} at={item.displayAt} />
             ) : (
               <BalanceRow key={item.key} entry={item.entry} />
             ),

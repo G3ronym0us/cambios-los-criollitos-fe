@@ -147,10 +147,14 @@ export function DistributeAmountPanel({ state, actions }: DistributeAmountPanelP
           </CardContent>
         </Card>
 
-        <div className="flex flex-col gap-2 sm:flex-row">
+        {/* Este paso ya es una pantalla completa —sustituye la lista, no hace falta hoja
+            aparte—, así que lo que cambia en móvil es dónde viven los botones: salen del
+            cuerpo y se fijan abajo, para que sigan a mano con el teclado numérico abierto,
+            que es justo cuando se usan. */}
+        <div className="sticky bottom-3 z-10 flex gap-2 rounded-xl bg-background p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-lg ring-1 ring-border sm:static sm:rounded-none sm:bg-transparent sm:p-0 sm:pb-0 sm:shadow-none sm:ring-0">
           <Button
             variant="outline"
-            size="lg"
+            className="h-11 sm:h-9"
             onClick={() => {
               actions.setAmount('');
               actions.setMode('select');
@@ -159,8 +163,7 @@ export function DistributeAmountPanel({ state, actions }: DistributeAmountPanelP
             Cancelar
           </Button>
           <Button
-            size="lg"
-            className="flex-1"
+            className="h-11 flex-1 sm:h-9"
             disabled={!enough || excess > 0.01}
             onClick={actions.goToSplit}
           >
@@ -183,10 +186,12 @@ export function DistributeAmountPanel({ state, actions }: DistributeAmountPanelP
         hint="Marca las operaciones que cubre y ajusta lo que le toca a cada una. Para confirmar, lo colocado tiene que sumar el monto entero."
       />
 
-      {/* El marcador: lo único que hay que mirar para saber si ya se puede confirmar. */}
+      {/* El marcador: lo único que hay que mirar para saber si ya se puede confirmar. Fijo
+          bajo la cabecera mientras se scrollea la lista de operaciones — es la condición
+          para el botón de confirmar, que en móvil queda fuera de la vista casi siempre. */}
       <div
         className={cn(
-          'flex flex-wrap items-baseline justify-between gap-2 rounded-lg border px-3 py-2',
+          'sticky top-2 z-10 flex flex-wrap items-baseline justify-between gap-2 rounded-lg border px-3 py-2 shadow-sm',
           state.balanced
             ? 'border-emerald-500/30 bg-emerald-500/10'
             : 'border-amber-500/30 bg-amber-500/10',
@@ -225,29 +230,37 @@ export function DistributeAmountPanel({ state, actions }: DistributeAmountPanelP
             return (
               <div
                 key={operation.uuid}
-                className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-3 py-2 last:border-b-0"
+                className="flex flex-col gap-2 border-b border-border px-3 py-3 last:border-b-0 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2 sm:py-2"
               >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => actions.toggleAllocation(operation.uuid)}
-                  aria-label={`Incluir la operación del ${formatCaracasShortDateTime(pendingSince(operation))}`}
-                  className="h-4 w-4 shrink-0 accent-[var(--primary)]"
-                />
+                {/* `sm:contents`: en escritorio la casilla y la fecha vuelven a ser dos
+                    hijos sueltos de la fila flex-wrap de siempre; en móvil este div es su
+                    propia línea. */}
+                <div className="flex items-center gap-3 sm:contents">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => actions.toggleAllocation(operation.uuid)}
+                    aria-label={`Incluir la operación del ${formatCaracasShortDateTime(pendingSince(operation))}`}
+                    className="h-4 w-4 shrink-0 accent-[var(--primary)]"
+                  />
 
-                <div className="min-w-0 flex-1 basis-40">
-                  <p className="truncate text-sm text-foreground">
-                    {formatCaracasShortDateTime(pendingSince(operation))}
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    debe {formatPending(pending, currency)}
-                  </p>
+                  <div className="min-w-0 flex-1 basis-40">
+                    <p className="truncate text-sm text-foreground">
+                      {formatCaracasShortDateTime(pendingSince(operation))}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      debe {formatPending(pending, currency)}
+                    </p>
+                  </div>
                 </div>
 
-                <div className="flex shrink-0 items-center gap-2">
+                {/* El campo baja, no se estrecha: en 390 px un `w-28` junto a la fecha
+                    dejaba ~110 px para un importe de nueve cifras. Aquí se lleva su propia
+                    línea a ancho completo — el mismo campo, tres veces más grande. */}
+                <div className="flex items-center gap-2 pl-7 sm:shrink-0 sm:pl-0">
                   <Label
                     htmlFor={`alloc-${operation.uuid}`}
-                    className="text-[10px] uppercase tracking-wider text-muted-foreground"
+                    className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground"
                   >
                     Le toca
                   </Label>
@@ -262,10 +275,13 @@ export function DistributeAmountPanel({ state, actions }: DistributeAmountPanelP
                     }}
                     placeholder="0,00"
                     className={cn(
-                      'h-9 w-28 text-right tabular-nums',
+                      'h-11 flex-1 text-right text-base tabular-nums sm:h-9 sm:w-28 sm:flex-none sm:text-sm',
                       tooMuch && 'border-destructive text-destructive',
                     )}
                   />
+                  <span className="shrink-0 text-sm font-semibold text-muted-foreground sm:hidden">
+                    {currency}
+                  </span>
                 </div>
 
                 {tooMuch ? (
@@ -288,13 +304,12 @@ export function DistributeAmountPanel({ state, actions }: DistributeAmountPanelP
         </p>
       ) : null}
 
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Button variant="outline" size="lg" onClick={actions.backToAmount}>
+      <div className="sticky bottom-3 z-10 flex gap-2 rounded-xl bg-background p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-lg ring-1 ring-border sm:static sm:rounded-none sm:bg-transparent sm:p-0 sm:pb-0 sm:shadow-none sm:ring-0">
+        <Button variant="outline" className="h-11 sm:h-9" onClick={actions.backToAmount}>
           Cambiar el monto
         </Button>
         <Button
-          size="lg"
-          className="flex-1"
+          className="h-11 flex-1 sm:h-9"
           disabled={!state.balanced || state.working}
           onClick={actions.applyDistribution}
         >

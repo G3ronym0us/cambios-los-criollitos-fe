@@ -55,6 +55,31 @@ export interface OperationData {
    */
   first_incoming_payment_at: string | null;
   /**
+   * Cuándo llegó el ÚLTIMO comprobante ENTRANTE del cliente — el más reciente, no el
+   * primero. Distinto a propósito de `first_incoming_payment_at`: ese mide antigüedad
+   * (desde cuándo espera la operación); este es el hecho más reciente, lo que hay que
+   * enseñar como «fecha del pago» cuando el cliente pagó en varias partes. `null` en los
+   * mismos casos que el anterior (sin entrante, p.ej. `VIA_PARTNER` o un par en efectivo).
+   */
+  last_incoming_payment_at: string | null;
+  /**
+   * Cuándo salió NUESTRA plata: el primer comprobante de SALIDA. El espejo de
+   * `first_incoming_payment_at`, y por el mismo motivo mide antigüedad y no el hecho más
+   * reciente.
+   *
+   * Es la fecha que salva a los pares de efectivo. Ahí el entrante no existe —de un billete
+   * no hay foto— y sin esta fecha la antigüedad caía a `created_at`: cinco operaciones
+   * tecleadas a mano en el mismo minuto salían todas con la misma espera aunque los pagos
+   * fueran de días distintos.
+   */
+  first_outgoing_payment_at: string | null;
+  /**
+   * Cuándo salió la ÚLTIMA: el comprobante de salida más reciente. Es al de arriba lo que
+   * `last_incoming_payment_at` es a `first_incoming_payment_at` — el hecho que se ENSEÑA
+   * como «fecha del pago» cuando se pagó en varias partes, no el que ordena la cola.
+   */
+  last_outgoing_payment_at: string | null;
+  /**
    * Su par se cambia en efectivo (`CurrencyPair.settles_in_cash`).
    *
    * Entonces `first_incoming_payment_at` vacío NO dice que el cliente no haya pagado: dice
