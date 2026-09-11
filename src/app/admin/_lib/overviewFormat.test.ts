@@ -90,11 +90,29 @@ describe('formatDailyAverage', () => {
 
 describe('topShareOfTotal', () => {
   it('el porcentaje que representan los mayores', () => {
-    expect(topShareOfTotal([620, 410, 380], 1980)).toBe(71);
+    const usd = (amount: number) => ({ amount, currency: 'USD' });
+    expect(
+      topShareOfTotal([usd(620), usd(410), usd(380)], [usd(1980)])
+    ).toBe(71);
   });
 
   it('null sin total contra qué dividir', () => {
-    expect(topShareOfTotal([1], 0)).toBeNull();
+    expect(topShareOfTotal([{ amount: 1, currency: 'USD' }], [{ amount: 0, currency: 'USD' }])).toBeNull();
+  });
+
+  it('null si el total mezcla más de una moneda: no hay % honesto que dar', () => {
+    expect(
+      topShareOfTotal(
+        [{ amount: 100, currency: 'ZELLE' }, { amount: 100, currency: 'USD' }],
+        [{ amount: 1066.6, currency: 'USD' }, { amount: 500, currency: 'ZELLE' }]
+      )
+    ).toBeNull();
+  });
+
+  it('null si los mayores traen una moneda que no está en el total', () => {
+    expect(
+      topShareOfTotal([{ amount: 100, currency: 'VES' }], [{ amount: 1000, currency: 'USD' }])
+    ).toBeNull();
   });
 });
 

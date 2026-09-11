@@ -18,6 +18,32 @@ interface Props {
   onClose: () => void;
 }
 
+// Los mismos valores en crudo que devuelve el bot/backend (`intent`, `amountSide`,
+// `operation.status`): sin este mapeo se leían tal cual en la pantalla ("QUOTE",
+// "SEND", "PENDING_VERIFICATION"). El valor sin mapear se muestra igual — nunca se
+// oculta un dato porque no esté en la lista.
+const INTENT_LABEL: Record<string, string> = {
+  QUOTE: 'Cotización',
+  APPROVE: 'Aprobación',
+  CANCEL: 'Cancelación',
+  CHAT: 'Charla',
+  UNKNOWN: 'No identificada',
+};
+
+const AMOUNT_SIDE_LABEL: Record<string, string> = {
+  SEND: 'Envía',
+  RECEIVE: 'Recibe',
+  FROM: 'Origen',
+  TO: 'Destino',
+};
+
+const OPERATION_STATUS_LABEL: Record<string, string> = {
+  QUOTED: 'Cotizada',
+  PENDING: 'Pendiente',
+  COMPLETED: 'Completada',
+  CANCELLED: 'Cancelada',
+};
+
 function Campo({ label, value }: { label: string; value: React.ReactNode }) {
   if (value === null || value === undefined || value === '') return null;
   return (
@@ -79,7 +105,10 @@ export function AnalysisDetail({ analysis, onClose }: Props) {
         <section>
           <h3 className="mb-1 text-sm font-semibold">Lo que dedujo</h3>
           <div className="divide-y divide-border">
-            <Campo label="Intención" value={output?.intent} />
+            <Campo
+              label="Intención"
+              value={output?.intent ? (INTENT_LABEL[output.intent] ?? output.intent) : null}
+            />
             <Campo label="Monto" value={output?.amount} />
             <Campo
               label="Par"
@@ -89,7 +118,10 @@ export function AnalysisDetail({ analysis, onClose }: Props) {
                   : null
               }
             />
-            <Campo label="Lado" value={output?.amountSide} />
+            <Campo
+              label="Lado"
+              value={output?.amountSide ? (AMOUNT_SIDE_LABEL[output.amountSide] ?? output.amountSide) : null}
+            />
             <Campo label="Margen" value={output?.marginOverride} />
             <Campo label="Beneficiario" value={output?.beneficiaryAlias} />
             <Campo label="Datos de pago" value={output?.paymentInfo} />
@@ -117,7 +149,10 @@ export function AnalysisDetail({ analysis, onClose }: Props) {
           <h3 className="mb-1 text-sm font-semibold">Lo que salió</h3>
           {operation ? (
             <div className="divide-y divide-border">
-              <Campo label="Estado" value={operation.status} />
+              <Campo
+                label="Estado"
+                value={operation.status ? (OPERATION_STATUS_LABEL[operation.status] ?? operation.status) : null}
+              />
               <Campo label="Par" value={operation.pair_symbol} />
               <Campo
                 label="Montos"
