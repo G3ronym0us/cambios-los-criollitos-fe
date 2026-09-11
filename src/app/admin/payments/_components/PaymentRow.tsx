@@ -100,8 +100,15 @@ export function PaymentRow({ payment: p, outgoing, suggestion, onManage }: Payme
           </Link>
         ) : suggestion ? (
           <span
-            className="flex items-center gap-1.5 text-primary"
-            title={`Sugerida por el matcher${suggestion.confident ? '' : ' (hay otra candidata igual de cerca)'}`}
+            className={cn(
+              'flex items-center gap-1.5',
+              suggestion.same_client ? 'text-primary' : 'text-amber-600 dark:text-amber-400',
+            )}
+            title={
+              suggestion.same_client
+                ? `Sugerida por el matcher${suggestion.confident ? '' : ' (hay otra candidata igual de cerca)'}`
+                : `Ojo: la operación es de ${suggestion.client_name ?? 'otro cliente'}`
+            }
           >
             <Sparkles className={cn('h-3 w-3 shrink-0', !suggestion.confident && 'opacity-60')} />
             <span className="truncate">{describeSuggestion(suggestion)}</span>

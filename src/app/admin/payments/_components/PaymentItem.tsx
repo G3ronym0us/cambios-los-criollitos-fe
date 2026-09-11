@@ -90,7 +90,7 @@ export function PaymentItem({ payment: p, outgoing, suggestion, onManage }: Paym
           </StatusBadge>
         ) : null}
         {suggestedLabel && !p.operation_uuid ? (
-          <StatusBadge tone="primary" icon={Sparkles}>
+          <StatusBadge tone={suggestion?.same_client === false ? 'warning' : 'primary'} icon={Sparkles}>
             <span className="truncate">Sugerida {suggestedLabel}</span>
           </StatusBadge>
         ) : null}
