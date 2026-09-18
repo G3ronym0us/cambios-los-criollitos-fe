@@ -34,6 +34,10 @@ export const defaultValues: CurrencyPairFormData = {
   rounding_amount_side: null,
   negotiation_step: null,
   negotiation_step_side: null,
+  default_fund_in_uuid: null,
+  default_fund_in_profit_pct: null,
+  default_fund_out_uuid: null,
+  default_fund_out_profit_pct: null,
 };
 
 /** El backend serializa los Numeric como string ("3000.0"); los inputs quieren number. */
@@ -68,6 +72,10 @@ export function buildEditDefaults(pair: CurrencyPairData): CurrencyPairFormData 
     rounding_amount_side: pair.rounding_amount_side ?? null,
     negotiation_step: toNumber(pair.negotiation_step),
     negotiation_step_side: pair.negotiation_step_side ?? null,
+    default_fund_in_uuid: pair.default_fund_in_uuid ?? null,
+    default_fund_in_profit_pct: toNumber(pair.default_fund_in_profit_pct),
+    default_fund_out_uuid: pair.default_fund_out_uuid ?? null,
+    default_fund_out_profit_pct: toNumber(pair.default_fund_out_profit_pct),
   };
 }
 

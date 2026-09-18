@@ -150,6 +150,15 @@ export class OperationService {
     return { success: result.success, data: result.data, error: result.error };
   }
 
+  // Reescala el reparto en proporción para que sume lo cobrado (7/3 cobrado al 8% → 5,6/2,4).
+  async scaleProfitAllocationsToCharged(uuid: string): Promise<ApiResponse<ProfitAllocationList>> {
+    const result = await httpClient.post<ProfitAllocationList>(
+      `/operations/${uuid}/profit-allocations/scale-to-charged`,
+      {},
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
   async updateValue(uuid: string, amount: number): Promise<ApiResponse<OperationData>> {
     const result = await httpClient.patch<OperationData>(`/operations/${uuid}/value`, { amount });
     return { success: result.success, data: result.data, error: result.error };

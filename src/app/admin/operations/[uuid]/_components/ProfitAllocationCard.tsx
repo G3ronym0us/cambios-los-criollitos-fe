@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, Gift, PiggyBank, Plus, Trash2, TrendingUp } from 'lucide-react';
+import { AlertTriangle, Gift, PiggyBank, Plus, Scale, Trash2, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -63,6 +63,7 @@ export function ProfitAllocationCard({
   const [editing, setEditing] = useState(false);
   const [rows, setRows] = useState<DraftRow[]>([]);
   const [saving, setSaving] = useState(false);
+  const [scaling, setScaling] = useState(false);
 
   const load = useCallback(async () => {
     const result = await operationService.getProfitAllocations(operationUuid);
@@ -122,6 +123,20 @@ export function ProfitAllocationCard({
       toast.success('Reparto actualizado');
     } else {
       toast.error(result.error || 'No se pudo guardar el reparto');
+    }
+  };
+
+  // El reparto del par es la meta (7/3) aunque se haya cobrado distinto; esto lo reescala en
+  // proporción a lo cobrado (al 8% → 5,6/2,4) y queda firmado por quien lo hizo.
+  const scaleToCharged = async () => {
+    setScaling(true);
+    const result = await operationService.scaleProfitAllocationsToCharged(operationUuid);
+    setScaling(false);
+    if (result.success && result.data) {
+      setData(result.data);
+      toast.success('Reparto ajustado a lo cobrado');
+    } else {
+      toast.error(result.error || 'No se pudo ajustar el reparto');
     }
   };
 
@@ -278,30 +293,38 @@ export function ProfitAllocationCard({
             )}
 
             {Math.abs(unallocated) > 0.001 ? (
-              <p
-                className={
-                  overAllocated
-                    ? 'text-sm text-amber-700 dark:text-amber-400'
-                    : 'text-sm text-muted-foreground'
-                }
-              >
-                {overAllocated ? (
-                  <>
-                    Se repartió{' '}
-                    <span className="font-semibold tabular-nums">
-                      {Math.abs(unallocated)}%
-                    </span>{' '}
-                    más de lo cobrado
-                    {data.allocations.some((a) => a.approved_at) ? ', aprobado por el operador' : ''}
-                    .
-                  </>
-                ) : (
-                  <>
-                    Quedan <span className="font-semibold tabular-nums">{unallocated}%</span> sin
-                    asignar.
-                  </>
-                )}
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p
+                  className={
+                    overAllocated
+                      ? 'text-sm text-amber-700 dark:text-amber-400'
+                      : 'text-sm text-muted-foreground'
+                  }
+                >
+                  {overAllocated ? (
+                    <>
+                      Se repartió{' '}
+                      <span className="font-semibold tabular-nums">
+                        {Math.abs(unallocated)}%
+                      </span>{' '}
+                      más de lo cobrado
+                      {data.allocations.some((a) => a.approved_at) ? ', aprobado por el operador' : ''}
+                      .
+                    </>
+                  ) : (
+                    <>
+                      Quedan <span className="font-semibold tabular-nums">{unallocated}%</span> sin
+                      asignar.
+                    </>
+                  )}
+                </p>
+                {canEdit && data.allocations.length > 0 && (charged ?? 0) > 0 ? (
+                  <Button variant="outline" size="sm" onClick={scaleToCharged} disabled={scaling}>
+                    <Scale className="h-4 w-4" />
+                    {scaling ? 'Ajustando...' : 'Ajustar a lo cobrado'}
+                  </Button>
+                ) : null}
+              </div>
             ) : null}
           </>
         )}

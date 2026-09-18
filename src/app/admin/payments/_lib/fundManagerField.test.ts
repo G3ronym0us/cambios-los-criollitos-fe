@@ -84,6 +84,21 @@ describe('splitFundOptions', () => {
   it('sin fondos que casen, todos quedan como otros', () => {
     expect(splitFundOptions([co, br], 'USD', 'VES')).toEqual({ suggested: [], others: [co, br] });
   });
+
+  it('sube el fondo de entrada del par, y de primero', () => {
+    expect(splitFundOptions([ve, co, br], 'USD', 'VES', null, null, 'br')).toEqual({
+      suggested: [br, ve],
+      others: [co],
+    });
+  });
+
+  it('el fondo del pago le gana al del par', () => {
+    // Igual que en el backend: el comprobante manda sobre el defecto del par.
+    expect(splitFundOptions([ve, co, br], 'USD', 'VES', 'co', null, 'br')).toEqual({
+      suggested: [co, br, ve],
+      others: [],
+    });
+  });
 });
 
 describe('defaultManagerFor / isManagerOverridden', () => {

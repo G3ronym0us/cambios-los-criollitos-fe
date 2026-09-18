@@ -90,6 +90,7 @@ export default function CurrencyPairDetailPage() {
         pair={pair}
         basePairs={state.basePairs}
         derivedPairs={state.derivedPairs}
+        funds={state.funds}
         fiatSymbol={state.fiatSymbol}
         error={state.error}
         onSave={actions.save}

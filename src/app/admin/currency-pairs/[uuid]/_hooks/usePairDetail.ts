@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { AdminService } from '@/services/adminService';
+import { fundService } from '@/services/fundService';
 import { CurrencyPairData, DerivedPairData, UpdateCurrencyPairData } from '@/types/admin';
+import type { FundGroup } from '@/types/fund';
 import type { CurrencyPairFormData } from '../../_components/sections/formShared';
 
 const adminService = new AdminService();
@@ -12,6 +14,7 @@ export function usePairDetail(uuid: string) {
   const [pair, setPair] = useState<CurrencyPairData | null>(null);
   const [basePairs, setBasePairs] = useState<CurrencyPairData[]>([]);
   const [derivedPairs, setDerivedPairs] = useState<DerivedPairData[]>([]);
+  const [funds, setFunds] = useState<FundGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState('');
@@ -38,6 +41,13 @@ export function usePairDetail(uuid: string) {
       if (result.success && result.data) setBasePairs(result.data);
     };
     loadBasePairs();
+  }, []);
+
+  // Los fondos activos, para elegir el fondo por defecto de cada pata.
+  useEffect(() => {
+    fundService.getGroups().then((result) => {
+      if (result.success && result.data) setFunds(result.data.filter((g) => g.is_active));
+    });
   }, []);
 
   // Apagar un par base arrastra a sus derivados: hay que poder avisarlo antes.
@@ -106,6 +116,9 @@ export function usePairDetail(uuid: string) {
         updateData as UpdateCurrencyPairData
       );
       if (!result.success) {
+        // El motivo del backend (ej. «un porcentaje sin su fondo») queda visible junto al
+        // botón, no solo en un toast que se va.
+        setError(result.error || '');
         toast.error(result.error || 'Error al actualizar el par');
         return false;
       }
@@ -119,7 +132,7 @@ export function usePairDetail(uuid: string) {
   );
 
   return {
-    state: { pair, basePairs, derivedPairs, loading, notFound, error, fiatSymbol },
+    state: { pair, basePairs, derivedPairs, funds, loading, notFound, error, fiatSymbol },
     actions: { setError, save, reload: loadPair },
   };
 }

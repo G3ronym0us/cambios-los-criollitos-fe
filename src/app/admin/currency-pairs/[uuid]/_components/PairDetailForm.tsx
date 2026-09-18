@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { Save } from 'lucide-react';
 import { CurrencyPairData, DerivedPairData } from '@/types/admin';
+import type { FundGroup } from '@/types/fund';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -14,11 +15,13 @@ import { GeneralSection } from '../../_components/sections/GeneralSection';
 import { RateSourceSection } from '../../_components/sections/RateSourceSection';
 import { RoundingSection } from '../../_components/sections/RoundingSection';
 import { StatusSection } from '../../_components/sections/StatusSection';
+import { FundsSection } from '../../_components/sections/FundsSection';
 
 interface PairDetailFormProps {
   pair: CurrencyPairData;
   basePairs: CurrencyPairData[];
   derivedPairs: DerivedPairData[];
+  funds: FundGroup[];
   fiatSymbol: string | null;
   error: string;
   onSave: (data: CurrencyPairFormData) => Promise<boolean>;
@@ -28,6 +31,7 @@ export function PairDetailForm({
   pair,
   basePairs,
   derivedPairs,
+  funds,
   fiatSymbol,
   error,
   onSave,
@@ -73,6 +77,12 @@ export function PairDetailForm({
             fromType={pair.from_currency.currency_type}
             toType={pair.to_currency.currency_type}
             derivedPairs={derivedPairs}
+          />
+          <FundsSection
+            {...sectionProps}
+            funds={funds}
+            fromSymbol={pair.from_currency.symbol}
+            toSymbol={pair.to_currency.symbol}
           />
         </TabsContent>
 

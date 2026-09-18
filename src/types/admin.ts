@@ -89,6 +89,17 @@ export interface CurrencyPairData {
   negotiation_step?: number | null;
   /** En qué moneda del par está expresado `negotiation_step`. */
   negotiation_step_side?: 'FROM' | 'TO' | null;
+  /**
+   * Fondo por defecto de cada pata y los puntos del margen que se queda. Es lo que toma una
+   * operación nueva cuando nadie eligió fondo a mano ni lo trae el comprobante. Sin fondo de
+   * entrada, la operación nace sin fondo (USD-VES: es efectivo).
+   */
+  default_fund_in_uuid?: string | null;
+  default_fund_in_name?: string | null;
+  default_fund_in_profit_pct?: number | null;
+  default_fund_out_uuid?: string | null;
+  default_fund_out_name?: string | null;
+  default_fund_out_profit_pct?: number | null;
   /** Solo la llenan el listado y el detalle; en otros endpoints llega `null`. */
   current_rate?: CurrencyPairRateInfo | null;
   created_at: string;
@@ -118,6 +129,10 @@ export interface CreateCurrencyPairData {
   rounding_amount_side?: 'FROM' | 'TO' | null;
   negotiation_step?: number | null;
   negotiation_step_side?: 'FROM' | 'TO' | null;
+  default_fund_in_uuid?: string | null;
+  default_fund_in_profit_pct?: number | null;
+  default_fund_out_uuid?: string | null;
+  default_fund_out_profit_pct?: number | null;
 }
 
 export interface UpdateCurrencyPairData {
@@ -141,6 +156,11 @@ export interface UpdateCurrencyPairData {
   rounding_amount_side?: 'FROM' | 'TO' | null;
   negotiation_step?: number | null;
   negotiation_step_side?: 'FROM' | 'TO' | null;
+  /** `null` quita el fondo. Un porcentaje sin su fondo lo rechaza el backend (400). */
+  default_fund_in_uuid?: string | null;
+  default_fund_in_profit_pct?: number | null;
+  default_fund_out_uuid?: string | null;
+  default_fund_out_profit_pct?: number | null;
 }
 
 export interface CurrencyPairStatusData {

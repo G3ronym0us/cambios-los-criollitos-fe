@@ -33,6 +33,9 @@ export interface FundOptions {
  *
  * `others` NO se descarta: antes el campo solo ofrecía los sugeridos, así que con un único
  * fondo candidato «Cambiar» no tenía nada que ofrecer y se quedaba en quitar y poner el mismo.
+ *
+ * El fondo de entrada del par (`pairDefaultFundUuid`) también sube, y de primero; solo el del
+ * pago le gana, igual que en el backend: el comprobante manda sobre el defecto del par.
  */
 export function splitFundOptions(
   groups: FundGroup[],
@@ -40,18 +43,23 @@ export function splitFundOptions(
   toCur: string,
   paymentFundGroupUuid?: string | null,
   selectedGroupUuid?: string | null,
+  pairDefaultFundUuid?: string | null,
 ): FundOptions {
   const suggested: FundGroup[] = [];
   const others: FundGroup[] = [];
   for (const g of groups) {
     const pinned =
       (!!paymentFundGroupUuid && g.uuid === paymentFundGroupUuid) ||
-      (!!selectedGroupUuid && g.uuid === selectedGroupUuid);
+      (!!selectedGroupUuid && g.uuid === selectedGroupUuid) ||
+      (!!pairDefaultFundUuid && g.uuid === pairDefaultFundUuid);
     if (pinned || matchesPairCurrency(g, fromCur, toCur)) suggested.push(g);
     else others.push(g);
   }
-  const fromPayment = suggested.findIndex((g) => g.uuid === paymentFundGroupUuid);
-  if (fromPayment > 0) suggested.unshift(suggested.splice(fromPayment, 1)[0]);
+  // Se sube primero el del par y después el del pago, que así queda por delante de todos.
+  for (const uuid of [pairDefaultFundUuid, paymentFundGroupUuid]) {
+    const index = uuid ? suggested.findIndex((g) => g.uuid === uuid) : -1;
+    if (index > 0) suggested.unshift(suggested.splice(index, 1)[0]);
+  }
   return { suggested, others };
 }
 

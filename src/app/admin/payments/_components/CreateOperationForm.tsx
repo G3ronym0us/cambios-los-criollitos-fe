@@ -156,6 +156,8 @@ export function CreateOperationForm({
   // 0% exacto en un −0,0001% que `implied_margin` ya no reconoce como margen y descarta.
   const [derivedExact, setDerivedExact] = useState<number | null>(null);
   const [fundGroupUuid, setFundGroupUuid] = useState('');
+  // Si el operador ya eligió fondo a mano, cambiar de par no se lo pisa con el del par.
+  const fundTouchedRef = useRef(false);
   const [exchangeUserUuid, setExchangeUserUuid] = useState('');
   const [creating, setCreating] = useState(false);
   // Mientras haya diferencia, el cuerpo del cajón es el paso de revisión y no el formulario.
@@ -276,6 +278,18 @@ export function CreateOperationForm({
   const pair = useMemo(() => pairs.find((p) => p.uuid === pairUuid), [pairs, pairUuid]);
   const fromCur = pair?.from_currency?.symbol ?? '';
   const toCur = pair?.to_currency?.symbol ?? '';
+
+  // Prefill: sin fondo en el comprobante, el campo arranca en el fondo de entrada del par, y
+  // lo sigue si cambia el par mientras nadie lo haya tocado a mano. Mismo orden que el
+  // backend al crear la op: elegido a mano > comprobante > defecto del par > sin fondo.
+  useEffect(() => {
+    if (loadingData || payment.fund_group_uuid || fundTouchedRef.current) return;
+    const group = pair?.default_fund_in_uuid
+      ? groups.find((g) => g.uuid === pair.default_fund_in_uuid)
+      : undefined;
+    setFundGroupUuid(group?.uuid ?? '');
+    setExchangeUserUuid(defaultManagerFor(group)?.user_uuid ?? '');
+  }, [pair, groups, loadingData, payment.fund_group_uuid]);
 
   useEffect(() => {
     if (!pairUuid) {
@@ -630,8 +644,16 @@ export function CreateOperationForm({
   // Los fondos que el par sugiere y —aparte, no descartados— todos los demás: el paso los
   // lista en dos secciones y así «Cambiar» siempre tiene algo que ofrecer.
   const { suggested: fundOptions, others: otherFunds } = useMemo(
-    () => splitFundOptions(groups, fromCur, toCur, payment.fund_group_uuid, fundGroupUuid),
-    [groups, fromCur, toCur, payment.fund_group_uuid, fundGroupUuid],
+    () =>
+      splitFundOptions(
+        groups,
+        fromCur,
+        toCur,
+        payment.fund_group_uuid,
+        fundGroupUuid,
+        pair?.default_fund_in_uuid,
+      ),
+    [groups, fromCur, toCur, payment.fund_group_uuid, fundGroupUuid, pair?.default_fund_in_uuid],
   );
   const selectedGroup = useMemo(() => groups.find((g) => g.uuid === fundGroupUuid), [groups, fundGroupUuid]);
 
@@ -642,6 +664,7 @@ export function CreateOperationForm({
    * de vuelta al confirmar un gestor que no es el del fondo.
    */
   const selectFund = (groupUuid: string) => {
+    fundTouchedRef.current = true;
     setFundGroupUuid(groupUuid);
     const group = groups.find((g) => g.uuid === groupUuid);
     setExchangeUserUuid(defaultManagerFor(group)?.user_uuid ?? '');
@@ -847,6 +870,7 @@ export function CreateOperationForm({
         toCur={toCur}
         onBack={() => setShowFundStep(false)}
         onConfirm={(groupUuid, managerUuid) => {
+          fundTouchedRef.current = true;
           setFundGroupUuid(groupUuid);
           setExchangeUserUuid(managerUuid);
           setShowFundStep(false);
