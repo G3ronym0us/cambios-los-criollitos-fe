@@ -28,6 +28,27 @@ interface PaymentsListProps {
   // Fila a la que volver (retorno desde "Ver operación"): scroll + resaltado.
   focusId?: number | null;
   onFocusHandled?: () => void;
+  /** Con la selección múltiple encendida: qué está marcado y qué se puede marcar. */
+  selection?: ListSelection;
+}
+
+export interface ListSelection {
+  selected: ReadonlySet<number>;
+  selectableIds: ReadonlySet<number>;
+  allSelected: boolean;
+  someSelected: boolean;
+  onToggle: (id: number) => void;
+  onToggleAll: () => void;
+}
+
+function rowSelection(selection: ListSelection | undefined, id: number) {
+  if (!selection) return undefined;
+  const disabled = !selection.selectableIds.has(id);
+  return {
+    checked: !disabled && selection.selected.has(id),
+    disabled,
+    onToggle: () => selection.onToggle(id),
+  };
 }
 
 function TableSkeleton() {
@@ -96,6 +117,7 @@ export function PaymentsList({
   onManage,
   focusId,
   onFocusHandled,
+  selection,
 }: PaymentsListProps) {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -209,7 +231,18 @@ export function PaymentsList({
     <div className="space-y-3">
       {/* Desktop: tabla densa. */}
       <div className="hidden overflow-hidden rounded-xl border border-border bg-card lg:block">
-        <PaymentRowHeader />
+        <PaymentRowHeader
+          selection={
+            selection
+              ? {
+                  checked: selection.allSelected,
+                  indeterminate: selection.someSelected,
+                  disabled: selection.selectableIds.size === 0,
+                  onToggle: selection.onToggleAll,
+                }
+              : undefined
+          }
+        />
         {payments.map((p) => (
           <PaymentRow
             key={p.uuid}
@@ -217,6 +250,7 @@ export function PaymentsList({
             outgoing={outgoing}
             suggestion={suggestions[p.id]}
             onManage={onManage}
+            selection={rowSelection(selection, p.id)}
           />
         ))}
       </div>
@@ -230,6 +264,7 @@ export function PaymentsList({
             outgoing={outgoing}
             suggestion={suggestions[p.id]}
             onManage={onManage}
+            selection={rowSelection(selection, p.id)}
           />
         ))}
       </div>
