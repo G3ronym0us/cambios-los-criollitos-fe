@@ -3,11 +3,12 @@
 import Link from 'next/link';
 import { MoreHorizontal, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SelectCheckbox } from '@/components/shared/SelectCheckbox';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { cn } from '@/lib/utils';
 import { getPaymentAction, getPaymentStatusMeta, getPaymentTag } from '@/utils/paymentStatus';
 import type { PaymentData, PaymentSuggestion } from '@/types/payment';
-import { rememberFocus } from './PaymentRow';
+import { rememberFocus, type RowSelection } from './PaymentRow';
 import { describePayment, describeSuggestion } from './paymentRowData';
 
 interface PaymentItemProps {
@@ -15,13 +16,20 @@ interface PaymentItemProps {
   outgoing: boolean;
   suggestion?: PaymentSuggestion;
   onManage?: (payment: PaymentData) => void;
+  selection?: RowSelection;
 }
 
 /**
  * La misma fila, en tarjeta, para mobile. La acción principal ocupa el ancho y llega a los
  * 44px de alto: en el teléfono el operador atiende la bandeja con el pulgar.
  */
-export function PaymentItem({ payment: p, outgoing, suggestion, onManage }: PaymentItemProps) {
+export function PaymentItem({
+  payment: p,
+  outgoing,
+  suggestion,
+  onManage,
+  selection,
+}: PaymentItemProps) {
   const d = describePayment(p);
   const status = getPaymentStatusMeta(p, outgoing);
   const tag = getPaymentTag(p, outgoing);
@@ -34,6 +42,7 @@ export function PaymentItem({ payment: p, outgoing, suggestion, onManage }: Paym
       id={`payment-row-${table}-${p.id}`}
       className={cn(
         'rounded-xl border border-border bg-card p-3',
+        selection?.checked && 'border-primary/60 bg-primary/5',
         status.attention &&
           (status.tone === 'destructive'
             ? 'shadow-[inset_3px_0_0] shadow-destructive'
@@ -41,7 +50,17 @@ export function PaymentItem({ payment: p, outgoing, suggestion, onManage }: Paym
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        {selection ? (
+          <div className="-my-2 -ml-2 shrink-0">
+            <SelectCheckbox
+              checked={selection.checked}
+              disabled={selection.disabled}
+              label={`Seleccionar el pago de ${d.amount}`}
+              onChange={selection.onToggle}
+            />
+          </div>
+        ) : null}
+        <div className="min-w-0 flex-1">
           {p.client_uuid ? (
             <Link
               href={`/admin/clients/${p.client_uuid}`}

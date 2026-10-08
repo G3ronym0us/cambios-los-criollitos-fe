@@ -390,7 +390,11 @@ export function ClientAccountTab({
         />
       </div>
       <div hidden={filter === 'pending'}>
-        <AccountThread items={items} emptyLabel={EMPTY_LABEL[filter]} />
+        <AccountThread
+          items={items}
+          emptyLabel={EMPTY_LABEL[filter]}
+          resetKey={`${filter}:${pair}`}
+        />
       </div>
 
       {hasOpenLoan && filter === 'pending' ? (

@@ -6,6 +6,7 @@ function stats(needs_attention: number): PaymentStats {
   return {
     table: 'incoming',
     needs_attention,
+    unlinked: 0,
     unassigned: [],
     unassigned_truncated: false,
     received_today: 0,

@@ -61,6 +61,7 @@ export class PaymentService {
     if (query.outClass && query.outClass !== 'ALL') sp.set('out_class', query.outClass);
     if (query.dateFrom) sp.set('date_from', query.dateFrom);
     if (query.dateTo) sp.set('date_to', query.dateTo);
+    if (query.clientUuid) sp.set('client_uuid', query.clientUuid);
   }
 
   // Cuánto del valor de una operación cubriría este comprobante de salida.

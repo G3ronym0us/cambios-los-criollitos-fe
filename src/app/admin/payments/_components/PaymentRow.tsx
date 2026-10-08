@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { MoreHorizontal, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SelectCheckbox } from '@/components/shared/SelectCheckbox';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { cn } from '@/lib/utils';
 import { getPaymentAction, getPaymentStatusMeta, getPaymentTag } from '@/utils/paymentStatus';
@@ -15,11 +16,24 @@ export interface PaymentRowProps {
   outgoing: boolean;
   suggestion?: PaymentSuggestion;
   onManage?: (payment: PaymentData) => void;
+  /** Con la selección encendida, la casilla de la fila. Sin ella, la fila es la de siempre. */
+  selection?: RowSelection;
+}
+
+export interface RowSelection {
+  checked: boolean;
+  /** No entra en el lote (ya irrelevante, préstamo, acreditado al saldo). */
+  disabled: boolean;
+  onToggle: () => void;
 }
 
 /** Rejilla compartida por la cabecera y las filas: un solo sitio donde cuadran las columnas. */
 export const ROW_GRID =
   'grid grid-cols-[7rem_minmax(0,1fr)_9rem_10rem_4.5rem_5.5rem] items-center gap-2.5 px-3.5';
+
+/** La misma rejilla con la columna de la casilla delante, para cuando se selecciona. */
+export const ROW_GRID_SELECT =
+  'grid grid-cols-[2.75rem_7rem_minmax(0,1fr)_9rem_10rem_4.5rem_5.5rem] items-center gap-2.5 pl-1 pr-3.5';
 
 export function rememberFocus(table: 'incoming' | 'outgoing', id: number) {
   try {
@@ -29,7 +43,13 @@ export function rememberFocus(table: 'incoming' | 'outgoing', id: number) {
   }
 }
 
-export function PaymentRow({ payment: p, outgoing, suggestion, onManage }: PaymentRowProps) {
+export function PaymentRow({
+  payment: p,
+  outgoing,
+  suggestion,
+  onManage,
+  selection,
+}: PaymentRowProps) {
   const d = describePayment(p);
   const status = getPaymentStatusMeta(p, outgoing);
   const tag = getPaymentTag(p, outgoing);
@@ -40,12 +60,21 @@ export function PaymentRow({ payment: p, outgoing, suggestion, onManage }: Payme
     <div
       id={`payment-row-${table}-${p.id}`}
       className={cn(
-        ROW_GRID,
+        selection ? ROW_GRID_SELECT : ROW_GRID,
         'h-14 border-t border-border/60 transition-colors first:border-t-0 hover:bg-muted/40',
+        selection?.checked && 'bg-primary/5',
         // La barra ámbar es la señal de "esto espera algo de ti", legible sin leer el badge.
         status.attention && 'shadow-[inset_3px_0_0] shadow-amber-500',
       )}
     >
+      {selection ? (
+        <SelectCheckbox
+          checked={selection.checked}
+          disabled={selection.disabled}
+          label={`Seleccionar el pago de ${d.amount}`}
+          onChange={selection.onToggle}
+        />
+      ) : null}
       <div className="min-w-0">
         <div
           className={cn(
@@ -145,14 +174,28 @@ export function PaymentRow({ payment: p, outgoing, suggestion, onManage }: Payme
   );
 }
 
-export function PaymentRowHeader() {
+export function PaymentRowHeader({
+  selection,
+}: {
+  /** La casilla de «todas», con la selección encendida. */
+  selection?: { checked: boolean; indeterminate: boolean; disabled: boolean; onToggle: () => void };
+} = {}) {
   return (
     <div
       className={cn(
-        ROW_GRID,
+        selection ? ROW_GRID_SELECT : ROW_GRID,
         'h-9 shrink-0 border-b border-border bg-muted/60 text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground',
       )}
     >
+      {selection ? (
+        <SelectCheckbox
+          checked={selection.checked}
+          indeterminate={selection.indeterminate}
+          disabled={selection.disabled}
+          label="Seleccionar todos los pagos cargados"
+          onChange={selection.onToggle}
+        />
+      ) : null}
       <span>Monto</span>
       <span>Cliente · origen</span>
       <span>Estado</span>

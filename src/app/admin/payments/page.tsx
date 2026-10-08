@@ -11,7 +11,9 @@ import { PaymentsList } from './_components/PaymentsList';
 import { IncomingPaymentDrawer } from './_components/IncomingPaymentDrawer';
 import { OutgoingPaymentActionDialog } from './_components/OutgoingPaymentActionDialog';
 import { SaveClientDefaultDialog } from './_components/SaveClientDefaultDialog';
+import { BulkIrrelevantBar, BulkSelectToggle } from './_components/BulkIrrelevantBar';
 import { usePayments } from './_hooks/usePayments';
+import { usePaymentSelection } from './_hooks/usePaymentSelection';
 
 function PaymentsAdminContent() {
   const { state, actions } = usePayments();
@@ -32,6 +34,7 @@ function PaymentsAdminContent() {
   };
 
   const outgoing = state.tab === 'outgoing';
+  const selection = usePaymentSelection(state.tab, state.payments, actions.refreshInPlace);
 
   // Filtros y lista son idénticos en las dos pestañas salvo la clasificación de salientes;
   // se comparten para que un cambio no se quede a medias en una de las dos.
@@ -71,8 +74,24 @@ function PaymentsAdminContent() {
       onManage={outgoing ? setActioning : setActioningIncoming}
       focusId={state.focusId}
       onFocusHandled={actions.clearFocus}
+      selection={
+        selection.state.active
+          ? {
+              selected: selection.state.selected,
+              selectableIds: selection.state.selectableIds,
+              allSelected: selection.state.allSelected,
+              someSelected: selection.state.someSelected,
+              onToggle: selection.actions.toggle,
+              onToggleAll: selection.actions.toggleAll,
+            }
+          : undefined
+      }
     />
   );
+
+  // Seleccionar va con la lista: sólo tiene sentido cuando hay algo cargado.
+  const bulk =
+    state.payments.length > 0 ? <BulkSelectToggle selection={selection} /> : null;
 
   return (
     <div className="space-y-5">
@@ -102,6 +121,7 @@ function PaymentsAdminContent() {
           className="space-y-3 animate-in fade-in-0 slide-in-from-bottom-1 duration-200"
         >
           {!outgoing ? filters : null}
+          {!outgoing ? bulk : null}
           {!outgoing ? list : null}
         </TabsContent>
 
@@ -110,9 +130,12 @@ function PaymentsAdminContent() {
           className="space-y-3 animate-in fade-in-0 slide-in-from-bottom-1 duration-200"
         >
           {outgoing ? filters : null}
+          {outgoing ? bulk : null}
           {outgoing ? list : null}
         </TabsContent>
       </Tabs>
+
+      <BulkIrrelevantBar selection={selection} />
 
       {/* Tras vincular/marcar, refrescar EN SITIO: la lista conserva las páginas ya
           cargadas y el scroll (no vuelve al principio). */}

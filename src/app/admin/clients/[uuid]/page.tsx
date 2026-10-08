@@ -1,8 +1,9 @@
 'use client';
 
+import { Suspense } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { ArrowLeft, Ban, Coins, Eye, HandCoins, Truck, Users, UserX, Wallet, Tag } from 'lucide-react';
+import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { AlertTriangle, ArrowLeft, Ban, Coins, Eye, HandCoins, Truck, Users, UserX, Wallet, Tag } from 'lucide-react';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -42,6 +43,62 @@ function formatDate(value: string | null) {
   });
 }
 
+/**
+ * La bandeja de pagos ya filtrada a este cliente y a lo que espera una decisión. Busca por
+ * teléfono (la bandeja no filtra por cliente); en un grupo no hay teléfono útil y va el nombre.
+ */
+function paymentsHref(phone: string, name: string | null, table: 'incoming' | 'outgoing') {
+  const params = new URLSearchParams();
+  if (table === 'outgoing') params.set('tab', 'outgoing');
+  params.set('q', isGroup(phone) ? (name ?? '') : formatPhone(phone));
+  params.set('att', 'ATTENTION');
+  return `/admin/payments?${params.toString()}`;
+}
+
+function UnlinkedPaymentsNotice({
+  incoming,
+  outgoing,
+  phone,
+  name,
+}: {
+  incoming: number;
+  outgoing: number;
+  phone: string;
+  name: string | null;
+}) {
+  if (incoming === 0 && outgoing === 0) return null;
+  const parts = [
+    incoming > 0
+      ? { table: 'incoming' as const, label: `${incoming} ${incoming === 1 ? 'entrante' : 'entrantes'}` }
+      : null,
+    outgoing > 0
+      ? { table: 'outgoing' as const, label: `${outgoing} ${outgoing === 1 ? 'saliente' : 'salientes'}` }
+      : null,
+  ].filter((part) => part !== null);
+
+  return (
+    <div className="flex items-start gap-2 rounded-lg border border-border bg-card p-3">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden />
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Este cliente tiene{' '}
+        <strong className="font-semibold text-foreground">pagos sin vincular</strong>:{' '}
+        {parts.map((part, index) => (
+          <span key={part.table}>
+            {index > 0 ? ' y ' : ''}
+            <Link
+              href={paymentsHref(phone, name, part.table)}
+              className="font-semibold text-foreground underline underline-offset-2"
+            >
+              {part.label}
+            </Link>
+          </span>
+        ))}
+        . Mientras no respalden una operación, la cuenta no los ve.
+      </p>
+    </div>
+  );
+}
+
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5">
@@ -51,12 +108,34 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
-export default function ClientProfilePage() {
+const TABS = ['settings', 'account', 'loans'] as const;
+type ClientTab = (typeof TABS)[number];
+const DEFAULT_TAB: ClientTab = 'settings';
+
+function isClientTab(value: string | null): value is ClientTab {
+  return TABS.includes(value as ClientTab);
+}
+
+function ClientProfileContent() {
   const { uuid } = useParams<{ uuid: string }>();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  // La pestaña vive en `?tab=` para que recargar o compartir el enlace no te devuelva a
+  // Configuración. La de por defecto no se escribe, así la URL limpia sigue siendo válida.
+  const tabParam = searchParams.get('tab');
+  const tab: ClientTab = isClientTab(tabParam) ? tabParam : DEFAULT_TAB;
+  const selectTab = (value: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value === DEFAULT_TAB) params.delete('tab');
+    else params.set('tab', value);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
   const { state, actions } = useClientProfile(uuid);
   const {
     client, loading, notFound, saving, operations, operationsLoading, pairs,
-    balance, balanceLoading, loans, loansLoading, loanTotals,
+    balance, balanceLoading, loans, loansLoading, loanTotals, unlinked,
   } = state;
 
   if (loading) {
@@ -127,11 +206,18 @@ export default function ClientProfilePage() {
         ) : null}
       </div>
 
+      <UnlinkedPaymentsNotice
+        incoming={unlinked.incoming}
+        outgoing={unlinked.outgoing}
+        phone={client.phone}
+        name={client.display_name}
+      />
+
       {/* Tres pestañas, no cinco: Transacciones, Por entregar y Saldo eran el mismo hilo
           contado tres veces y ahora son filtros dentro de Cuenta. Préstamos se queda aparte
           —vive en tres monedas, se revalúa a diario y tiene abonos anidados—, y
           Configuración no se toca. */}
-      <Tabs defaultValue="settings">
+      <Tabs value={tab} onValueChange={(v) => selectTab(v as string)}>
         <TabsList className="h-auto w-full flex-wrap sm:w-auto">
           <TabsTrigger value="settings">Configuración</TabsTrigger>
           <TabsTrigger value="account" className="gap-1.5">
@@ -193,5 +279,14 @@ export default function ClientProfilePage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+// useSearchParams (la pestaña en la URL) exige un boundary de Suspense al prerenderizar.
+export default function ClientProfilePage() {
+  return (
+    <Suspense fallback={<LoadingState label="Cargando cliente..." />}>
+      <ClientProfileContent />
+    </Suspense>
   );
 }
