@@ -106,16 +106,6 @@ export function useClientPending(
    * descubre mañana ya no obliga a entrar operación por operación al panel de cobertura.
    */
   const [undoable, setUndoable] = useState<PendingDelivery[]>([]);
-  /**
-   * Los lotes marcados en ESTA sesión.
-   *
-   * La cola sigue enseñando sus operaciones aunque ya no deban nada, para que el botón de
-   * deshacer siga a mano el segundo siguiente. Los lotes viejos no: meterlos devolvería a
-   * una lista de trabajo decenas de operaciones ya entregadas. Ésos se deshacen desde la
-   * tira de abajo, que sí los lista.
-   */
-  const [sessionDeliveries, setSessionDeliveries] = useState<ReadonlySet<string>>(new Set());
-
   const loadDeliveries = useCallback(async () => {
     const result = await clientService.getPendingDeliveries(clientUuid);
     if (!result.success || !result.data) return;
@@ -137,27 +127,12 @@ export function useClientPending(
     return map;
   }, [undoable]);
 
-  /** Las operaciones que siguen en la cola sólo para poder deshacerlas. */
-  const undoableIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const delivery of undoable) {
-      if (!sessionDeliveries.has(delivery.uuid)) continue;
-      for (const item of delivery.items) {
-        if (item.operation_uuid) ids.add(item.operation_uuid);
-      }
-    }
-    return ids;
-  }, [undoable, sessionDeliveries]);
-
   /**
-   * Lo que sigue a la vista en la cola: lo que falta por entregar MÁS lo que se acaba de
-   * marcar en esta sesión. Sin lo segundo, marcar una fila la hace desaparecer y con ella su
-   * botón de deshacer justo cuando hace falta — que es el segundo siguiente.
+   * Lo que sigue a la vista en la cola: sólo lo que falta por entregar. Lo que se acaba de
+   * marcar sale en el acto —dejarlo en un filtro que se llama «por pagar» hacía creer que
+   * no se había marcado—, y su deshacer sigue a mano en la tira «Entregas marcadas».
    */
-  const pending = useMemo(
-    () => operations.filter((op) => isPendingOperation(op) || undoableIds.has(op.uuid)),
-    [operations, undoableIds],
-  );
+  const pending = useMemo(() => operations.filter(isPendingOperation), [operations]);
 
   /** La cola de trabajo: de la más vieja a la más nueva, que es el orden en que se reparte. */
   const rows = useMemo(() => {
@@ -173,10 +148,7 @@ export function useClientPending(
   const entries = useMemo(() => pendingByPair(rows), [rows]);
   const totals = useMemo(() => pendingTotals(entries), [entries]);
 
-  /**
-   * Las que sí se pueden marcar: ni las trabadas por falta de datos, ni las que ya se
-   * marcaron en esta sesión y sólo siguen ahí para poder deshacerlas.
-   */
+  /** Las que sí se pueden marcar: las que no están trabadas por falta de datos. */
   const selectable = useMemo(
     () => rows.filter((op) => isPendingOperation(op) && blockedReason(op) === null),
     [rows],
@@ -348,7 +320,6 @@ export function useClientPending(
 
       const delivery = result.data;
       setUndoable((prev) => [delivery, ...prev]);
-      setSessionDeliveries((prev) => new Set(prev).add(delivery.uuid));
       // «Saldada» y no «entregada»: en un par de efectivo lo que se salda es lo que el
       // cliente nos debía, y decir «entregada» ahí es decir lo contrario de lo que pasó.
       toast.success(

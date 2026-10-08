@@ -23,12 +23,16 @@ export interface PaymentQuery {
   attention?: AttentionFilter;
   dateFrom?: string;
   dateTo?: string;
+  // Sólo los pagos de este cliente (por DUEÑO: un pago transferido cuenta para el destino).
+  clientUuid?: string;
 }
 
 // Agregados de la franja de atención (GET /payments/{table}/stats).
 export interface PaymentStats {
   table: PaymentTable;
   needs_attention: number;
+  // De los por atender, los que no respaldan ninguna operación (ni total ni en parte).
+  unlinked: number;
   // Dinero por atender que todavía no respalda ninguna operación, por moneda.
   unassigned: { currency: string; amount: number; count: number }[];
   // El monto se calcula fila a fila sobre un tope: con más pendientes se queda corto.

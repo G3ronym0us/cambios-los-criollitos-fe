@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { adminService } from '@/services/adminService';
 import { clientService } from '@/services/clientService';
 import { operationService } from '@/services/operationService';
+import { paymentService } from '@/services/paymentService';
 import { CurrencyPairData } from '@/types/admin';
 import {
   BalanceAdjust,
@@ -72,9 +73,35 @@ export function useClientProfile(uuid: string) {
    * deshacer—, así que la barra de deshacer nunca llegaba a verse. Aquí sólo se recargan las
    * operaciones y el árbol se queda en pie.
    */
+  /**
+   * Comprobantes del cliente que no respaldan ninguna operación, por lado. Es el aviso de la
+   * cabecera: un Zelle sin vincular es dinero que entró y que la cuenta todavía no ve.
+   */
+  const [unlinked, setUnlinked] = useState<{ incoming: number; outgoing: number }>({
+    incoming: 0,
+    outgoing: 0,
+  });
+
+  const loadUnlinked = useCallback(async () => {
+    const [incoming, outgoing] = await Promise.all([
+      paymentService.getStats('incoming', { clientUuid: uuid }),
+      paymentService.getStats('outgoing', { clientUuid: uuid }),
+    ]);
+    setUnlinked({
+      incoming: incoming.success && incoming.data ? incoming.data.unlinked : 0,
+      outgoing: outgoing.success && outgoing.data ? outgoing.data.unlinked : 0,
+    });
+  }, [uuid]);
+
+  useEffect(() => {
+    loadUnlinked();
+  }, [loadUnlinked]);
+
+  // Vincular o marcar desde la cuenta puede cambiar la cuenta de sin vincular: se recalcula.
   const reloadOperations = useCallback(async () => {
+    loadUnlinked();
     if (client?.phone) await loadOperations(client.phone);
-  }, [client?.phone, loadOperations]);
+  }, [client?.phone, loadOperations, loadUnlinked]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -165,7 +192,7 @@ export function useClientProfile(uuid: string) {
   return {
     state: {
       client, loading, notFound, saving, operations, operationsLoading, pairs,
-      balance, balanceLoading, loans, loansLoading, loanTotals,
+      balance, balanceLoading, loans, loansLoading, loanTotals, unlinked,
     },
     actions: { updateFields, reload: load, reloadOperations, adjustBalance, addLoanRepayment, createLoan },
   };

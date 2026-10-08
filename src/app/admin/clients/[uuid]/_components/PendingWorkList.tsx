@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Check, HandCoins, Minus, PartyPopper, Receipt, RotateCcw } from 'lucide-react';
+import { Check, HandCoins, PartyPopper, Receipt, RotateCcw } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -13,6 +13,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { SelectCheckbox as Checkbox } from '@/components/shared/SelectCheckbox';
+import { ListPagination } from '@/components/shared/ListPagination';
+import { usePagedList } from '@/hooks/usePagedList';
 import { SidePanel, SidePanelHeader } from '@/components/shared/SidePanel';
 import { cn } from '@/lib/utils';
 import { formatCaracasShortDateTime, formatRelativeTime } from '@/utils/functions';
@@ -48,59 +51,6 @@ interface PendingWorkListProps {
 
 /** El `<Select>` no admite valor vacío, y «todos los pares» es justo el par sin elegir. */
 const ALL_PAIRS = '__all__';
-
-function Checkbox({
-  checked,
-  indeterminate,
-  disabled,
-  label,
-  onChange,
-  hiddenBelowLg,
-}: {
-  checked: boolean;
-  indeterminate?: boolean;
-  disabled?: boolean;
-  label: string;
-  onChange: () => void;
-  /** La casilla del diseño desktop no aparece en móvil hasta que se enciende la selección
-   *  (5c): en la cola de siempre (5b) esa columna la ocupa el botón de la fila. */
-  hiddenBelowLg?: boolean;
-}) {
-  const marked = checked || !!indeterminate;
-
-  return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={indeterminate ? 'mixed' : checked}
-      aria-label={label}
-      disabled={disabled}
-      onClick={onChange}
-      className={cn(
-        'h-11 w-11 shrink-0 items-center justify-center rounded-md disabled:cursor-not-allowed',
-        hiddenBelowLg ? 'hidden lg:flex' : 'flex',
-        !disabled && 'hover:bg-muted',
-      )}
-    >
-      <span
-        className={cn(
-          'flex h-[18px] w-[18px] items-center justify-center rounded border-2 transition-colors',
-          disabled
-            ? 'border-border bg-muted'
-            : marked
-              ? 'border-primary bg-primary text-primary-foreground'
-              : 'border-muted-foreground/40 bg-card',
-        )}
-      >
-        {indeterminate ? (
-          <Minus className="h-3 w-3" strokeWidth={3.5} />
-        ) : checked ? (
-          <Check className="h-3 w-3" strokeWidth={3.5} />
-        ) : null}
-      </span>
-    </button>
-  );
-}
 
 /** Un estado de fila del diseño: qué le va a pasar a esta operación si confirmas. */
 function StateChip({
@@ -443,6 +393,8 @@ function PendingRow({
   );
 }
 
+const PAGE_SIZE = 25;
+
 /**
  * El filtro «Por entregar» de Cuenta, que no es un histórico sino una cola de trabajo:
  * pocas filas, todas accionables, de la más vieja a la más nueva.
@@ -462,6 +414,9 @@ export function PendingWorkList({
   onPairChange,
 }: PendingWorkListProps) {
   const [covering, setCovering] = useState<string | null>(null);
+  // Se pagina lo que se PINTA; seleccionar todas, el reparto y los totales siguen siendo
+  // sobre la cola entera.
+  const paged = usePagedList(state.rows, PAGE_SIZE, pair);
 
   if (state.rows.length === 0) {
     return (
@@ -557,7 +512,7 @@ export function PendingWorkList({
               ) : null}
             </div>
 
-            {state.rows.map((operation) => (
+            {paged.pageItems.map((operation) => (
               <PendingRow
                 key={operation.uuid}
                 operation={operation}
@@ -591,6 +546,14 @@ export function PendingWorkList({
           </CardContent>
         </Card>
       )}
+
+      <ListPagination
+        page={paged.page}
+        totalPages={paged.totalPages}
+        total={paged.total}
+        noun="operaciones"
+        onPageChange={paged.setPage}
+      />
 
       {/* Barra de selección: sólo aparece cuando hay algo seleccionado, y se queda pegada
           abajo para no perderla al hacer scroll por una lista larga, con hueco para el

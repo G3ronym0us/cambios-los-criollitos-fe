@@ -5,6 +5,8 @@ import { ArrowDownCircle, ArrowUpCircle, Receipt } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { buttonVariants } from '@/components/ui/button';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ListPagination } from '@/components/shared/ListPagination';
+import { usePagedList } from '@/hooks/usePagedList';
 import { cn } from '@/lib/utils';
 import { formatCaracasShortDateTime } from '@/utils/functions';
 import type { BalanceEntry } from '@/types/client';
@@ -22,7 +24,11 @@ import { ACCOUNT_COL as COL, ACCOUNT_GRID as GRID, ACCOUNT_TABLE_MIN as TABLE_MI
 interface AccountThreadProps {
   items: AccountItem[];
   emptyLabel: string;
+  /** Lo que, al cambiar, vuelve a la primera página: el filtro y el par elegidos. */
+  resetKey?: string;
 }
+
+const PAGE_SIZE = 25;
 
 const STATE_TONE: Record<OperationState, string> = {
   pending: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
@@ -294,25 +300,36 @@ function BalanceRow({ entry }: { entry: BalanceEntry }) {
   );
 }
 
-export function AccountThread({ items, emptyLabel }: AccountThreadProps) {
+export function AccountThread({ items, emptyLabel, resetKey }: AccountThreadProps) {
+  const paged = usePagedList(items, PAGE_SIZE, resetKey);
+
   if (items.length === 0) {
     return <EmptyState icon={Receipt} title="Nada que mostrar" description={emptyLabel} />;
   }
 
   return (
-    <Card className="overflow-hidden py-0">
-      <CardContent className="overflow-x-auto p-0">
-        <div className={TABLE_MIN}>
-          <ThreadHeader />
-          {items.map((item) =>
-            item.kind === 'operation' ? (
-              <OperationRow key={item.key} operation={item.operation} at={item.displayAt} />
-            ) : (
-              <BalanceRow key={item.key} entry={item.entry} />
-            ),
-          )}
-        </div>
-      </CardContent>
-    </Card>
+    <div className="space-y-3">
+      <Card className="overflow-hidden py-0">
+        <CardContent className="overflow-x-auto p-0">
+          <div className={TABLE_MIN}>
+            <ThreadHeader />
+            {paged.pageItems.map((item) =>
+              item.kind === 'operation' ? (
+                <OperationRow key={item.key} operation={item.operation} at={item.displayAt} />
+              ) : (
+                <BalanceRow key={item.key} entry={item.entry} />
+              ),
+            )}
+          </div>
+        </CardContent>
+      </Card>
+      <ListPagination
+        page={paged.page}
+        totalPages={paged.totalPages}
+        total={paged.total}
+        noun="movimientos"
+        onPageChange={paged.setPage}
+      />
+    </div>
   );
 }
