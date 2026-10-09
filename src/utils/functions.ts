@@ -126,6 +126,30 @@ export const formatRelativeTime = (
 };
 
 /**
+ * "14 min antes del pago" / "2 h después del pago" / "3 d antes del pago". En el cajón de
+ * vincular lo que importa es cuánto separa la operación del comprobante, no de hoy: la
+ * bandeja se procesa días después y "hace 19 d" lo dicen todas las candidatas por igual.
+ */
+export const formatGapToPayment = (
+  opCreatedAt: string | null | undefined,
+  paymentCreatedAt: string | null | undefined,
+): string => {
+  if (!opCreatedAt || !paymentCreatedAt) return '';
+  const op = new Date(opCreatedAt).getTime();
+  const pago = new Date(paymentCreatedAt).getTime();
+  if (Number.isNaN(op) || Number.isNaN(pago)) return '';
+  const diffSec = Math.round((pago - op) / 1000);
+  const abs = Math.abs(diffSec);
+  if (abs < 60) return 'junto al pago';
+  const sufijo = diffSec >= 0 ? 'antes del pago' : 'después del pago';
+  const minutes = Math.floor(abs / 60);
+  if (minutes < 60) return `${minutes} min ${sufijo}`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h ${sufijo}`;
+  return `${Math.floor(hours / 24)} d ${sufijo}`;
+};
+
+/**
  * ¿El "cliente" de una operación es en realidad un marcador de que aún no sabemos quién
  * es? Cubre el JID de un grupo contable (comprobante reenviado, ops antiguas) y los
  * clientes anónimos que crea el backend cuando el operador atendió al cliente por fuera
