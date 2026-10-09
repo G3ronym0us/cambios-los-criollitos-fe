@@ -22,7 +22,12 @@ import { operationService } from '@/services/operationService';
 import { paymentService } from '@/services/paymentService';
 import { fundService } from '@/services/fundService';
 import { clientService } from '@/services/clientService';
-import { formatCaracasShortDateTime, formatNumber, formatRelativeTime } from '@/utils/functions';
+import {
+  formatCaracasShortDateTime,
+  formatGapToPayment,
+  formatNumber,
+  formatRelativeTime,
+} from '@/utils/functions';
 import { getStatusMeta } from '@/utils/operationStatus';
 import type {
   OperationData,
@@ -108,7 +113,8 @@ function describeMatchReason(
   else if (score.within_tolerance) señales.push('monto aproximado');
   if (score.time_score >= 0.5) señales.push('hora');
 
-  const cuando = formatRelativeTime(op.created_at);
+  const cuando =
+    formatGapToPayment(op.created_at, payment.created_at) || formatRelativeTime(op.created_at);
   if (señales.length === 0) {
     return cuando ? `La candidata más cercana · cotizada ${cuando}` : 'La candidata más cercana';
   }
@@ -789,7 +795,9 @@ export function LinkOperationPanel({
                       </StatusBadge>
                     ) : null}
                     <span className="truncate text-xs text-muted-foreground">
-                      {formatCaracasShortDateTime(op.created_at)} · {formatRelativeTime(op.created_at)}
+                      {formatCaracasShortDateTime(op.created_at)} ·{' '}
+                      {formatGapToPayment(op.created_at, payment.created_at) ||
+                        formatRelativeTime(op.created_at)}
                     </span>
                   </span>
 
