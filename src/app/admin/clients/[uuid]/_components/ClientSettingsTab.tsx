@@ -17,34 +17,11 @@ import {
 } from '@/components/ui/drawer';
 import { PairPicker, type PairRate, type PairUsage } from '@/components/shared/PairPicker';
 import { ratesService } from '@/services/ratesService';
-import {
-  applyRounding,
-  effectiveRate as toEffectiveRate,
-  pairRoundingFrom,
-} from '@/utils/rounding';
+import { quotedRateOf } from '@/utils/rounding';
 import type { CurrencyPairData } from '@/types/admin';
-import type { ExchangeRateResponse } from '@/types/currency';
 import type { ClientData, ClientUpdate } from '@/types/client';
 import type { OperationData } from '@/types/operation';
 import { ClientAccountsCard } from './ClientAccountsCard';
-
-/**
- * La tasa que se muestra junto a cada par: la misma cuenta que hace `CreateOperationForm` al
- * cotizar. Si el par redondea la tasa (modo RATE) se muestra ya redondeada —USD-VES a 915, no
- * a los 919,005 crudos del scraper—; el resto de modos usan la del par tal cual. Se duplica en
- * vez de importarse porque cada pantalla la aplica sobre datos propios (aquí no hay tasa "de
- * la operación", sólo la vigente de cada par).
- */
-function quotedRateOf(rate: ExchangeRateResponse): number {
-  const rounding = pairRoundingFrom(rate);
-  if (rounding?.mode !== 'RATE') return rate.rate;
-  const rounded = applyRounding(
-    toEffectiveRate(rate.rate, rate.inverse_percentage),
-    rounding.step,
-    rounding.direction,
-  );
-  return rounded > 0 ? rounded : rate.rate;
-}
 
 interface PendingChange {
   title: string;

@@ -80,6 +80,24 @@ export function effectiveRate(rate: number, inverse: boolean): number {
   return inverse ? 1 / rate : rate;
 }
 
+/**
+ * La tasa que un selector de pares muestra junto a cada par: la que se va a aplicar. Si el
+ * par redondea la tasa (modo RATE) se muestra ya redondeada —USD-VES cotiza a 915, no a los
+ * 919,005 crudos del scraper—; en cualquier otro caso, la del par tal cual.
+ */
+export function quotedRateOf(
+  rate: PairRoundingFields & { rate: number; inverse_percentage: boolean },
+): number {
+  const rounding = pairRoundingFrom(rate);
+  if (rounding?.mode !== 'RATE') return rate.rate;
+  const rounded = applyRounding(
+    effectiveRate(rate.rate, rate.inverse_percentage),
+    rounding.step,
+    rounding.direction,
+  );
+  return rounded > 0 ? rounded : rate.rate;
+}
+
 /** Convierte `amount` con la tasa del par, respetando el flag `inverse`. */
 function applyRate(amount: number, rate: number, inverse: boolean): number {
   return inverse ? amount / rate : amount * rate;
