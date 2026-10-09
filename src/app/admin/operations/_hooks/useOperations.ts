@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { operationService } from '@/services/operationService';
 import { OperationData, OperationScenario, OperationStats, OperationStatus } from '@/types/operation';
+import type { DateRange } from '@/lib/dateRange';
 
 export type StatusFilter = 'ALL' | OperationStatus;
 export type DeliveryFilter = 'ALL' | 'PENDING' | 'RECEIVED';
@@ -22,6 +23,11 @@ export interface OperationsFilters {
   segment: SegmentFilter;
   /** La tarjeta pulsada en la cabecera. Manda sobre el segmento. */
   needs: NeedsFilter;
+  /**
+   * Rango de días (yyyy-mm-dd). Va por la fecha que enseña cada fila: la del pago, o la de
+   * la operación mientras no tenga ninguno.
+   */
+  dateRange: DateRange;
 }
 
 const emptyFilters: OperationsFilters = {
@@ -31,6 +37,7 @@ const emptyFilters: OperationsFilters = {
   scenario: 'ALL',
   segment: 'ALL',
   needs: null,
+  dateRange: {},
 };
 
 const emptyStats: OperationStats = {
@@ -102,6 +109,8 @@ export function useOperations() {
               : undefined,
         delivery_status: filters.delivery !== 'ALL' ? filters.delivery : undefined,
         scenario: filters.scenario !== 'ALL' ? filters.scenario : undefined,
+        date_from: filters.dateRange.from,
+        date_to: filters.dateRange.to,
       }),
       operationService.getStats(),
     ]);
@@ -144,7 +153,8 @@ export function useOperations() {
     filters.delivery !== 'ALL' ||
     filters.scenario !== 'ALL' ||
     filters.segment !== 'ALL' ||
-    filters.needs !== null;
+    filters.needs !== null ||
+    Boolean(filters.dateRange.from || filters.dateRange.to);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
