@@ -12,6 +12,7 @@ import {
   OperationStats,
   ProfitAllocationInput,
   ProfitAllocationList,
+  RequotePreview,
 } from '@/types/operation';
 import type { PaymentData } from '@/types/payment';
 
@@ -94,6 +95,22 @@ export class OperationService {
   async updatePair(uuid: string, currencyPairUuid: string): Promise<ApiResponse<OperationData>> {
     const result = await httpClient.patch<OperationData>(`/operations/${uuid}`, {
       currency_pair_uuid: currencyPairUuid,
+    });
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  /**
+   * Recotiza la operación con otro par: conserva el monto que fijó el cliente y recalcula el
+   * otro con la tasa de ese par al cotizar. `dryRun` sólo devuelve el antes/después.
+   */
+  async requotePair(
+    uuid: string,
+    currencyPairUuid: string,
+    dryRun: boolean,
+  ): Promise<ApiResponse<RequotePreview>> {
+    const result = await httpClient.post<RequotePreview>(`/operations/${uuid}/requote-pair`, {
+      currency_pair_uuid: currencyPairUuid,
+      dry_run: dryRun,
     });
     return { success: result.success, data: result.data, error: result.error };
   }
