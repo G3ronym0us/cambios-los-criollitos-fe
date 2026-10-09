@@ -60,6 +60,11 @@ interface Props {
   clearable?: boolean;
   /** Rótulo de la fila y del botón cuando `value === ''` con `clearable`. */
   clearLabel?: string;
+  /**
+   * Las tasas no son las de hoy sino las de un momento fijo (recotizar una operación usa
+   * las de su cotización): este rótulo reemplaza a «hace N min» y no se marcan como viejas.
+   */
+  rateCaption?: string;
 }
 
 /** Más de esto y la tasa se muestra como vieja: hay que mirarla antes de cotizar. */
@@ -100,6 +105,7 @@ export function PairPicker({
   id,
   clearable,
   clearLabel = 'Sin par preferido',
+  rateCaption,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -159,7 +165,8 @@ export function PairPicker({
 
   const Row = ({ pair, hint }: { pair: CurrencyPairData; hint?: string }) => {
     const rate = rates.get(pair.uuid);
-    const age = ageLabel(rate?.updatedAt ?? null);
+    const age =
+      rateCaption && rate ? { text: rateCaption, stale: false } : ageLabel(rate?.updatedAt ?? null);
     const isSelected = pair.uuid === value;
     return (
       <button
