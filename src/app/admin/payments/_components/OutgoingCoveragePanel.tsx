@@ -82,6 +82,31 @@ export function OutgoingCoveragePanel({
       active ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
     }`;
 
+  // El pago da justo lo que falta: «lo que da la tasa» y «cubre el pendiente» son la misma
+  // cifra a la misma tasa, y elegir entre ellas es ruido. Se confirma en una línea; el monto
+  // a mano queda a un clic para el caso raro en que el pago cubra otra cosa.
+  const exact = suggested != null && pending > 0 && Math.abs(suggested - pending) <= 0.01;
+  if (exact && mode !== 'CUSTOM') {
+    return (
+      <div className="shrink-0 space-y-1 rounded-lg border border-primary bg-primary/5 p-3">
+        <span className="block text-sm font-medium text-foreground">
+          Cubre exacto el pendiente · {formatNumber(pending)} {cur}
+        </span>
+        <span className="block text-xs text-muted-foreground">
+          {formatNumber(paid)} {payCur} {flipped ? '×' : '÷'} {showRate(coverage.reference_rate ?? 0)}
+          {' · cuadra con la tasa de la cotización'}
+        </span>
+        <button
+          type="button"
+          className="text-xs font-medium text-primary hover:underline"
+          onClick={() => setMode('CUSTOM')}
+        >
+          Otro monto
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="shrink-0 space-y-2 rounded-lg border border-border bg-muted/40 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
