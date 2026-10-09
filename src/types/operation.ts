@@ -7,6 +7,13 @@ export type OperationScenario = 'NORMAL' | 'ZELLE_DIRECT' | 'VIA_PARTNER';
 /** De dónde nació la cotización. Ver `getOriginMeta`. */
 export type OperationOrigin = 'TEXT' | 'TEXT_RECEIPT' | 'INCOMING_RECEIPT' | 'OUTGOING_RECEIPT';
 
+/** La tasa de cada par a la hora de la cotización (`GET /operations/{uuid}/requote-rates`). */
+export interface RequoteRates {
+  /** ISO: la hora de la cotización. */
+  rate_at: string;
+  rates: { pair_uuid: string; rate: number; inverse_percentage: boolean }[];
+}
+
 /** Antes/después de recotizar una operación con otro par (`POST /operations/{uuid}/requote-pair`). */
 export interface RequotePreview {
   pair_uuid: string;

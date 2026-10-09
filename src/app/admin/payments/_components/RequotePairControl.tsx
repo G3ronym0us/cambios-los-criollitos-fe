@@ -7,11 +7,9 @@ import { PairPicker, type PairRate, type PairUsage } from '@/components/shared/P
 import { adminService } from '@/services/adminService';
 import { clientService } from '@/services/clientService';
 import { operationService } from '@/services/operationService';
-import { ratesService } from '@/services/ratesService';
 import type { CurrencyPairData } from '@/types/admin';
 import type { OperationData, RequotePreview } from '@/types/operation';
 import { formatCaracasShortDateTime, formatNumber } from '@/utils/functions';
-import { quotedRateOf } from '@/utils/rounding';
 
 interface RequotePairControlProps {
   operation: OperationData;
@@ -41,26 +39,22 @@ export function RequotePairControl({ operation, onRequoted, disabled }: RequoteP
   const [usage, setUsage] = useState<Map<string, PairUsage>>(new Map());
   const [clientOps, setClientOps] = useState(0);
   const [preferredUuid, setPreferredUuid] = useState<string | null>(null);
+  const [ratesAt, setRatesAt] = useState<string | null>(null);
 
-  // Lo mismo que el selector de «Crear operación»: la tasa vigente de cada par y cuántas
-  // operaciones lleva el cliente en cada uno, para que el par bueno salga arriba. Cada
-  // petición va por su lado: si alguna falla, se elige el par igual, sin ese dato. La tasa
-  // que se aplica al recotizar es la de la hora de la cotización: la muestra la vista previa.
+  // Como el selector de «Crear operación», pero con la tasa de cada par A LA HORA DE LA
+  // COTIZACIÓN —la que aplica recotizar—, no la de hoy: si no, el selector decía 935 y la
+  // vista previa 945. Y cuántas operaciones lleva el cliente en cada par, para que el bueno
+  // salga arriba. Cada petición va por su lado: si alguna falla, se elige el par igual.
   useEffect(() => {
     if (!open || pairs.length) return;
     adminService.getCurrencyPairs(0, 200, true).then((res) => {
       if (res.success && res.data) setPairs(res.data.pairs);
     });
-    ratesService.getAllActiveRates().then((res) => {
+    operationService.requoteRates(operation.uuid).then((res) => {
       if (!res.success || !res.data) return;
-      setRates(
-        new Map(
-          res.data.map((r) => [
-            r.currency_pair_uuid,
-            { rate: quotedRateOf(r), updatedAt: r.updated_at ?? r.created_at ?? null },
-          ]),
-        ),
-      );
+      const at = res.data.rate_at;
+      setRatesAt(at);
+      setRates(new Map(res.data.rates.map((r) => [r.pair_uuid, { rate: r.rate, updatedAt: at }])));
     });
     if (operation.client_phone) {
       operationService
@@ -83,7 +77,7 @@ export function RequotePairControl({ operation, onRequoted, disabled }: RequoteP
         if (res.success && res.data) setPreferredUuid(res.data.preferred_pair_uuid);
       });
     }
-  }, [open, pairs.length, operation.client_phone, operation.client_uuid]);
+  }, [open, pairs.length, operation.uuid, operation.client_phone, operation.client_uuid]);
 
   const close = () => {
     setOpen(false);
@@ -144,6 +138,7 @@ export function RequotePairControl({ operation, onRequoted, disabled }: RequoteP
         rates={rates}
         totalOperations={clientOps}
         preferredUuid={preferredUuid}
+        rateCaption={ratesAt ? `al ${formatCaracasShortDateTime(ratesAt)}` : undefined}
         clientName={operation.client_display_name}
         disabled={busy}
       />

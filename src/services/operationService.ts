@@ -13,6 +13,7 @@ import {
   ProfitAllocationInput,
   ProfitAllocationList,
   RequotePreview,
+  RequoteRates,
 } from '@/types/operation';
 import type { PaymentData } from '@/types/payment';
 
@@ -96,6 +97,12 @@ export class OperationService {
     const result = await httpClient.patch<OperationData>(`/operations/${uuid}`, {
       currency_pair_uuid: currencyPairUuid,
     });
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  /** La tasa con la que se recotizaría en cada par: la de la hora de la cotización. */
+  async requoteRates(uuid: string): Promise<ApiResponse<RequoteRates>> {
+    const result = await httpClient.get<RequoteRates>(`/operations/${uuid}/requote-rates`);
     return { success: result.success, data: result.data, error: result.error };
   }
 
