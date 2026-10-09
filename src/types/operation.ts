@@ -32,6 +32,7 @@ export interface RequotePreview {
     from_amount: number;
     to_amount: number;
     rate: number;
+    amount_side: 'SEND' | 'RECEIVE' | null;
   };
 }
 

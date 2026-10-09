@@ -17,6 +17,13 @@ import {
 } from '@/types/operation';
 import type { PaymentData } from '@/types/payment';
 
+/** Qué se corrige al recotizar; lo que no viene se deja como está. */
+export interface RequoteChange {
+  currency_pair_uuid?: string;
+  amount?: number;
+  amount_side?: 'SEND' | 'RECEIVE';
+}
+
 export interface OperationPayments {
   incoming: PaymentData[];
   outgoing: PaymentData[];
@@ -107,16 +114,17 @@ export class OperationService {
   }
 
   /**
-   * Recotiza la operación con otro par: conserva el monto que fijó el cliente y recalcula el
-   * otro con la tasa de ese par al cotizar. `dryRun` sólo devuelve el antes/después.
+   * Corrige la cotización: otro par (se recotiza con la tasa de ese par al cotizar) y/o otro
+   * monto o lado (sin cambiar el par se conserva la tasa cotizada). `dryRun` sólo devuelve
+   * el antes/después.
    */
   async requotePair(
     uuid: string,
-    currencyPairUuid: string,
+    change: RequoteChange,
     dryRun: boolean,
   ): Promise<ApiResponse<RequotePreview>> {
     const result = await httpClient.post<RequotePreview>(`/operations/${uuid}/requote-pair`, {
-      currency_pair_uuid: currencyPairUuid,
+      ...change,
       dry_run: dryRun,
     });
     return { success: result.success, data: result.data, error: result.error };
