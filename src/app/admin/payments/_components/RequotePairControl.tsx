@@ -3,12 +3,15 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { PairPicker } from '@/components/shared/PairPicker';
+import { PairPicker, type PairRate, type PairUsage } from '@/components/shared/PairPicker';
 import { adminService } from '@/services/adminService';
+import { clientService } from '@/services/clientService';
 import { operationService } from '@/services/operationService';
+import { ratesService } from '@/services/ratesService';
 import type { CurrencyPairData } from '@/types/admin';
 import type { OperationData, RequotePreview } from '@/types/operation';
 import { formatCaracasShortDateTime, formatNumber } from '@/utils/functions';
+import { quotedRateOf } from '@/utils/rounding';
 
 interface RequotePairControlProps {
   operation: OperationData;
@@ -16,9 +19,6 @@ interface RequotePairControlProps {
   onRequoted: (operation: OperationData) => void;
   disabled?: boolean;
 }
-
-const NO_USAGE = new Map();
-const NO_RATES = new Map();
 
 /** Unidades de `to` por 1 de `from`, que es como el operador lee una tasa. */
 function effectiveRate(rate: number, inverse: boolean): number {
@@ -37,13 +37,53 @@ export function RequotePairControl({ operation, onRequoted, disabled }: RequoteP
   const [pairUuid, setPairUuid] = useState(operation.currency_pair_uuid ?? '');
   const [preview, setPreview] = useState<RequotePreview | null>(null);
   const [busy, setBusy] = useState(false);
+  const [rates, setRates] = useState<Map<string, PairRate>>(new Map());
+  const [usage, setUsage] = useState<Map<string, PairUsage>>(new Map());
+  const [clientOps, setClientOps] = useState(0);
+  const [preferredUuid, setPreferredUuid] = useState<string | null>(null);
 
+  // Lo mismo que el selector de «Crear operación»: la tasa vigente de cada par y cuántas
+  // operaciones lleva el cliente en cada uno, para que el par bueno salga arriba. Cada
+  // petición va por su lado: si alguna falla, se elige el par igual, sin ese dato. La tasa
+  // que se aplica al recotizar es la de la hora de la cotización: la muestra la vista previa.
   useEffect(() => {
     if (!open || pairs.length) return;
     adminService.getCurrencyPairs(0, 200, true).then((res) => {
       if (res.success && res.data) setPairs(res.data.pairs);
     });
-  }, [open, pairs.length]);
+    ratesService.getAllActiveRates().then((res) => {
+      if (!res.success || !res.data) return;
+      setRates(
+        new Map(
+          res.data.map((r) => [
+            r.currency_pair_uuid,
+            { rate: quotedRateOf(r), updatedAt: r.updated_at ?? r.created_at ?? null },
+          ]),
+        ),
+      );
+    });
+    if (operation.client_phone) {
+      operationService
+        .getOperations({ phone: operation.client_phone, limit: 100 })
+        .then((res) => {
+          if (!res.success || !res.data) return;
+          const counts = new Map<string, PairUsage>();
+          for (const op of res.data.operations) {
+            if (!op.currency_pair_uuid) continue;
+            counts.set(op.currency_pair_uuid, {
+              count: (counts.get(op.currency_pair_uuid)?.count ?? 0) + 1,
+            });
+          }
+          setUsage(counts);
+          setClientOps(res.data.operations.length);
+        });
+    }
+    if (operation.client_uuid) {
+      clientService.getClient(operation.client_uuid).then((res) => {
+        if (res.success && res.data) setPreferredUuid(res.data.preferred_pair_uuid);
+      });
+    }
+  }, [open, pairs.length, operation.client_phone, operation.client_uuid]);
 
   const close = () => {
     setOpen(false);
@@ -100,9 +140,10 @@ export function RequotePairControl({ operation, onRequoted, disabled }: RequoteP
         pairs={pairs}
         value={pairUuid}
         onChange={(uuid) => void choose(uuid)}
-        usage={NO_USAGE}
-        rates={NO_RATES}
-        totalOperations={0}
+        usage={usage}
+        rates={rates}
+        totalOperations={clientOps}
+        preferredUuid={preferredUuid}
         clientName={operation.client_display_name}
         disabled={busy}
       />

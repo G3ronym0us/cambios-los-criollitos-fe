@@ -34,9 +34,9 @@ import type { CreateHint, PaymentData, PaymentTable } from '@/types/payment';
 import { defaultManagerFor, fundFieldMode, settleCurrency, splitFundOptions } from '../_lib/fundManagerField';
 import { formatAmountForInput, sanitizeAmountInput } from '@/utils/functions';
 import {
-  applyRounding,
   effectiveRate as toEffectiveRate,
   pairRoundingFrom,
+  quotedRateOf,
   quotePair,
   rateDecimals,
   type AmountSide,
@@ -51,22 +51,6 @@ import {
   type DifferenceChoice,
   type ValueDifference,
 } from './ValueDifferenceStep';
-
-/**
- * La tasa que el selector muestra junto a cada par: la que el formulario va a aplicar.
- * Si el par redondea la tasa (modo RATE) se muestra ya redondeada —USD-VES cotiza a 915,
- * no a los 919,005 crudos del scraper—; en cualquier otro caso, la del par tal cual.
- */
-function quotedRateOf(rate: ExchangeRateResponse): number {
-  const rounding = pairRoundingFrom(rate);
-  if (rounding?.mode !== 'RATE') return rate.rate;
-  const rounded = applyRounding(
-    toEffectiveRate(rate.rate, rate.inverse_percentage),
-    rounding.step,
-    rounding.direction,
-  );
-  return rounded > 0 ? rounded : rate.rate;
-}
 
 /**
  * Sanea el campo de tasa. Admite más decimales que un monto porque una tasa puede vivir en
