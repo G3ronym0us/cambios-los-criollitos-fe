@@ -39,6 +39,8 @@ export class OperationService {
     if (filters.needs) params.append('needs', filters.needs);
     if (filters.phone) params.append('phone', filters.phone);
     if (filters.search) params.append('search', filters.search);
+    if (filters.date_from) params.append('date_from', filters.date_from);
+    if (filters.date_to) params.append('date_to', filters.date_to);
     if (filters.page != null) params.append('page', String(filters.page));
     if (filters.limit != null) params.append('limit', String(filters.limit));
 

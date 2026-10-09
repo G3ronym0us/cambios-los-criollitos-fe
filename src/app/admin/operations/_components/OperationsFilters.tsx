@@ -2,6 +2,7 @@
 
 import { RotateCcw, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { DateRangeFilter } from '@/components/shared/DateRangeFilter';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -135,6 +136,14 @@ export function OperationsFilters({ filters, hasActiveFilters, onChange, onReset
               <SelectItem value="RECEIVED">Entregadas</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">Fecha</span>
+          <DateRangeFilter
+            value={filters.dateRange}
+            onChange={(range) => onChange({ ...filters, dateRange: range })}
+          />
         </div>
 
         {hasActiveFilters ? (

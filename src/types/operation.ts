@@ -277,6 +277,9 @@ export interface OperationFilters {
   phone?: string;
   /** Nombre o teléfono del cliente; lo resuelve el servidor. */
   search?: string;
+  /** Días de calendario (yyyy-mm-dd, hora de Caracas), el último incluido. */
+  date_from?: string;
+  date_to?: string;
   page?: number;
   limit?: number;
 }
