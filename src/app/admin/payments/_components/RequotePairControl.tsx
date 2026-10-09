@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { PairPicker, type PairRate, type PairUsage } from '@/components/shared/PairPicker';
 import { adminService } from '@/services/adminService';
 import { clientService } from '@/services/clientService';
-import { operationService } from '@/services/operationService';
+import { operationService, type RequoteChange } from '@/services/operationService';
 import type { CurrencyPairData } from '@/types/admin';
 import type { OperationData, RequotePreview } from '@/types/operation';
 import { formatCaracasShortDateTime, formatNumber } from '@/utils/functions';
@@ -18,21 +19,41 @@ interface RequotePairControlProps {
   disabled?: boolean;
 }
 
+type Side = 'SEND' | 'RECEIVE';
+
 /** Unidades de `to` por 1 de `from`, que es como el operador lee una tasa. */
 function effectiveRate(rate: number, inverse: boolean): number {
   return inverse && rate ? 1 / rate : rate;
 }
 
+/** El monto que fijó el cliente: lo que envía (SEND) o lo que recibe (RECEIVE). */
+function fixedAmount(op: OperationData): number {
+  return op.amount_side === 'RECEIVE' ? op.to_amount : op.from_amount;
+}
+
+function parseAmount(text: string): number | null {
+  const value = Number(text.trim().replace(',', '.'));
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
 /**
- * Cambiar el par de una operación al vincularla. El bot cotiza con el par por defecto del
- * cliente cuando el mensaje no dice la moneda, y a veces era otro: aquí se elige el bueno,
- * se ve cómo quedaría (misma cantidad que fijó el cliente, tasa de ese par a la hora de la
- * cotización) y sólo entonces se guarda.
+ * Corregir la cotización de una operación al vincularla, antes de decir cuánto cubre el pago.
+ *
+ * Dos errores del bot que se arreglan aquí:
+ * - El PAR: cotiza con el por defecto del cliente si el mensaje no dice la moneda. Con otro
+ *   par se recotiza con la tasa que ese par tenía a la hora de la cotización.
+ * - El MONTO o su LADO: tomó como COP enviados los 6000 Bs que había que entregar (op 5178).
+ *   Sin cambiar el par se conserva la tasa con la que se cotizó.
+ *
+ * Cada cambio pide la vista previa al backend (el mismo cálculo que guardará) y sólo
+ * «Recotizar» escribe.
  */
 export function RequotePairControl({ operation, onRequoted, disabled }: RequotePairControlProps) {
   const [open, setOpen] = useState(false);
   const [pairs, setPairs] = useState<CurrencyPairData[]>([]);
   const [pairUuid, setPairUuid] = useState(operation.currency_pair_uuid ?? '');
+  const [side, setSide] = useState<Side>(operation.amount_side);
+  const [amountText, setAmountText] = useState(String(fixedAmount(operation)));
   const [preview, setPreview] = useState<RequotePreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [rates, setRates] = useState<Map<string, PairRate>>(new Map());
@@ -79,27 +100,52 @@ export function RequotePairControl({ operation, onRequoted, disabled }: RequoteP
     }
   }, [open, pairs.length, operation.uuid, operation.client_phone, operation.client_uuid]);
 
+  // Lo que cambió respecto a la operación; null si nada (o el monto no es válido).
+  const amount = parseAmount(amountText);
+  const change: RequoteChange | null = (() => {
+    if (amount === null) return null;
+    const next: RequoteChange = {};
+    if (pairUuid && pairUuid !== operation.currency_pair_uuid) next.currency_pair_uuid = pairUuid;
+    if (side !== operation.amount_side) next.amount_side = side;
+    if (side !== operation.amount_side || Math.abs(amount - fixedAmount(operation)) > 0.005) {
+      next.amount = amount;
+    }
+    return Object.keys(next).length ? next : null;
+  })();
+  const changeKey = change ? JSON.stringify(change) : '';
+
+  // La vista previa sigue a lo que se va escribiendo, con un respiro para no pedir una por
+  // tecla.
+  useEffect(() => {
+    if (!open) return;
+    setPreview(null);
+    if (!changeKey) return;
+    const parsed = JSON.parse(changeKey) as RequoteChange;
+    let active = true;
+    const timer = setTimeout(async () => {
+      const res = await operationService.requotePair(operation.uuid, parsed, true);
+      if (!active) return;
+      if (res.success && res.data) setPreview(res.data);
+      else toast.error(res.error || 'No se pudo calcular la corrección');
+    }, 350);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [open, changeKey, operation.uuid]);
+
   const close = () => {
     setOpen(false);
     setPreview(null);
     setPairUuid(operation.currency_pair_uuid ?? '');
-  };
-
-  const choose = async (uuid: string) => {
-    setPairUuid(uuid);
-    setPreview(null);
-    if (!uuid || uuid === operation.currency_pair_uuid) return;
-    setBusy(true);
-    const res = await operationService.requotePair(operation.uuid, uuid, true);
-    setBusy(false);
-    if (res.success && res.data) setPreview(res.data);
-    else toast.error(res.error || 'No se pudo recotizar con ese par');
+    setSide(operation.amount_side);
+    setAmountText(String(fixedAmount(operation)));
   };
 
   const confirm = async () => {
-    if (!preview) return;
+    if (!preview || !change) return;
     setBusy(true);
-    const res = await operationService.requotePair(operation.uuid, preview.pair_uuid, false);
+    const res = await operationService.requotePair(operation.uuid, change, false);
     if (!res.success) {
       setBusy(false);
       toast.error(res.error || 'No se pudo recotizar la operación');
@@ -108,7 +154,7 @@ export function RequotePairControl({ operation, onRequoted, disabled }: RequoteP
     const fresh = await operationService.getOperation(operation.uuid);
     setBusy(false);
     if (fresh.success && fresh.data) {
-      toast.success(`Recotizada en ${preview.pair_symbol}`);
+      toast.success('Cotización corregida');
       onRequoted(fresh.data);
       setOpen(false);
       setPreview(null);
@@ -123,17 +169,33 @@ export function RequotePairControl({ operation, onRequoted, disabled }: RequoteP
         onClick={() => setOpen(true)}
         disabled={disabled}
       >
-        Cambiar par
+        Corregir cotización
       </button>
     );
   }
+
+  const pair = pairs.find((p) => p.uuid === pairUuid);
+  const fromCur = pair?.from_currency?.symbol ?? operation.from_currency ?? '';
+  const toCur = pair?.to_currency?.symbol ?? operation.to_currency ?? '';
+  const sideButton = (value: Side, label: string) => (
+    <button
+      type="button"
+      onClick={() => setSide(value)}
+      disabled={busy}
+      className={`flex-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors ${
+        side === value ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground'
+      }`}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <div className="mt-2 space-y-2 border-t border-dashed border-border pt-2">
       <PairPicker
         pairs={pairs}
         value={pairUuid}
-        onChange={(uuid) => void choose(uuid)}
+        onChange={setPairUuid}
         usage={usage}
         rates={rates}
         totalOperations={clientOps}
@@ -142,6 +204,21 @@ export function RequotePairControl({ operation, onRequoted, disabled }: RequoteP
         clientName={operation.client_display_name}
         disabled={busy}
       />
+
+      <div className="space-y-1">
+        <div className="flex gap-1.5">
+          {sideButton('SEND', `El cliente envía ${fromCur}`)}
+          {sideButton('RECEIVE', `El cliente recibe ${toCur}`)}
+        </div>
+        <Input
+          inputMode="decimal"
+          value={amountText}
+          onChange={(e) => setAmountText(e.target.value)}
+          disabled={busy}
+          className="h-8"
+          aria-label={`Monto en ${side === 'SEND' ? fromCur : toCur}`}
+        />
+      </div>
 
       {preview ? (
         <div className="space-y-0.5 rounded-md bg-background px-2 py-1.5 text-xs tabular-nums">
@@ -154,8 +231,11 @@ export function RequotePairControl({ operation, onRequoted, disabled }: RequoteP
             {formatNumber(preview.to_amount)} {preview.to_currency}
           </p>
           <p className="text-muted-foreground">
-            tasa {formatNumber(effectiveRate(preview.rate, preview.inverse_percentage))} del{' '}
-            {formatCaracasShortDateTime(preview.rate_at)} · se mantiene lo que{' '}
+            tasa {formatNumber(effectiveRate(preview.rate, preview.inverse_percentage))}
+            {preview.pair_uuid === operation.currency_pair_uuid
+              ? ' · la misma con que se cotizó'
+              : ` del ${formatCaracasShortDateTime(preview.rate_at)}`}
+            {' · fija lo que '}
             {preview.amount_side === 'SEND' ? 'envía' : 'recibe'} el cliente
           </p>
         </div>
@@ -166,7 +246,7 @@ export function RequotePairControl({ operation, onRequoted, disabled }: RequoteP
           Cancelar
         </Button>
         <Button type="button" size="sm" onClick={() => void confirm()} disabled={busy || !preview}>
-          {busy ? 'Calculando…' : 'Recotizar'}
+          {busy ? 'Guardando…' : 'Recotizar'}
         </Button>
       </div>
     </div>
