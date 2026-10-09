@@ -29,6 +29,7 @@ import {
   formatRelativeTime,
 } from '@/utils/functions';
 import { getStatusMeta } from '@/utils/operationStatus';
+import { getOriginMeta } from '@/utils/operationOrigin';
 import type {
   OperationData,
   OperationMatchItem,
@@ -42,6 +43,7 @@ import type { CreateHint, PaymentData, PaymentTable } from '@/types/payment';
 import { describeCoverage } from './paymentRowData';
 import { CreateOperationForm } from './CreateOperationForm';
 import { OutgoingCoveragePanel } from './OutgoingCoveragePanel';
+import { RequotePairControl } from './RequotePairControl';
 import { UnlinkOrphanDialog } from './UnlinkOrphanDialog';
 import {
   buildMatchQuery,
@@ -174,6 +176,8 @@ export function LinkOperationPanel({
   const [selected, setSelected] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [mode, setMode] = useState<'pick' | 'create' | 'coverage'>(initialMode);
+  // Sube al recotizar: el paso de cobertura se vuelve a pedir con los montos nuevos.
+  const [coverageKey, setCoverageKey] = useState(0);
   // Cuánto del valor de la operación cubre este saliente (null = lo que da la tasa).
   const [settledAmount, setSettledAmount] = useState<number | null>(null);
   // Desvincular el último comprobante de una op abre el cuadro de decisión.
@@ -551,13 +555,30 @@ export function LinkOperationPanel({
               <span className="truncate text-sm font-medium text-foreground">{client}</span>
               <span className="shrink-0 text-xs text-muted-foreground">{selectedOp.pair_symbol}</span>
             </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Cotizado {formatNumber(selectedOp.from_amount)} {selectedOp.from_currency} →{' '}
-              {formatNumber(selectedOp.to_amount)} {selectedOp.to_currency}
-            </p>
+            <div className="mt-0.5 flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                Cotizado {formatNumber(selectedOp.from_amount)} {selectedOp.from_currency} →{' '}
+                {formatNumber(selectedOp.to_amount)} {selectedOp.to_currency}
+              </p>
+            </div>
+            {/* El bot cotiza con el par por defecto del cliente si el mensaje no dice la
+                moneda; si era otro, se recotiza aquí antes de decir cuánto cubre el pago. */}
+            <RequotePairControl
+              key={selectedOp.uuid}
+              operation={selectedOp}
+              disabled={submitting}
+              onRequoted={(fresh) => {
+                setItems((prev) =>
+                  prev.map((it) => (it.operation.uuid === fresh.uuid ? { ...it, operation: fresh } : it)),
+                );
+                setLinkedOp((prev) => (prev?.uuid === fresh.uuid ? fresh : prev));
+                setCoverageKey((k) => k + 1);
+              }}
+            />
           </div>
 
           <OutgoingCoveragePanel
+            key={coverageKey}
             paymentId={payment.id}
             operationUuid={selectedOp.uuid}
             onChange={setSettledAmount}
@@ -733,6 +754,7 @@ export function LinkOperationPanel({
             const isSuggested = visibleSuggestion?.uuid === op.uuid;
             const client = op.client_display_name || stripPhone(op.client_phone) || 'Cliente';
             const statusMeta = getStatusMeta(op.status);
+            const originMeta = getOriginMeta(op.origin);
             // El par ya nombra las dos monedas: repetirlas junto a cada importe alarga la
             // línea principal sin añadir nada.
             const pairLabel = op.pair_symbol || [op.from_currency, op.to_currency].filter(Boolean).join('/');
@@ -789,6 +811,13 @@ export function LinkOperationPanel({
                     <StatusBadge tone={statusMeta.tone} icon={statusMeta.icon}>
                       {statusMeta.label}
                     </StatusBadge>
+                    {originMeta ? (
+                      <span title={originMeta.hint}>
+                        <StatusBadge tone={originMeta.tone} icon={originMeta.icon}>
+                          {originMeta.label}
+                        </StatusBadge>
+                      </span>
+                    ) : null}
                     {(op.delivered_amount ?? 0) > 0.01 && (op.pending_amount ?? 0) > 0.01 ? (
                       <StatusBadge tone="warning">
                         faltan {formatNumber(op.pending_amount ?? 0)} {op.currency ?? op.from_currency}

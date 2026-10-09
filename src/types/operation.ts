@@ -4,6 +4,29 @@
 export type OperationStatus = 'QUOTED' | 'PENDING' | 'COMPLETED' | 'CANCELLED';
 export type DeliveryStatus = 'PENDING' | 'RECEIVED';
 export type OperationScenario = 'NORMAL' | 'ZELLE_DIRECT' | 'VIA_PARTNER';
+/** De dónde nació la cotización. Ver `getOriginMeta`. */
+export type OperationOrigin = 'TEXT' | 'TEXT_RECEIPT' | 'INCOMING_RECEIPT' | 'OUTGOING_RECEIPT';
+
+/** Antes/después de recotizar una operación con otro par (`POST /operations/{uuid}/requote-pair`). */
+export interface RequotePreview {
+  pair_uuid: string;
+  pair_symbol: string;
+  from_currency: string;
+  to_currency: string;
+  from_amount: number;
+  to_amount: number;
+  rate: number;
+  inverse_percentage: boolean;
+  /** ISO: la hora de la cotización, cuya tasa se usó. */
+  rate_at: string;
+  amount_side: 'SEND' | 'RECEIVE';
+  previous: {
+    pair_symbol: string | null;
+    from_amount: number;
+    to_amount: number;
+    rate: number;
+  };
+}
 
 export interface OperationData {
   uuid: string;
@@ -109,6 +132,8 @@ export interface OperationData {
   bcv_usd: number | null;
   status: OperationStatus;
   scenario: OperationScenario;
+  /** `null`/ausente: no se sabe (o un backend anterior a la columna). */
+  origin?: OperationOrigin | null;
   fund_group_uuid: string | null;
   fund_group_name: string | null;
   received_by_user_uuid: string | null;
