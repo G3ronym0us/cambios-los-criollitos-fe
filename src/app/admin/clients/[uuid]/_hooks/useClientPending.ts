@@ -123,7 +123,8 @@ export function useClientPending(
     const map = new Map<string, PendingDelivery>();
     for (const delivery of undoable) {
       for (const item of delivery.items) {
-        if (item.operation_uuid) map.set(item.operation_uuid, delivery);
+        // Sólo lo que sigue marcado: una deshecha suelta ya no es de ese lote.
+        if (item.operation_uuid && !item.undone_at) map.set(item.operation_uuid, delivery);
       }
     }
     return map;
@@ -490,6 +491,42 @@ export function useClientPending(
     [clientUuid, onChanged],
   );
 
+  /**
+   * Desmarca esas operaciones, sean del lote que sean: se agrupan por lote y se deshace en
+   * cada uno sólo lo pedido. Lo usa la selección múltiple de cualquier pestaña de Cuenta.
+   */
+  const unmarkOperations = useCallback(
+    async (operationUuids: string[]) => {
+      const byDelivery = new Map<string, { delivery: PendingDelivery; uuids: string[] }>();
+      for (const uuid of operationUuids) {
+        const delivery = deliveryByOperation.get(uuid);
+        if (!delivery) continue;
+        const entry = byDelivery.get(delivery.uuid) ?? { delivery, uuids: [] };
+        entry.uuids.push(uuid);
+        byDelivery.set(delivery.uuid, entry);
+      }
+      if (byDelivery.size === 0) return false;
+
+      setWorking(true);
+      let done = 0;
+      let failed: string | null = null;
+      for (const { delivery, uuids } of byDelivery.values()) {
+        const result = await clientService.undoPendingDelivery(clientUuid, delivery.uuid, uuids);
+        if (result.success) done += uuids.length;
+        else failed = result.error || 'No se pudo desmarcar';
+      }
+      setWorking(false);
+      await loadDeliveries();
+      if (failed) toast.error(failed);
+      if (done > 0) {
+        toast.success(done === 1 ? 'Operación desmarcada' : `${done} operaciones desmarcadas`);
+        onChanged();
+      }
+      return failed === null;
+    },
+    [clientUuid, deliveryByOperation, loadDeliveries, onChanged],
+  );
+
   const undoOne = useCallback(
     async (operationUuid: string) => {
       const delivery = deliveryByOperation.get(operationUuid);
@@ -560,6 +597,7 @@ export function useClientPending(
       markOne,
       undoOne,
       undoItems,
+      unmarkOperations,
       undoDelivery,
       applyDistribution,
     },

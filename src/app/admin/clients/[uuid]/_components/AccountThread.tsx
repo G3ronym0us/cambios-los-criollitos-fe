@@ -1,9 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowDownCircle, ArrowUpCircle, Receipt } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowDownCircle, ArrowUpCircle, Receipt, RotateCcw } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
-import { buttonVariants } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { SelectCheckbox as Checkbox } from '@/components/shared/SelectCheckbox';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ListPagination } from '@/components/shared/ListPagination';
 import { usePagedList } from '@/hooks/usePagedList';
@@ -26,6 +28,11 @@ interface AccountThreadProps {
   emptyLabel: string;
   /** Lo que, al cambiar, vuelve a la primera página: el filtro y el par elegidos. */
   resetKey?: string;
+  /** Operaciones marcadas como entregadas/cobradas desde la cola: las que se pueden desmarcar. */
+  marked?: ReadonlySet<string>;
+  /** Desmarca las elegidas. Devuelve si todo salió bien, para soltar la selección. */
+  onUnmark?: (operationUuids: string[]) => Promise<boolean>;
+  working?: boolean;
 }
 
 const PAGE_SIZE = 10;
@@ -56,7 +63,17 @@ function Chip({ className, children }: { className: string; children: React.Reac
 }
 
 /** La cabecera de columnas, la misma que la cola de «Por entregar». Sólo en ≥lg. */
-function ThreadHeader() {
+function ThreadHeader({
+  checked,
+  indeterminate,
+  disabled,
+  onToggleAll,
+}: {
+  checked: boolean;
+  indeterminate: boolean;
+  disabled: boolean;
+  onToggleAll: () => void;
+}) {
   return (
     <div
       className={cn(
@@ -64,7 +81,15 @@ function ThreadHeader() {
         'hidden border-b border-border bg-muted/40 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground lg:grid lg:px-3',
       )}
     >
-      <span className={COL.check} />
+      <div className={COL.check}>
+        <Checkbox
+          checked={checked}
+          indeterminate={indeterminate}
+          disabled={disabled}
+          label="Seleccionar las operaciones de esta página"
+          onChange={onToggleAll}
+        />
+      </div>
       <span className={COL.when}>Fecha</span>
       <span className={COL.value}>Valor</span>
       <span className={COL.state}>Estado</span>
@@ -83,7 +108,17 @@ function ThreadHeader() {
  * de columnas envolvía igual de roto aquí, y el comentario de `accountTable.ts` es
  * literal — un ancho que cambia ahí cambia las dos listas a la vez.
  */
-function OperationRow({ operation, at }: { operation: OperationData; at: string | null }) {
+function OperationRow({
+  operation,
+  at,
+  checked,
+  onToggle,
+}: {
+  operation: OperationData;
+  at: string | null;
+  checked: boolean;
+  onToggle: () => void;
+}) {
   const state = operationState(operation);
   const pending = outstandingAmount(operation);
   const value = valueAmount(operation);
@@ -102,7 +137,14 @@ function OperationRow({ operation, at }: { operation: OperationData; at: string 
 
   return (
     <div className={cn(GRID, 'border-b border-border px-2 py-2 last:border-b-0 sm:px-3')}>
-      <span className={cn(COL.check, 'hidden lg:block')} aria-hidden />
+      <div className={COL.check}>
+        <Checkbox
+          checked={checked}
+          label={`Seleccionar operación del ${formatCaracasShortDateTime(at)}`}
+          onChange={onToggle}
+          hiddenBelowLg
+        />
+      </div>
 
       <div className={cn(COL.when, 'hidden lg:block')}>
         <Link
@@ -168,12 +210,21 @@ function OperationRow({ operation, at }: { operation: OperationData; at: string 
           palabras) y la acción — la misma forma que una fila de la cola. */}
       <div className="flex w-full basis-full flex-col gap-1.5 lg:hidden">
         <div className="flex items-baseline justify-between gap-2">
-          <Link
-            href={`/admin/operations/${operation.uuid}`}
-            className="truncate text-sm text-foreground hover:underline"
-          >
-            {formatCaracasShortDateTime(at)}
-          </Link>
+          <span className="flex min-w-0 items-center gap-1">
+            <span className="lg:hidden">
+              <Checkbox
+                checked={checked}
+                label={`Seleccionar operación del ${formatCaracasShortDateTime(at)}`}
+                onChange={onToggle}
+              />
+            </span>
+            <Link
+              href={`/admin/operations/${operation.uuid}`}
+              className="truncate text-sm text-foreground hover:underline"
+            >
+              {formatCaracasShortDateTime(at)}
+            </Link>
+          </span>
           {state === 'pending' ? (
             <span
               className={cn(
@@ -300,22 +351,61 @@ function BalanceRow({ entry }: { entry: BalanceEntry }) {
   );
 }
 
-export function AccountThread({ items, emptyLabel, resetKey }: AccountThreadProps) {
+export function AccountThread({
+  items,
+  emptyLabel,
+  resetKey,
+  marked,
+  onUnmark,
+  working = false,
+}: AccountThreadProps) {
   const paged = usePagedList(items, PAGE_SIZE, resetKey);
+  // Selección de la página a la vista: cambiar de página o de filtro la suelta, para que
+  // nada que no se ve entre en la acción (lote de Neurys, 2026-10-09).
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const pageKey = `${resetKey ?? ''}:${paged.page}`;
+  useEffect(() => {
+    setSelected(new Set());
+  }, [pageKey]);
 
   if (items.length === 0) {
     return <EmptyState icon={Receipt} title="Nada que mostrar" description={emptyLabel} />;
   }
+
+  const visibleOps = paged.pageItems
+    .filter((item): item is Extract<AccountItem, { kind: 'operation' }> => item.kind === 'operation')
+    .map((item) => item.operation.uuid);
+  const chosen = visibleOps.filter((uuid) => selected.has(uuid));
+  const allChosen = chosen.length > 0 && chosen.length === visibleOps.length;
+  const unmarkable = chosen.length > 0 && chosen.every((uuid) => marked?.has(uuid));
+  const toggle = (uuid: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(uuid)) next.delete(uuid);
+      else next.add(uuid);
+      return next;
+    });
 
   return (
     <div className="space-y-3">
       <Card className="overflow-hidden py-0">
         <CardContent className="overflow-x-auto p-0">
           <div className={TABLE_MIN}>
-            <ThreadHeader />
+            <ThreadHeader
+              checked={allChosen}
+              indeterminate={chosen.length > 0 && !allChosen}
+              disabled={visibleOps.length === 0}
+              onToggleAll={() => setSelected(allChosen ? new Set() : new Set(visibleOps))}
+            />
             {paged.pageItems.map((item) =>
               item.kind === 'operation' ? (
-                <OperationRow key={item.key} operation={item.operation} at={item.displayAt} />
+                <OperationRow
+                  key={item.key}
+                  operation={item.operation}
+                  at={item.displayAt}
+                  checked={selected.has(item.operation.uuid)}
+                  onToggle={() => toggle(item.operation.uuid)}
+                />
               ) : (
                 <BalanceRow key={item.key} entry={item.entry} />
               ),
@@ -331,6 +421,39 @@ export function AccountThread({ items, emptyLabel, resetKey }: AccountThreadProp
         noun="movimientos"
         onPageChange={paged.setPage}
       />
+
+      {/* La barra de la selección. «Desmarcar» sólo cuando TODAS las elegidas salieron de
+          una entrega marcada: una completada por su comprobante no se desmarca desde aquí. */}
+      {chosen.length > 0 ? (
+        <div className="sticky bottom-2 z-10 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card p-3 shadow-md">
+          <span className="text-sm">
+            <strong>{chosen.length}</strong>{' '}
+            {chosen.length === 1 ? 'operación seleccionada' : 'operaciones seleccionadas'}
+            {!unmarkable ? (
+              <span className="block text-xs text-muted-foreground">
+                Sólo se pueden desmarcar las que se marcaron como entregadas o cobradas.
+              </span>
+            ) : null}
+          </span>
+          <span className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())} disabled={working}>
+              Quitar selección
+            </Button>
+            {onUnmark ? (
+              <Button
+                size="sm"
+                disabled={!unmarkable || working}
+                onClick={async () => {
+                  if (await onUnmark(chosen)) setSelected(new Set());
+                }}
+              >
+                <RotateCcw className="h-4 w-4" />
+                Desmarcar {chosen.length}
+              </Button>
+            ) : null}
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }
