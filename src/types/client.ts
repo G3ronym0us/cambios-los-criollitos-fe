@@ -219,6 +219,11 @@ export interface PendingDeliveryItem {
   currency: string | null;
   previous_uncovered: number | null;
   previous_uncovered_reason: string | null;
+  operation_created_at?: string | null;
+  operation_from_amount?: number | null;
+  operation_to_amount?: number | null;
+  /** Deshecha sola, sin el resto del lote. */
+  undone_at?: string | null;
 }
 
 export interface PendingDelivery {

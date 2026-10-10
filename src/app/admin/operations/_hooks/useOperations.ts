@@ -55,7 +55,7 @@ const emptyStats: OperationStats = {
   expiring_next_at: null,
 };
 
-export const PAGE_SIZES = [25, 50, 100] as const;
+export const PAGE_SIZES = [10, 25, 50, 100] as const;
 
 /**
  * El segmento y las tarjetas se traducen al `needs` del servidor, que filtra por lo que

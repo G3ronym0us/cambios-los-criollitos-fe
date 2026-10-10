@@ -19,6 +19,7 @@ import { usePagedList } from '@/hooks/usePagedList';
 import { SidePanel, SidePanelHeader } from '@/components/shared/SidePanel';
 import { cn } from '@/lib/utils';
 import { formatCaracasShortDateTime, formatRelativeTime } from '@/utils/functions';
+import type { PendingDelivery } from '@/types/client';
 import type { OperationData } from '@/types/operation';
 import { OperationCoveragePanel } from '../../../operations/_components/OperationCoveragePanel';
 import {
@@ -397,6 +398,118 @@ function PendingRow({
 const PAGE_SIZE = 10;
 
 /**
+ * Las operaciones de un lote de «entregas marcadas», plegadas, para deshacer una, varias o
+ * todas: un lote puede tener unas bien y otras mal (el de Neurys del 2026-10-09 marcó 38 y
+ * 10 no estaban cobradas). Van por fecha de la operación, que es como se reconocen.
+ */
+function DeliveryItems({
+  delivery,
+  working,
+  onUndo,
+}: {
+  delivery: PendingDelivery;
+  working: boolean;
+  onUndo: (operationUuids: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
+  const items = delivery.items
+    .filter((item) => !item.undone_at && item.operation_uuid)
+    .sort((a, b) =>
+      String(a.operation_created_at ?? '').localeCompare(String(b.operation_created_at ?? '')),
+    );
+  const uuids = items.map((item) => item.operation_uuid as string);
+  const chosen = uuids.filter((uuid) => picked.has(uuid));
+  const all = chosen.length > 0 && chosen.length === uuids.length;
+
+  const toggle = (uuid: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(uuid)) next.delete(uuid);
+      else next.add(uuid);
+      return next;
+    });
+  const undo = (list: string[]) => {
+    onUndo(list);
+    setPicked(new Set());
+  };
+
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="text-xs font-medium text-primary hover:underline"
+      >
+        {open ? 'Ocultar operaciones' : `Ver las ${items.length} operaciones y deshacer las que estén mal`}
+      </button>
+      {open ? (
+        <div className="mt-1.5 rounded-md border border-border bg-card">
+          <div className="flex items-center justify-between gap-2 border-b border-border px-2 py-1.5">
+            <span className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Checkbox
+                checked={all}
+                indeterminate={chosen.length > 0 && !all}
+                label="Seleccionar todas las operaciones del lote"
+                onChange={() => setPicked(all ? new Set() : new Set(uuids))}
+              />
+              {chosen.length > 0 ? `${chosen.length} seleccionadas` : 'Seleccionar'}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              disabled={working || chosen.length === 0}
+              onClick={() => undo(chosen)}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Deshacer {chosen.length > 0 ? chosen.length : ''}
+            </Button>
+          </div>
+          <ul className="divide-y divide-border">
+            {items.map((item) => {
+              const uuid = item.operation_uuid as string;
+              return (
+                <li key={item.uuid} className="flex items-center justify-between gap-2 px-2 py-1.5 text-xs">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Checkbox
+                      checked={picked.has(uuid)}
+                      label={`Seleccionar la operación del ${item.operation_created_at ?? ''}`}
+                      onChange={() => toggle(uuid)}
+                    />
+                    <span className="min-w-0 truncate tabular-nums text-muted-foreground">
+                      {item.operation_created_at
+                        ? formatCaracasShortDateTime(item.operation_created_at)
+                        : '—'}
+                      {' · '}
+                      <span className="font-medium text-foreground">
+                        {formatPending(item.amount, item.currency)}
+                      </span>
+                      {item.pair_symbol ? ` · ${item.pair_symbol}` : ''}
+                    </span>
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 shrink-0"
+                    disabled={working}
+                    onClick={() => undo([uuid])}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Deshacer
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * El filtro «Por entregar» de Cuenta, que no es un histórico sino una cola de trabajo:
  * pocas filas, todas accionables, de la más vieja a la más nueva.
  *
@@ -629,10 +742,8 @@ export function PendingWorkList({
           </p>
           <div className="mt-2 divide-y divide-border">
             {state.undoable.slice(0, 5).map((delivery) => (
-              <div
-                key={delivery.uuid}
-                className="flex flex-col gap-2 py-3 first:pt-2 sm:flex-row sm:items-center sm:justify-between sm:py-2"
-              >
+              <div key={delivery.uuid} className="py-3 first:pt-2 sm:py-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 {/* Qué se marcó, no sólo cuántas: para decidir si hay que deshacer hay que
                     reconocer la operación, y «1 operación» no se reconoce. */}
                 <p className="min-w-0 text-xs text-muted-foreground">
@@ -658,6 +769,15 @@ export function PendingWorkList({
                   <RotateCcw className="h-3.5 w-3.5" />
                   Deshacer esta entrega
                 </Button>
+              </div>
+              {/* Una por una: un lote puede tener unas bien y otras mal. */}
+              {delivery.operations > 1 ? (
+                <DeliveryItems
+                  delivery={delivery}
+                  working={state.working}
+                  onUndo={(uuids) => actions.undoItems(delivery, uuids)}
+                />
+              ) : null}
               </div>
             ))}
           </div>
