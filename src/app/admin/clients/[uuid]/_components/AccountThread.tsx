@@ -28,7 +28,7 @@ interface AccountThreadProps {
   resetKey?: string;
 }
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 const STATE_TONE: Record<OperationState, string> = {
   pending: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',

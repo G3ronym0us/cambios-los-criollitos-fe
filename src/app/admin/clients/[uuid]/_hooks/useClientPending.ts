@@ -459,12 +459,43 @@ export function useClientPending(
     [clientUuid, confirm, onChanged],
   );
 
+  /**
+   * Deshace sólo esas operaciones del lote; el resto sigue marcado. El lote de Neurys del
+   * 2026-10-09 tomó 38 y 10 estaban mal: antes había que deshacerlo entero.
+   */
+  const undoItems = useCallback(
+    async (delivery: PendingDelivery, operationUuids: string[]) => {
+      if (operationUuids.length === 0) return;
+      setWorking(true);
+      const result = await clientService.undoPendingDelivery(clientUuid, delivery.uuid, operationUuids);
+      setWorking(false);
+
+      if (!result.success || !result.data) {
+        toast.error(result.error || 'No se pudo deshacer');
+        return;
+      }
+      const updated = result.data;
+      setUndoable((prev) =>
+        updated.undone_at
+          ? prev.filter((item) => item.uuid !== delivery.uuid)
+          : prev.map((item) => (item.uuid === delivery.uuid ? updated : item)),
+      );
+      toast.success(
+        operationUuids.length === 1
+          ? 'La operación vuelve a pendiente'
+          : `${operationUuids.length} operaciones vuelven a pendiente`,
+      );
+      onChanged();
+    },
+    [clientUuid, onChanged],
+  );
+
   const undoOne = useCallback(
     async (operationUuid: string) => {
       const delivery = deliveryByOperation.get(operationUuid);
-      if (delivery) await undoDelivery(delivery, true);
+      if (delivery) await undoItems(delivery, [operationUuid]);
     },
-    [deliveryByOperation, undoDelivery],
+    [deliveryByOperation, undoItems],
   );
 
   /**
@@ -528,6 +559,7 @@ export function useClientPending(
       markSelected,
       markOne,
       undoOne,
+      undoItems,
       undoDelivery,
       applyDistribution,
     },

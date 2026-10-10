@@ -161,10 +161,12 @@ export class ClientService {
   async undoPendingDelivery(
     clientUuid: string,
     deliveryUuid: string,
+    /** Sólo estas operaciones del lote; sin ellas, todas las que siguen marcadas. */
+    operationUuids?: string[],
   ): Promise<ApiResponse<PendingDelivery>> {
     const result = await httpClient.post<PendingDelivery>(
       `/clients/${clientUuid}/pending/deliveries/${deliveryUuid}/undo`,
-      {},
+      operationUuids ? { operation_uuids: operationUuids } : {},
     );
     return { success: result.success, data: result.data, error: result.error };
   }
