@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Check, HandCoins, PartyPopper, Receipt, RotateCcw } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -393,7 +393,8 @@ function PendingRow({
   );
 }
 
-const PAGE_SIZE = 25;
+/** Diez por página: una cola que se marca a ojo tiene que caber en la pantalla. */
+const PAGE_SIZE = 10;
 
 /**
  * El filtro «Por entregar» de Cuenta, que no es un histórico sino una cola de trabajo:
@@ -417,6 +418,13 @@ export function PendingWorkList({
   // Se pagina lo que se PINTA; seleccionar todas, el reparto y los totales siguen siendo
   // sobre la cola entera.
   const paged = usePagedList(state.rows, PAGE_SIZE, pair);
+  // Le dice al hook qué se ve, para que «seleccionar todas» no tome otras páginas.
+  const visibleKey = paged.pageItems.map((op) => op.uuid).join(',');
+  const { setVisible } = actions;
+  useEffect(() => {
+    setVisible(visibleKey ? visibleKey.split(',') : []);
+    return () => setVisible(null);
+  }, [visibleKey, setVisible]);
 
   if (state.rows.length === 0) {
     return (
@@ -428,8 +436,9 @@ export function PendingWorkList({
     );
   }
 
+  const visibleSelectable = state.selectableVisible;
   const allSelected =
-    state.selectable.length > 0 && state.selectedRows.length === state.selectable.length;
+    visibleSelectable.length > 0 && visibleSelectable.every((op) => state.selected.has(op.uuid));
   const someSelected = state.selectedRows.length > 0 && !allSelected;
   // En móvil no hay casilla de fila hasta que hay algo marcado: la que la enciende es la
   // cabecera de «seleccionar todas», que sí está siempre a mano.
@@ -485,7 +494,7 @@ export function PendingWorkList({
             <ListHeader
               checked={allSelected}
               indeterminate={someSelected}
-              disabled={state.selectable.length === 0}
+              disabled={visibleSelectable.length === 0}
               onToggleAll={allSelected ? actions.clearSelection : actions.selectAll}
             />
 
@@ -497,13 +506,13 @@ export function PendingWorkList({
               <Checkbox
                 checked={allSelected}
                 indeterminate={someSelected}
-                disabled={state.selectable.length === 0}
-                label="Seleccionar todas las operaciones entregables"
+                disabled={visibleSelectable.length === 0}
+                label="Seleccionar las operaciones entregables de esta página"
                 onChange={allSelected ? actions.clearSelection : actions.selectAll}
               />
               <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
-                Seleccionar {state.selectable.length === 1 ? 'la' : 'las'} {state.selectable.length}{' '}
-                {state.selectable.length === 1 ? 'entregable' : 'entregables'}
+                Seleccionar {visibleSelectable.length === 1 ? 'la' : 'las'} {visibleSelectable.length}{' '}
+                {visibleSelectable.length === 1 ? 'entregable' : 'entregables'} de esta página
               </span>
               {blockedCount > 0 ? (
                 <span className="shrink-0 text-xs text-muted-foreground">
@@ -551,6 +560,7 @@ export function PendingWorkList({
         page={paged.page}
         totalPages={paged.totalPages}
         total={paged.total}
+        pageSize={PAGE_SIZE}
         noun="operaciones"
         onPageChange={paged.setPage}
       />
@@ -597,7 +607,7 @@ export function PendingWorkList({
                   className="h-11 flex-1 sm:h-9 sm:flex-none"
                   onClick={actions.selectAll}
                 >
-                  Seleccionar todas ({state.selectable.length})
+                  Seleccionar las {visibleSelectable.length} de esta página
                 </Button>
               ) : null}
             </div>
