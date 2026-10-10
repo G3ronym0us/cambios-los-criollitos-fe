@@ -6,6 +6,8 @@ import type {
   LoanValuation,
   OutgoingCoverage,
   OutgoingSettlementSummary,
+  OutgoingRefundInput,
+  OutgoingRefundSummary,
   PaymentAllocationSummary,
   PaymentData,
   PaymentPage,
@@ -114,6 +116,25 @@ export class PaymentService {
   async getSettlements(paymentId: number): Promise<ApiResponse<OutgoingSettlementSummary>> {
     const result = await httpClient.get<OutgoingSettlementSummary>(
       `/payments/outgoing/${paymentId}/settlements`,
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  async getRefunds(paymentId: number): Promise<ApiResponse<OutgoingRefundSummary>> {
+    const result = await httpClient.get<OutgoingRefundSummary>(
+      `/payments/outgoing/${paymentId}/refunds`,
+    );
+    return { success: result.success, data: result.data, error: result.error };
+  }
+
+  // Reemplaza lo devuelto del saliente (lista vacía = no hubo devolución).
+  async setRefunds(
+    paymentId: number,
+    refunds: OutgoingRefundInput[],
+  ): Promise<ApiResponse<OutgoingRefundSummary>> {
+    const result = await httpClient.put<OutgoingRefundSummary>(
+      `/payments/outgoing/${paymentId}/refunds`,
+      { refunds },
     );
     return { success: result.success, data: result.data, error: result.error };
   }

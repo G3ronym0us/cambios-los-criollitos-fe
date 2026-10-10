@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRightLeft, Ban, ChevronRight, HandCoins, Info, Link2, Lock, PiggyBank, RotateCcw, ScanLine, Split, Tag, TriangleAlert, UserRoundCog, Wallet } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, Ban, ChevronRight, HandCoins, Info, Link2, Lock, PiggyBank, RotateCcw, ScanLine, Split, Tag, TriangleAlert, Undo2, UserRoundCog, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   SidePanel,
@@ -37,6 +37,7 @@ import { LinkOperationPanel } from './LinkOperationPanel';
 import { FundDepositStep, fundDepositLabel } from './FundDepositStep';
 import { OutgoingSettlementsPanel } from './OutgoingSettlementsPanel';
 import { PaymentTimeline, TransferOriginChip } from './PaymentTransferTrail';
+import { OutgoingRefundsStep } from './OutgoingRefundsStep';
 import { TransferClientStep } from './TransferClientStep';
 import { canTransferPayment, canTransferPayments } from './paymentTransfer';
 import { LoanReferenceFields } from '@/components/loans/LoanReferenceFields';
@@ -86,6 +87,11 @@ const STEP_META: Record<
     title: () => 'Marcar como irrelevante',
     subtitle: () => 'Duplicado o ajeno a las operaciones. Deja constancia del motivo.',
   },
+  refunds: {
+    title: () => 'Devuelto por el cliente',
+    subtitle: () =>
+      'Se pagó de más y el cliente devolvió la diferencia: el pago pasa a contar por lo que entregó de verdad.',
+  },
   transfer: {
     title: () => 'Transferir a otro cliente',
     subtitle: () =>
@@ -113,6 +119,7 @@ type Step =
   | 'settlements'
   | 'loan'
   | 'fundDeposit'
+  | 'refunds'
   | 'transfer';
 
 export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConverted }: OutgoingPaymentActionDialogProps) {
@@ -685,6 +692,19 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
                 onClick={() => setCorrecting(true)}
               />
               <ChoiceButton
+                icon={Undo2}
+                title="Devuelto por el cliente"
+                description={
+                  payment.refunded_amount
+                    ? `Devolvió ${formatNumber(payment.refunded_amount)} · neto ${formatNumber(
+                        payment.net_amount ?? 0,
+                      )} ${payment.currency ?? ''}`
+                    : 'Se pagó de más y el cliente devolvió la diferencia.'
+                }
+                active={(payment.refunded_amount ?? 0) > 0}
+                onClick={() => setStep('refunds')}
+              />
+              <ChoiceButton
                 icon={ArrowRightLeft}
                 title="Convertir en entrante"
                 description="Es dinero que entró, no que salió."
@@ -745,6 +765,8 @@ export function OutgoingPaymentActionDialog({ payment, onClose, onDone, onConver
           </Button>
         </SidePanelFooter>
         </>
+      ) : step === 'refunds' ? (
+        <OutgoingRefundsStep payment={payment} onDone={finish} onCancel={() => setStep('choose')} />
       ) : step === 'transfer' ? (
         <TransferClientStep
           payment={payment}

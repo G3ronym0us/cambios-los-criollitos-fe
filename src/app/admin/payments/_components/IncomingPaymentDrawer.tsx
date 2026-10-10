@@ -199,6 +199,7 @@ export function IncomingPaymentDrawer({
     setIrrelevantDesc(payment.irrelevant_description ?? '');
     setOrphan(null);
     if (payment.operation_uuid) return; // ya vinculado: no hay nada que sugerir
+    if (payment.refund_of_outgoing_id) return; // es una devolución: ya tiene destino
     let active = true;
     paymentService.getSuggestions('incoming', [payment.id]).then((res) => {
       if (active && res.success && res.data) setSuggestion(res.data.items[0] ?? null);
@@ -482,6 +483,20 @@ export function IncomingPaymentDrawer({
                   {p.raw_text}
                 </pre>
               ) : null}
+            </div>
+          ) : null}
+
+          {/* Este dinero es lo que el cliente devolvió de un saliente pagado de más: ya tiene
+              destino. Se suelta desde ese saliente («Devuelto por el cliente»). */}
+          {p.refund_of_outgoing_id ? (
+            <div className="rounded-xl border border-primary/40 bg-primary/5 p-3">
+              <p className="text-[13px] font-semibold text-foreground">
+                Devolución del pago saliente #{p.refund_of_outgoing_id}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Se pagó de más y el cliente devolvió la diferencia: este pago descuenta de ese
+                saliente. Para cambiarlo, ábrelo en Salientes → «Devuelto por el cliente».
+              </p>
             </div>
           ) : null}
 

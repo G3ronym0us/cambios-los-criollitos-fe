@@ -121,6 +121,11 @@ export interface PaymentData {
   settled_amount?: number | null;
   settled_rate?: number | null;
   settled_reference_rate?: number | null;
+  // solo outgoing: lo que el cliente devolvió de un pago hecho de más, y lo que queda (neto).
+  refunded_amount?: number;
+  net_amount?: number | null;
+  // solo incoming: este pago es la devolución de ese saliente.
+  refund_of_outgoing_id?: number | null;
   // solo incoming: depósito a fondo registrado desde este pago (inyectado por list_payments_page).
   deposit?: PaymentDeposit | null;
   // solo incoming: reparto del pago entre operaciones (un Zelle puede cubrir varios cambios).
@@ -306,8 +311,53 @@ export interface OutgoingSettlementSummary {
   settlements: OutgoingSettlement[];
 }
 
+/** Lo devuelto de un saliente pagado de más (`GET /payments/outgoing/{id}/refunds`). */
+export interface OutgoingRefund {
+  uuid: string;
+  outgoing_payment_id: number;
+  incoming_payment_id: number | null;
+  incoming_reference: string | null;
+  incoming_created_at: string | null;
+  amount: number;
+  currency: string | null;
+  note: string | null;
+  created_at: string | null;
+}
+
+export interface OutgoingRefundCandidate {
+  incoming_payment_id: number;
+  amount: number | null;
+  currency: string | null;
+  reference: string | null;
+  identification: string | null;
+  created_at: string | null;
+}
+
+export interface OutgoingRefundSummary {
+  payment_id: number;
+  amount: number | null;
+  currency: string | null;
+  refunded_amount: number;
+  net_amount: number | null;
+  refunds: OutgoingRefund[];
+  candidates: OutgoingRefundCandidate[];
+}
+
+export interface OutgoingRefundInput {
+  incoming_payment_id?: number;
+  amount?: number;
+  note?: string;
+}
+
 export interface OutgoingCoverage {
-  payment: { id: number; amount: number | null; currency: string | null };
+  payment: {
+    id: number;
+    amount: number | null;
+    currency: string | null;
+    /** Lo devuelto por el cliente y lo que queda: el neto es lo que cubre. */
+    refunded_amount?: number;
+    net_amount?: number | null;
+  };
   operation_uuid: string;
   value: number;
   value_currency: string;
