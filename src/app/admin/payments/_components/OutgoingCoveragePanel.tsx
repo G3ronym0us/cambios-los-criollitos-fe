@@ -74,7 +74,9 @@ export function OutgoingCoveragePanel({
   const suggested = coverage.suggested_settled_amount;
   const pending = coverage.pending;
   const customValue = Number(custom.replace(',', '.'));
-  const paid = coverage.payment.amount ?? 0;
+  // Lo que el pago entregó de verdad: si el cliente devolvió parte, el neto.
+  const refunded = coverage.payment.refunded_amount ?? 0;
+  const paid = coverage.payment.net_amount ?? coverage.payment.amount ?? 0;
   const payCur = coverage.payment.currency ?? '';
 
   const pick = (next: Mode, value: number | null) => {
@@ -113,6 +115,12 @@ export function OutgoingCoveragePanel({
           {formatNumber(paid)} {payCur} {flipped ? '×' : '÷'} {showRate(coverage.reference_rate ?? 0)}
           {' · cuadra con la tasa de la cotización'}
         </span>
+        {refunded > 0 ? (
+          <span className="block text-xs text-muted-foreground">
+            Pagado {formatNumber(coverage.payment.amount ?? 0)} − devuelto {formatNumber(refunded)} = neto{' '}
+            {formatNumber(paid)} {payCur}
+          </span>
+        ) : null}
         <button
           type="button"
           className="text-xs font-medium text-primary hover:underline"
@@ -137,6 +145,13 @@ export function OutgoingCoveragePanel({
           {formatNumber(pending)}
         </span>
       </div>
+
+      {refunded > 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Pagado {formatNumber(coverage.payment.amount ?? 0)} {payCur} − devuelto por el cliente{' '}
+          {formatNumber(refunded)} = neto {formatNumber(paid)} {payCur}
+        </p>
+      ) : null}
 
       {suggested != null ? (
         <button type="button" className={option(mode === 'RATE')} onClick={() => pick('RATE', null)}>
@@ -165,15 +180,21 @@ export function OutgoingCoveragePanel({
             {coverage.full_rate_difference != null && coverage.full_amount_difference != null ? (
               <>
                 {' · '}
+                {/* Positivo = se pagó MÁS de lo que tocaba a la tasa de referencia: es una
+                    pérdida, y salía en verde (saliente 5917, +20.575 Bs). */}
                 <span
                   className={
-                    coverage.full_amount_difference < 0
+                    coverage.full_amount_difference > 0.005
                       ? 'text-amber-600 dark:text-amber-400'
                       : 'text-emerald-600 dark:text-emerald-400'
                   }
                 >
-                  {coverage.full_amount_difference < 0 ? '' : '+'}
-                  {formatNumber(coverage.full_amount_difference)} {payCur} frente a la de referencia
+                  {coverage.full_amount_difference > 0.005
+                    ? `se pagaron ${formatNumber(coverage.full_amount_difference)} ${payCur} de más`
+                    : coverage.full_amount_difference < -0.005
+                      ? `${formatNumber(-coverage.full_amount_difference)} ${payCur} menos`
+                      : 'igual a la referencia'}{' '}
+                  frente a la tasa de referencia
                 </span>
               </>
             ) : null}
