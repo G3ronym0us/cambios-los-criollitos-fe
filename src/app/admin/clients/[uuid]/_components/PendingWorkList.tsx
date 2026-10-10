@@ -509,6 +509,65 @@ function DeliveryItems({
   );
 }
 
+/** Los lotes de «entregas marcadas» que siguen en pie, con su deshacer. */
+function MarkedDeliveries({
+  state,
+  actions,
+}: {
+  state: PendingWorkListProps['state'];
+  actions: PendingWorkListProps['actions'];
+}) {
+  if (state.undoable.length === 0) return null;
+  return (
+      <div className="rounded-lg border border-border bg-muted p-3">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          Entregas marcadas
+        </p>
+        <div className="mt-2 divide-y divide-border">
+          {state.undoable.slice(0, 5).map((delivery) => (
+            <div key={delivery.uuid} className="py-3 first:pt-2 sm:py-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              {/* Qué se marcó, no sólo cuántas: para decidir si hay que deshacer hay que
+                  reconocer la operación, y «1 operación» no se reconoce. */}
+              <p className="min-w-0 text-xs text-muted-foreground">
+                <strong className="font-semibold text-foreground">
+                  {delivery.operations}{' '}
+                  {delivery.operations === 1 ? 'operación' : 'operaciones'} ·{' '}
+                  {formatPending(delivery.amount, delivery.items[0]?.currency ?? null)}
+                </strong>{' '}
+                ({delivery.items
+                  .slice(0, 3)
+                  .map((item) => item.operation_uuid?.slice(0, 8) ?? '—')
+                  .join(', ')}
+                {delivery.operations > 3 ? ` y ${delivery.operations - 3} más` : ''}){' '}
+                {formatRelativeTime(delivery.created_at)}
+                {delivery.created_by_username ? ` · ${delivery.created_by_username}` : ''}
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => actions.undoDelivery(delivery)}
+                disabled={state.working}
+                className="h-11 w-full shrink-0 sm:h-8 sm:w-auto"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Deshacer esta entrega
+              </Button>
+            </div>
+            {/* Una por una: un lote puede tener unas bien y otras mal. */}
+            {delivery.operations > 1 ? (
+              <DeliveryItems
+                delivery={delivery}
+                working={state.working}
+                onUndo={(uuids) => actions.undoItems(delivery, uuids)}
+              />
+            ) : null}
+            </div>
+          ))}
+        </div>
+      </div>
+  );
+}
+
 /**
  * El filtro «Por entregar» de Cuenta, que no es un histórico sino una cola de trabajo:
  * pocas filas, todas accionables, de la más vieja a la más nueva.
@@ -540,12 +599,17 @@ export function PendingWorkList({
   }, [visibleKey, setVisible]);
 
   if (state.rows.length === 0) {
+    // Sin nada pendiente sigue haciendo falta la tira: si lo que dejó la cola vacía fue una
+    // marca equivocada (Neurys, 2026-10-09), es justo desde aquí que se deshace.
     return (
-      <EmptyState
-        icon={PartyPopper}
-        title="No le debemos nada"
-        description="Todas sus operaciones de este par están cubiertas."
-      />
+      <div className="space-y-4">
+        <EmptyState
+          icon={PartyPopper}
+          title="No le debemos nada"
+          description="Todas sus operaciones de este par están cubiertas."
+        />
+        <MarkedDeliveries state={state} actions={actions} />
+      </div>
     );
   }
 
@@ -735,54 +799,7 @@ export function PendingWorkList({
           alto: se apila —descripción arriba, botón de 44 px debajo— con un separador entre
           entregas en vez del hueco a medias de antes. El texto no se acorta: para decidir
           si hay que deshacer hay que poder reconocer qué se marcó. */}
-      {state.undoable.length > 0 ? (
-        <div className="rounded-lg border border-border bg-muted p-3">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            Entregas marcadas
-          </p>
-          <div className="mt-2 divide-y divide-border">
-            {state.undoable.slice(0, 5).map((delivery) => (
-              <div key={delivery.uuid} className="py-3 first:pt-2 sm:py-2">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                {/* Qué se marcó, no sólo cuántas: para decidir si hay que deshacer hay que
-                    reconocer la operación, y «1 operación» no se reconoce. */}
-                <p className="min-w-0 text-xs text-muted-foreground">
-                  <strong className="font-semibold text-foreground">
-                    {delivery.operations}{' '}
-                    {delivery.operations === 1 ? 'operación' : 'operaciones'} ·{' '}
-                    {formatPending(delivery.amount, delivery.items[0]?.currency ?? null)}
-                  </strong>{' '}
-                  ({delivery.items
-                    .slice(0, 3)
-                    .map((item) => item.operation_uuid?.slice(0, 8) ?? '—')
-                    .join(', ')}
-                  {delivery.operations > 3 ? ` y ${delivery.operations - 3} más` : ''}){' '}
-                  {formatRelativeTime(delivery.created_at)}
-                  {delivery.created_by_username ? ` · ${delivery.created_by_username}` : ''}
-                </p>
-                <Button
-                  variant="outline"
-                  onClick={() => actions.undoDelivery(delivery)}
-                  disabled={state.working}
-                  className="h-11 w-full shrink-0 sm:h-8 sm:w-auto"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  Deshacer esta entrega
-                </Button>
-              </div>
-              {/* Una por una: un lote puede tener unas bien y otras mal. */}
-              {delivery.operations > 1 ? (
-                <DeliveryItems
-                  delivery={delivery}
-                  working={state.working}
-                  onUndo={(uuids) => actions.undoItems(delivery, uuids)}
-                />
-              ) : null}
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
+      <MarkedDeliveries state={state} actions={actions} />
 
       <SidePanel open={covering !== null} onOpenChange={(open) => !open && setCovering(null)}>
         <SidePanelHeader>

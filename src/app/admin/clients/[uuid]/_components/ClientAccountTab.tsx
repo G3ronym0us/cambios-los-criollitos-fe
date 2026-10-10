@@ -229,6 +229,12 @@ export function ClientAccountTab({
    */
   const pending = useClientPending(clientUuid, scopedOperations, onChanged);
 
+  // Las que se marcaron entregadas/cobradas desde la cola y siguen así: las desmarcables.
+  const markedOperations = useMemo(
+    () => new Set(pending.state.deliveryByOperation.keys()),
+    [pending.state.deliveryByOperation],
+  );
+
   const deliverAll = () => {
     setFilter('pending');
     pending.actions.setMode('select');
@@ -396,6 +402,9 @@ export function ClientAccountTab({
           items={items}
           emptyLabel={EMPTY_LABEL[filter]}
           resetKey={`${filter}:${pair}`}
+          marked={markedOperations}
+          onUnmark={pending.actions.unmarkOperations}
+          working={pending.state.working}
         />
       </div>
 
