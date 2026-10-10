@@ -327,6 +327,7 @@ export function AccountThread({ items, emptyLabel, resetKey }: AccountThreadProp
         page={paged.page}
         totalPages={paged.totalPages}
         total={paged.total}
+        pageSize={PAGE_SIZE}
         noun="movimientos"
         onPageChange={paged.setPage}
       />

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { clientService } from '@/services/clientService';
 import { useConfirm } from '@/hooks/useConfirm';
@@ -84,6 +84,8 @@ export function useClientPending(
   const confirm = useConfirm();
   const [mode, setMode] = useState<PendingMode>('select');
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  // Las filas que la lista está ENSEÑANDO (su página). `null` mientras no lo diga.
+  const [visible, setVisibleState] = useState<readonly string[] | null>(null);
   const [amount, setAmount] = useState('');
   /**
    * El reparto se hace en DOS pasos: primero cuánto entregó, y sólo después entre cuáles se
@@ -153,6 +155,17 @@ export function useClientPending(
     () => rows.filter((op) => isPendingOperation(op) && blockedReason(op) === null),
     [rows],
   );
+
+  /**
+   * Las seleccionables que se están viendo. «Seleccionar todas» se queda en éstas: con la
+   * cola en dos páginas tomaba también las de la otra, y así se marcaron cobradas 38
+   * operaciones de Neurys (lote del 2026-10-09) cuando en pantalla había unas pocas.
+   */
+  const selectableVisible = useMemo(() => {
+    if (!visible) return selectable;
+    const shown = new Set(visible);
+    return selectable.filter((op) => shown.has(op.uuid));
+  }, [selectable, visible]);
 
   const selectedRows = useMemo(
     () => selectable.filter((op) => selected.has(op.uuid)),
@@ -294,11 +307,43 @@ export function useClientPending(
     [splittable, amount],
   );
 
+  // Lo último que la lista enseñó, y si hay un «seleccionar todas» esperando a que se vea:
+  // el botón de la cabecera abre la cola y selecciona en el mismo clic, antes de que la
+  // lista exista; sin esperar, volvía a tomar la cola entera.
+  const lastShown = useRef<readonly string[] | null>(null);
+  const wantAll = useRef(false);
+
   const selectAll = useCallback(() => {
-    setSelected(new Set(selectable.map((op) => op.uuid)));
-  }, [selectable]);
+    if (visible === null) {
+      wantAll.current = true;
+      return;
+    }
+    setSelected(new Set(selectableVisible.map((op) => op.uuid)));
+  }, [visible, selectableVisible]);
 
   const clearSelection = useCallback(() => setSelected(new Set()), []);
+
+  /**
+   * La lista avisa qué está enseñando (`null` al desmontarse). Al pasar a OTRA página se
+   * suelta lo marcado en la anterior: lo que no se ve no debe ir en el lote.
+   */
+  const setVisible = useCallback(
+    (uuids: readonly string[] | null) => {
+      setVisibleState(uuids);
+      if (uuids === null) return;
+      const same = (a: readonly string[] | null) =>
+        a !== null && a.length === uuids.length && a.every((u, i) => u === uuids[i]);
+      if (wantAll.current) {
+        wantAll.current = false;
+        const shown = new Set(uuids);
+        setSelected(new Set(selectable.filter((op) => shown.has(op.uuid)).map((op) => op.uuid)));
+      } else if (lastShown.current !== null && !same(lastShown.current)) {
+        setSelected(new Set());
+      }
+      lastShown.current = uuids;
+    },
+    [selectable],
+  );
 
   /**
    * Manda un lote y lo pone arriba del todo si entró.
@@ -463,6 +508,7 @@ export function useClientPending(
       selectedTotals,
       selectedEntries,
       selectable,
+      selectableVisible,
       amount,
       working,
       undoable,
@@ -473,6 +519,7 @@ export function useClientPending(
       toggle,
       selectAll,
       clearSelection,
+      setVisible,
       setAmount,
       goToSplit,
       backToAmount,

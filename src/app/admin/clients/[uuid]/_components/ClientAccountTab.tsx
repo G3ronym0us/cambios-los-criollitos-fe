@@ -274,7 +274,9 @@ export function ClientAccountTab({
             {pending.state.selectable.length > 0 ? (
               <Button size="sm" onClick={deliverAll}>
                 <Truck className="h-4 w-4" />
-                {cashDebt ? 'Marcar todo cobrado' : 'Entregar todo'}
+                {/* Abre la cola y marca la PRIMERA página, no la cola entera: lo que se
+                    marca tiene que estar a la vista (lote de Neurys, 2026-10-09). */}
+                {cashDebt ? 'Marcar cobradas' : 'Entregar'}
               </Button>
             ) : null}
 
