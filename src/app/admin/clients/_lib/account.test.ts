@@ -18,8 +18,13 @@ function op(overrides: Partial<OperationData>): OperationData {
     ...overrides,
   };
   // Por defecto el dinero entró cuando se registró la operación —el caso del bot—, así que
-  // el orden no cambia salvo que la prueba diga otra cosa. Con `null` no hay deuda.
-  return { first_incoming_payment_at: base.created_at, ...base } as OperationData;
+  // el orden no cambia salvo que la prueba diga otra cosa. Si está en la cola lo dice el
+  // servidor (`client_pending`): por defecto, fuera.
+  return {
+    first_incoming_payment_at: base.created_at,
+    client_pending: false,
+    ...base,
+  } as OperationData;
 }
 
 function entry(overrides: Partial<BalanceEntry>): BalanceEntry {
@@ -35,7 +40,7 @@ function entry(overrides: Partial<BalanceEntry>): BalanceEntry {
 
 describe('operationState', () => {
   it('separa lo pendiente de lo entregado, y saca cotizadas y canceladas del medio', () => {
-    expect(operationState(op({ pending_amount: 50 }))).toBe('pending');
+    expect(operationState(op({ pending_amount: 50, client_pending: true }))).toBe('pending');
     expect(operationState(op({ pending_amount: 0, status: 'COMPLETED' }))).toBe('delivered');
     expect(operationState(op({ status: 'QUOTED', pending_amount: 50 }))).toBe('quoted');
     expect(operationState(op({ status: 'CANCELLED', pending_amount: 50 }))).toBe('cancelled');
@@ -72,6 +77,7 @@ describe('operationState', () => {
     // que falta es `to_collect`: la operación está CUBIERTA —los bolívares ya salieron— y
     // aun así el cliente no ha traído un dólar.
     const efectivo = op({
+      client_pending: true,
       pending_amount: 0,
       to_collect: 50,
       first_incoming_payment_at: null,
@@ -100,7 +106,11 @@ describe('operationState', () => {
 describe('accountCounts', () => {
   it('«todo» son las operaciones más los movimientos de saldo, y entregado es el resto', () => {
     const counts = accountCounts(
-      [op({ uuid: 'a', pending_amount: 50 }), op({ uuid: 'b' }), op({ uuid: 'c' })],
+      [
+        op({ uuid: 'a', pending_amount: 50, client_pending: true }),
+        op({ uuid: 'b' }),
+        op({ uuid: 'c' }),
+      ],
       [entry({ uuid: 'e1' }), entry({ uuid: 'e2' })],
     );
 
@@ -109,9 +119,9 @@ describe('accountCounts', () => {
 
   it('cuenta lo que el chip va a enseñar de verdad: con par, acotado', () => {
     const operations = [
-      op({ uuid: 'a', pending_amount: 50 }),
+      op({ uuid: 'a', pending_amount: 50, client_pending: true }),
       op({ uuid: 'b' }),
-      op({ uuid: 'c', pending_amount: 10, pair_symbol: 'VES/COP' }),
+      op({ uuid: 'c', pending_amount: 10, pair_symbol: 'VES/COP', client_pending: true }),
     ];
     const counts = accountCounts(operations, [entry({ uuid: 'e1' })], 'VES/COP');
 
@@ -126,11 +136,17 @@ describe('accountCounts', () => {
 
 describe('accountThread', () => {
   const operations = [
-    op({ uuid: 'vieja', pending_amount: 50, created_at: '2026-08-01T00:00:00Z' }),
+    op({
+      uuid: 'vieja',
+      pending_amount: 50,
+      client_pending: true,
+      created_at: '2026-08-01T00:00:00Z',
+    }),
     op({ uuid: 'nueva', created_at: '2026-08-28T00:00:00Z' }),
     op({
       uuid: 'otro-par',
       pending_amount: 10,
+      client_pending: true,
       pair_symbol: 'VES/COP',
       created_at: '2026-08-15T00:00:00Z',
     }),

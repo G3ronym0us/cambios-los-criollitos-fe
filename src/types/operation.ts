@@ -119,6 +119,14 @@ export interface OperationData {
    */
   settles_in_cash: boolean;
   /**
+   * Sólo en la ficha del cliente, y los pone el SERVIDOR (`GET /clients/{uuid}/pending`, la
+   * misma consulta que el directorio): si la operación está en su cola, cuánto falta —del
+   * lado que toca— y desde cuándo espera. La pantalla no los recalcula.
+   */
+  client_pending?: boolean;
+  outstanding_amount?: number | null;
+  pending_since?: string | null;
+  /**
    * La tasa que resultó de los comprobantes (entregado ÷ valor). `rate_used` es la que se
    * COTIZÓ; la desviación entre ambas es lo que la columna de cobertura viene a mostrar.
    * `null` mientras no haya nada entregado.

@@ -1,3 +1,5 @@
+import type { OperationData } from './operation';
+
 // Cliente del bot (whatsapp_clients) visto como "cliente" del negocio.
 // No confundir con UserData (operadores/socios del sistema, con login y rol).
 
@@ -198,6 +200,15 @@ export interface ClientPendingByPair {
   oldest_at: string | null;
   payout_currency: string | null;
   payout_amount: number | null;
+}
+
+/**
+ * Lo pendiente de un cliente según el servidor (`GET /clients/{uuid}/pending`): agregado por
+ * par y la cola operación a operación, de la más vieja a la más nueva.
+ */
+export interface ClientPending {
+  by_pair: ClientPendingByPair[];
+  operations: (OperationData & { outstanding_amount: number; pending_since: string | null })[];
 }
 
 /**

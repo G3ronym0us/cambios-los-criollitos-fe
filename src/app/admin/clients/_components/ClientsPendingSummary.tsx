@@ -10,6 +10,8 @@ interface ClientsPendingSummaryProps {
   /** Cuántos clientes se están enseñando en total, con deuda o sin ella. */
   shown: number;
   totals: PendingTotals;
+  /** «por entregar», «por cobrar» o «pendiente» si se mezclan las dos direcciones. */
+  label: string;
   sort: ClientsSort;
   onSort: (sort: ClientsSort) => void;
 }
@@ -35,6 +37,7 @@ export function ClientsPendingSummary({
   clients,
   shown,
   totals,
+  label,
   sort,
   onSort,
 }: ClientsPendingSummaryProps) {
@@ -54,9 +57,9 @@ export function ClientsPendingSummary({
           <p className="text-sm font-bold tabular-nums text-foreground">
             {clients} {clients === 1 ? 'cliente' : 'clientes'}
             {totals.currency ? (
-              <> · {formatPending(totals.amount, totals.currency)} por entregar</>
+              <> · {formatPending(totals.amount, totals.currency)} {label}</>
             ) : (
-              <> con algo por entregar</>
+              <> con algo {label}</>
             )}
           </p>
           <p className="text-xs text-muted-foreground">

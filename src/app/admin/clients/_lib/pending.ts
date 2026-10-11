@@ -30,35 +30,18 @@ import type { OperationData } from '@/types/operation';
 /** Pasados estos días la espera deja de ser ámbar y se pinta de rojo. */
 export const PENDING_ALERT_DAYS = 3;
 
-/** Debajo de esto es ruido de redondeo, no deuda. */
-const EPSILON = 0.01;
-
 /**
- * ¿Esta operación tiene algo sin cubrir que de verdad haya que entregar?
+ * ¿Esta operación está en la cola del cliente? Lo dice el SERVIDOR, no esta función.
  *
- * Son DOS condiciones, no una. `pending_amount` sale de los comprobantes de SALIDA: mide
- * lo que no le hemos pagado. Pero no le debemos nada hasta que su plata llega — una
- * operación registrada sin comprobante entrante es una cotización o un trato a medio
- * armar, y ahí el que debe es él, no nosotros. Contar sólo `pending_amount` mezclaba las
- * dos patas del cambio y ponía bajo «Le debemos» operaciones que nadie había pagado.
- *
- * **En los pares que se cambian en efectivo** (`settles_in_cash`) la pregunta es la
- * contraria y por eso se mide otra columna. Ahí los bolívares ya salieron y lo que falta es
- * el efectivo del CLIENTE: `to_collect`, el valor menos lo que ya se le recogió. Mirar
- * `pending_amount` sacaba de la lista justo lo que hay que ir a cobrar — una operación
- * creada desde su propio comprobante en bolívares nace cubierta, así que salía el mismo día
- * en que empezaba a deberse. El comprobante entrante tampoco filtra: no hay ni habrá, nadie
- * fotografía un billete.
- *
- * Es la misma regla que aplica el backend en `ClientPendingService` para el agregado que
- * ya consume la lista de clientes; vive aquí para que el perfil no diga otra cosa que la
- * lista sobre el mismo cliente.
+ * La regla —sin cubrir y con su dinero ya entrado; en un par de efectivo, PENDING con
+ * efectivo por cobrar— vive en `ClientPendingService._pending_query`, la misma consulta que
+ * alimenta el directorio. Aquí antes había una copia que se aplicaba sobre las operaciones
+ * cargadas en el navegador, y con un techo de 200 la deuda vieja de un cliente grande se
+ * quedaba fuera: la lista enseñaba la deuda y la cuenta decía 0. Ahora `useClientProfile`
+ * marca cada operación con `client_pending` a partir de `GET /clients/{uuid}/pending`.
  */
 export function isPendingOperation(op: OperationData): boolean {
-  if (op.status === 'CANCELLED' || op.status === 'QUOTED') return false;
-  if (op.settles_in_cash) return outstandingAmount(op) > EPSILON;
-  if (!op.first_incoming_payment_at) return false;
-  return outstandingAmount(op) > EPSILON;
+  return op.client_pending === true;
 }
 
 /**
@@ -71,6 +54,8 @@ export function isPendingOperation(op: OperationData): boolean {
  * lado. Es lo que hacía que una USD-VES ya pagada en bolívares saliera como saldada.
  */
 export function outstandingAmount(op: OperationData): number {
+  // En la cola, la cifra la trae el servidor; fuera de ella se lee del lado que toca.
+  if (op.outstanding_amount != null) return op.outstanding_amount;
   if (op.settles_in_cash) return op.to_collect ?? 0;
   return op.pending_amount ?? 0;
 }
@@ -169,6 +154,7 @@ export function payoutEquivalent(op: OperationData): number | null {
  */
 export function pendingSince(op: OperationData): string | null {
   return (
+    op.pending_since ??
     op.first_incoming_payment_at ??
     op.first_outgoing_payment_at ??
     op.created_at ??

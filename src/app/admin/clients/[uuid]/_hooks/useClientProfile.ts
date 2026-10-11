@@ -11,6 +11,7 @@ import {
   BalanceAdjust,
   BalanceSummary,
   ClientData,
+  ClientPendingByPair,
   ClientUpdate,
   LoanData,
   LoanTotals,
@@ -18,12 +19,17 @@ import {
 } from '@/types/client';
 import { OperationData } from '@/types/operation';
 
+/** El máximo que acepta `/operations` por página. */
+const PAGE_LIMIT = 500;
+
 export function useClientProfile(uuid: string) {
   const [client, setClient] = useState<ClientData | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [saving, setSaving] = useState(false);
   const [operations, setOperations] = useState<OperationData[]>([]);
+  /** Lo pendiente agregado por par, tal como lo calcula el servidor. */
+  const [pendingEntries, setPendingEntries] = useState<ClientPendingByPair[]>([]);
   const [operationsLoading, setOperationsLoading] = useState(true);
   const [pairs, setPairs] = useState<CurrencyPairData[]>([]);
   const [balance, setBalance] = useState<BalanceSummary | null>(null);
@@ -56,13 +62,52 @@ export function useClientProfile(uuid: string) {
     loadBalance();
   }, [loadBalance]);
 
-  // Carga las operaciones (transacciones) del cliente filtrando por su teléfono.
+  /**
+   * Carga el historial del cliente y, aparte, su cola de pendientes calculada en el
+   * servidor (`GET /clients/{uuid}/pending`).
+   *
+   * Qué está pendiente, cuánto falta y desde cuándo NO se decide aquí: lo dice el servidor
+   * con la misma consulta que el directorio, y cada operación del historial se marca con
+   * eso. Antes se recalculaba en el navegador sobre las 200 operaciones más nuevas, y a un
+   * cliente con 518 la deuda vieja se le quedaba fuera: la cuenta decía 0 mientras la lista
+   * enseñaba la deuda. El historial se pide entero, por páginas, porque es lo que el hilo
+   * enseña y lo que cuentan sus chips.
+   */
   const loadOperations = useCallback(async (phone: string) => {
     setOperationsLoading(true);
-    const result = await operationService.getOperations({ phone, limit: 200 });
-    setOperations(result.success && result.data ? result.data.operations : []);
+    const [first, pending] = await Promise.all([
+      operationService.getOperations({ phone, limit: PAGE_LIMIT, page: 1 }),
+      clientService.getPending(uuid),
+    ]);
+    const pages = first.success && first.data ? Math.ceil(first.data.total / PAGE_LIMIT) : 0;
+    const rest = await Promise.all(
+      Array.from({ length: Math.max(0, pages - 1) }, (_, i) =>
+        operationService.getOperations({ phone, limit: PAGE_LIMIT, page: i + 2 }),
+      ),
+    );
+    const history = [first, ...rest].flatMap((result) =>
+      result.success && result.data ? result.data.operations : [],
+    );
+
+    const queue = new Map(
+      (pending.success && pending.data ? pending.data.operations : []).map((op) => [op.uuid, op]),
+    );
+    const seen = new Set(history.map((op) => op.uuid));
+    setOperations([
+      ...history.map((op) => {
+        const server = queue.get(op.uuid);
+        return server
+          ? { ...op, client_pending: true, outstanding_amount: server.outstanding_amount, pending_since: server.pending_since }
+          : { ...op, client_pending: false };
+      }),
+      // Por si el historial no la trajo: la cola manda, no puede quedarse fuera una deuda.
+      ...[...queue.values()]
+        .filter((op) => !seen.has(op.uuid))
+        .map((op) => ({ ...op, client_pending: true })),
+    ]);
+    setPendingEntries(pending.success && pending.data ? pending.data.by_pair : []);
     setOperationsLoading(false);
-  }, []);
+  }, [uuid]);
 
   /**
    * Refresca las operaciones sin tocar el `loading` de la página.
@@ -191,7 +236,7 @@ export function useClientProfile(uuid: string) {
 
   return {
     state: {
-      client, loading, notFound, saving, operations, operationsLoading, pairs,
+      client, loading, notFound, saving, operations, operationsLoading, pairs, pendingEntries,
       balance, balanceLoading, loans, loansLoading, loanTotals, unlinked,
     },
     actions: { updateFields, reload: load, reloadOperations, adjustBalance, addLoanRepayment, createLoan },

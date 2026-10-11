@@ -61,6 +61,16 @@ export function blockedReason(op: OperationData): string | null {
 
 export type PendingMode = 'select' | 'distribute';
 
+/**
+ * ¿Se puede marcar a mano? Sólo en los pares de efectivo (USD-VES): el cliente trae los
+ * billetes y de eso no hay comprobante. Los demás pares son por transacción y se saldan con
+ * su comprobante de salida («Cubrir»), nunca con una marca. El servidor lo exige igual
+ * (`settles_with_receipt`).
+ */
+export function isMarkable(op: OperationData): boolean {
+  return op.settles_in_cash && isPendingOperation(op) && blockedReason(op) === null;
+}
+
 /** Debajo de esto es ruido de redondeo, no dinero. Igual que en el backend. */
 const EPSILON = 0.01;
 
@@ -153,7 +163,7 @@ export function useClientPending(
 
   /** Las que sí se pueden marcar: las que no están trabadas por falta de datos. */
   const selectable = useMemo(
-    () => rows.filter((op) => isPendingOperation(op) && blockedReason(op) === null),
+    () => rows.filter(isMarkable),
     [rows],
   );
 
@@ -190,7 +200,7 @@ export function useClientPending(
     () =>
       new Set(
         rows
-          .filter((op) => !isPendingOperation(op) || blockedReason(op) !== null)
+          .filter((op) => !isMarkable(op))
           .map((op) => op.uuid),
       ),
     [rows],
@@ -202,12 +212,15 @@ export function useClientPending(
    * impronunciable. Con varias monedas a la vista no hay reparto hasta elegir un par — eso es
    * lo que `distributeCurrency` en `null` le dice al panel.
    */
-  const distributeCurrency = totals.currency;
+  const distributeCurrency = useMemo(
+    () => pendingTotals(pendingByPair(rows.filter(isMarkable))).currency,
+    [rows],
+  );
 
   const distributableRows = useMemo(
     () =>
       distributeCurrency
-        ? rows.filter((op) => isPendingOperation(op) && valueCurrency(op) === distributeCurrency)
+        ? rows.filter((op) => isMarkable(op) && valueCurrency(op) === distributeCurrency)
         : [],
     [rows, distributeCurrency],
   );
@@ -360,7 +373,7 @@ export function useClientPending(
       setWorking(false);
 
       if (!result.success || !result.data) {
-        toast.error(result.error || 'No se pudo marcar la entrega');
+        toast.error(result.error || 'No se pudo marcar el cobro');
         return false;
       }
 
@@ -445,15 +458,15 @@ export function useClientPending(
       setWorking(false);
 
       if (!result.success) {
-        toast.error(result.error || 'No se pudo deshacer la entrega');
+        toast.error(result.error || 'No se pudo deshacer el cobro');
         return;
       }
 
       setUndoable((prev) => prev.filter((item) => item.uuid !== delivery.uuid));
       toast.success(
         delivery.operations === 1
-          ? 'Entrega deshecha: la operación vuelve a pendiente'
-          : `Entrega deshecha: ${delivery.operations} operaciones vuelven a pendiente`,
+          ? 'Cobro deshecho: la operación vuelve a pendiente'
+          : `Cobro deshecho: ${delivery.operations} operaciones vuelven a pendiente`,
       );
       onChanged();
     },
