@@ -65,9 +65,9 @@ export function operationState(op: OperationData): OperationState {
 }
 
 export const STATE_LABEL: Record<OperationState, string> = {
-  pending: 'Por entregar',
+  pending: 'Por pagar',
   open: 'Pendiente',
-  delivered: 'Entregado',
+  delivered: 'Completada',
   quoted: 'Cotizada',
   cancelled: 'Cancelada',
 };

@@ -13,22 +13,15 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { cn } from '@/lib/utils';
-import type { BalanceAdjust, BalanceSummary, LoanTotals } from '@/types/client';
+import type {
+  BalanceAdjust,
+  BalanceSummary,
+  ClientPendingByPair,
+  LoanTotals,
+} from '@/types/client';
 import type { OperationData } from '@/types/operation';
-import {
-  accountCounts,
-  accountPairs,
-  accountThread,
-  type AccountFilter,
-} from '../../_lib/account';
-import {
-  formatPendingBreakdown,
-  isCashDebt,
-  isPendingOperation,
-  pendingByPair,
-  pendingTotals,
-  waitedFor,
-} from '../../_lib/pending';
+import { accountCounts, accountPairs, accountThread, type AccountFilter } from '../../_lib/account';
+import { formatPendingBreakdown, isCashDebt, pendingTotals, waitedFor } from '../../_lib/pending';
 import { useClientPending } from '../_hooks/useClientPending';
 import { AccountThread } from './AccountThread';
 import { BalanceAdjustDialog } from './BalanceAdjustDialog';
@@ -43,13 +36,15 @@ interface ClientAccountTabProps {
   loanTotals: LoanTotals | null;
   hasOpenLoan: boolean;
   onAdjustBalance: (data: BalanceAdjust) => Promise<boolean>;
+  /** Lo pendiente agregado por par, calculado en el servidor. */
+  pendingEntries: ClientPendingByPair[];
   onChanged: () => void;
 }
 
 const FILTER_LABEL: Record<AccountFilter, string> = {
   all: 'Todo',
-  pending: 'Por entregar',
-  delivered: 'Entregado',
+  pending: 'Por pagar',
+  delivered: 'Saldado',
   balance: 'Saldo',
 };
 
@@ -61,7 +56,7 @@ const ALL_PAIRS = '__all__';
 const EMPTY_LABEL: Record<AccountFilter, string> = {
   all: 'Este cliente todavía no tiene movimientos.',
   pending: 'No le debemos nada.',
-  delivered: 'Todavía no hay operaciones entregadas.',
+  delivered: 'Todavía no hay operaciones saldadas.',
   balance: 'Sin créditos ni abonos. Acredita un pago entrante desde Pagos, o ajusta el saldo.',
 };
 
@@ -165,6 +160,7 @@ export function ClientAccountTab({
   loanTotals,
   hasOpenLoan,
   onAdjustBalance,
+  pendingEntries,
   onChanged,
 }: ClientAccountTabProps) {
   /**
@@ -184,7 +180,17 @@ export function ClientAccountTab({
    * salir como una fila más del hilo.
    */
   const autoFilter = useRef<AccountFilter | null>(null);
-  const [pair, setPair] = useState('');
+  /**
+   * `null` = sin elegir: entonces abre en el par de efectivo (USD-VES) si el cliente opera
+   * en él, que es lo que se persigue a diario —lo que nos deben—. Los demás pares quedan a
+   * un clic en el selector, y «Todos los pares» es una elección como cualquier otra.
+   */
+  const [chosenPair, setPair] = useState<string | null>(null);
+  const cashPair = useMemo(
+    () => operations.find((op) => op.settles_in_cash && op.pair_symbol)?.pair_symbol ?? '',
+    [operations],
+  );
+  const pair = chosenPair ?? cashPair;
   const [adjusting, setAdjusting] = useState(false);
 
   const entries = useMemo(() => balance?.entries ?? [], [balance]);
@@ -199,11 +205,11 @@ export function ClientAccountTab({
     [operations, pair],
   );
 
-  const pendingEntries = useMemo(
-    () => pendingByPair(scopedOperations.filter(isPendingOperation)),
-    [scopedOperations],
+  const scopedEntries = useMemo(
+    () => (pair ? pendingEntries.filter((entry) => entry.pair_symbol === pair) : pendingEntries),
+    [pendingEntries, pair],
   );
-  const pendingTotal = pendingTotals(pendingEntries);
+  const pendingTotal = pendingTotals(scopedEntries);
   const waited = waitedFor(pendingTotal.oldest_at);
 
   // El filtro se resuelve ANTES del hilo, que es quien lo consume.
@@ -220,7 +226,22 @@ export function ClientAccountTab({
 
   // En un par de efectivo la cifra pendiente significa lo contrario: los bolívares ya
   // salieron y lo que falta es el efectivo del cliente. Mismo número, rótulo opuesto.
-  const cashDebt = isCashDebt(pendingEntries);
+  const cashDebt = isCashDebt(scopedEntries);
+  // Las dos direcciones van por separado y nunca se suman: lo que LE DEBEMOS (pares
+  // normales) y lo que NOS DEBE (efectivo por cobrar). Un cliente puede tener las dos.
+  const weOwe = scopedEntries.filter((entry) => !entry.settles_in_cash);
+  const owesUs = scopedEntries.filter((entry) => entry.settles_in_cash);
+  const mixedDebt = weOwe.length > 0 && owesUs.length > 0;
+  const debtDetail = (list: typeof scopedEntries) => {
+    const totals = pendingTotals(list);
+    const since = waitedFor(totals.oldest_at);
+    return [
+      `${totals.operations} ${totals.operations === 1 ? 'operación' : 'operaciones'}`,
+      since ? `desde hace ${since}` : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  };
 
   /**
    * La cola de «por entregar» se gobierna desde aquí, no desde la lista, porque la
@@ -253,28 +274,47 @@ export function ClientAccountTab({
           sin préstamos abiertos» gastaba dos tercios del ancho en decir que no hay nada. */}
       <Card>
         <CardContent className="flex flex-wrap items-start justify-between gap-4 p-4 sm:p-6">
-          <Position
-            icon={Truck}
-            label={cashDebt ? 'Nos debe en efectivo' : 'Le debemos'}
-            value={
-              pendingTotal.operations > 0 ? formatPendingBreakdown(pendingEntries) : 'Nada'
-            }
-            detail={
-              pendingTotal.operations > 0
-                ? // Sólo la moneda de la deuda. El equivalente en la moneda de pago salía
-                  // de la tasa cotizada, no de la real, y en pantalla no decidía nada:
-                  // quien va a cobrar o entregar razona en la moneda en que se debe.
-                  [
-                    `${pendingTotal.operations} ${pendingTotal.operations === 1 ? 'operación' : 'operaciones'}`,
-                    waited ? `desde hace ${waited}` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')
-                : 'todo cubierto'
-            }
-            tone={cashDebt ? 'owed' : 'debt'}
-            big
-          />
+          {mixedDebt ? (
+            <>
+              <Position
+                icon={Truck}
+                label="Le debemos"
+                value={formatPendingBreakdown(weOwe)}
+                detail={debtDetail(weOwe)}
+                tone="debt"
+                big
+              />
+              <Position
+                icon={HandCoins}
+                label="Nos debe en efectivo"
+                value={formatPendingBreakdown(owesUs)}
+                detail={debtDetail(owesUs)}
+                tone="owed"
+                big
+              />
+            </>
+          ) : (
+            <Position
+              icon={cashDebt ? HandCoins : Truck}
+              label={cashDebt ? 'Nos debe en efectivo' : 'Le debemos'}
+              value={pendingTotal.operations > 0 ? formatPendingBreakdown(scopedEntries) : 'Nada'}
+              detail={
+                pendingTotal.operations > 0
+                  ? // Sólo la moneda de la deuda. El equivalente en la moneda de pago salía
+                    // de la tasa cotizada, no de la real, y en pantalla no decidía nada:
+                    // quien va a cobrar o entregar razona en la moneda en que se debe.
+                    [
+                      `${pendingTotal.operations} ${pendingTotal.operations === 1 ? 'operación' : 'operaciones'}`,
+                      waited ? `desde hace ${waited}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')
+                  : 'todo cubierto'
+              }
+              tone={cashDebt ? 'owed' : 'debt'}
+              big
+            />
+          )}
 
           <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
             {pending.state.selectable.length > 0 ? (
@@ -282,7 +322,7 @@ export function ClientAccountTab({
                 <Truck className="h-4 w-4" />
                 {/* Abre la cola y marca la PRIMERA página, no la cola entera: lo que se
                     marca tiene que estar a la vista (lote de Neurys, 2026-10-09). */}
-                {cashDebt ? 'Marcar cobradas' : 'Entregar'}
+                Marcar cobradas
               </Button>
             ) : null}
 
@@ -294,7 +334,12 @@ export function ClientAccountTab({
                 <Wallet className="mr-1 inline h-3.5 w-3.5 align-text-bottom text-emerald-600" />
                 Saldo a favor{' '}
                 <strong className="font-semibold tabular-nums text-foreground">
-                  ${(balance?.balance ?? 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                  $
+                  {(balance?.balance ?? 0).toLocaleString('es-VE', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}{' '}
+                  USD
                 </strong>
               </p>
             ) : null}
@@ -344,7 +389,13 @@ export function ClientAccountTab({
             {/* En un par de efectivo la cola no es de entregas sino de cobros: los
                 bolívares ya salieron y lo que falta es el efectivo del cliente. Mismo
                 filtro, rótulo opuesto — igual que la cifra de arriba. */}
-            {option === 'pending' && cashDebt ? 'Por cobrar' : FILTER_LABEL[option]}
+            {option === 'pending'
+              ? mixedDebt
+                ? 'Pendiente'
+                : cashDebt
+                  ? 'Por cobrar'
+                  : FILTER_LABEL[option]
+              : FILTER_LABEL[option]}
           </Chip>
         ))}
 
@@ -379,8 +430,8 @@ export function ClientAccountTab({
 
       {filter === 'all' && pair ? (
         <p className="text-xs text-muted-foreground">
-          Con un par elegido no se enseñan los movimientos de saldo: el saldo a favor es un
-          ledger en USD y no pertenece a ningún par.
+          Con un par elegido no se enseñan los movimientos de saldo: el saldo a favor es un ledger
+          en USD y no pertenece a ningún par.
         </p>
       ) : null}
 
@@ -421,7 +472,11 @@ export function ClientAccountTab({
         </div>
       ) : null}
 
-      <BalanceAdjustDialog open={adjusting} onOpenChange={setAdjusting} onAdjust={onAdjustBalance} />
+      <BalanceAdjustDialog
+        open={adjusting}
+        onOpenChange={setAdjusting}
+        onAdjust={onAdjustBalance}
+      />
     </div>
   );
 }

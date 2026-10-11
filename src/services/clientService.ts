@@ -10,6 +10,7 @@ import {
   ClientData,
   ClientFilters,
   ClientListResponse,
+  ClientPending,
   ClientLoansSummary,
   LoanData,
   ClientUpdate,
@@ -123,6 +124,12 @@ export class ClientService {
   // Libreta de cuentas del cliente (beneficiarios con nombre). Listar requiere usuario
   // autenticado; crear/editar/borrar requieren moderador+ en el backend.
   // ── Entregas de lo que le debemos ──────────────────────────────────────────
+
+  /** Lo pendiente del cliente, calculado en el servidor con la misma regla que la lista. */
+  async getPending(clientUuid: string): Promise<ApiResponse<ClientPending>> {
+    const result = await httpClient.get<ClientPending>(`/clients/${clientUuid}/pending`);
+    return { success: result.success, data: result.data, error: result.error };
+  }
 
   /** Las entregas marcadas del cliente, de la más nueva a la más vieja. */
   async getPendingDeliveries(

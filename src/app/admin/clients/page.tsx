@@ -60,6 +60,7 @@ function ClientsAdminContent() {
           clients={state.pendingSummary.clients}
           shown={state.clients.length}
           totals={state.pendingSummary.totals}
+          label={state.pendingSummary.label}
           sort={state.sort}
           onSort={actions.setSort}
         />

@@ -19,8 +19,6 @@ import { useClientProfile } from './_hooks/useClientProfile';
 import {
   formatPendingBreakdown,
   isCashDebt,
-  isPendingOperation,
-  pendingByPair,
   pendingTotals,
 } from '../_lib/pending';
 
@@ -135,7 +133,7 @@ function ClientProfileContent() {
   const { state, actions } = useClientProfile(uuid);
   const {
     client, loading, notFound, saving, operations, operationsLoading, pairs,
-    balance, balanceLoading, loans, loansLoading, loanTotals, unlinked,
+    balance, balanceLoading, loans, loansLoading, loanTotals, unlinked, pendingEntries,
   } = state;
 
   if (loading) {
@@ -164,11 +162,8 @@ function ClientProfileContent() {
   const group = isGroup(client.phone);
   const title = client.display_name || formatPhone(client.phone);
 
-  // Lo que le debemos: el trozo sin cubrir de sus operaciones. Se calcula aquí para el
-  // contador de la pestaña y el chip de la cabecera; la pestaña lo recalcula sobre las
-  // mismas operaciones, sin volver a pedirlas.
-  const pendingOperations = operations.filter(isPendingOperation);
-  const pendingEntries = pendingByPair(pendingOperations);
+  // Lo pendiente, tal como lo agrega el servidor: el chip de la cabecera y el contador de
+  // la pestaña no pueden decir otra cosa que la lista de clientes.
   const pendingTotal = pendingTotals(pendingEntries);
   const hasOpenLoan = loans.some((loan) => loan.status === 'OPEN' || loan.status === 'PARTIAL');
 
@@ -263,6 +258,7 @@ function ClientProfileContent() {
             loanTotals={loanTotals}
             hasOpenLoan={hasOpenLoan}
             onAdjustBalance={actions.adjustBalance}
+            pendingEntries={pendingEntries}
             onChanged={actions.reloadOperations}
           />
         </TabsContent>

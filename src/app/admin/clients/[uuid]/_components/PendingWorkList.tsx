@@ -102,7 +102,7 @@ function ListHeader({
           checked={checked}
           indeterminate={indeterminate}
           disabled={disabled}
-          label="Seleccionar todas las operaciones entregables"
+          label="Seleccionar todas las operaciones por cobrar"
           onChange={onToggleAll}
         />
       </div>
@@ -175,9 +175,9 @@ function PendingRow({
   // En efectivo no hay comprobante que atar: el camino corto es marcarla y ya.
   const cash = operation.settles_in_cash;
   const waited = waitedFor(since);
-  // Sólo estas se pueden marcar; las demás siguen en la tarjeta de botón propio aunque la
-  // selección esté encendida, para no dejarlas sin acción a mano.
-  const selectable = !blocked && !done;
+  // Sólo estas se pueden marcar —las de efectivo—; las demás se saldan con su comprobante
+  // («Cubrir») y siguen con su botón propio aunque la selección esté encendida.
+  const selectable = cash && !blocked && !done;
   const asCheckbox = selecting && selectable;
 
   // El resumen que en escritorio da la columna Estado, pero en palabras dentro de la
@@ -234,7 +234,7 @@ function PendingRow({
     <div className={cn(GRID, 'border-b border-border px-2 py-2 last:border-b-0 sm:px-3')}>
       <Checkbox
         checked={checked}
-        disabled={!!blocked || done}
+        disabled={!selectable}
         label={`Seleccionar operación del ${formatCaracasShortDateTime(since)}`}
         onChange={onToggle}
         hiddenBelowLg
@@ -292,7 +292,7 @@ function PendingRow({
 
       <div className={cn(COL.state, 'hidden lg:block')}>
         {done ? (
-          <StateChip tone="done">{cash ? 'Cobrada' : 'Entregada'}</StateChip>
+          <StateChip tone="done">{cash ? 'Cobrada' : 'Pagada'}</StateChip>
         ) : blocked ? (
           <StateChip tone="blocked">Falta dato</StateChip>
         ) : checked ? (
@@ -521,7 +521,7 @@ function MarkedDeliveries({
   return (
       <div className="rounded-lg border border-border bg-muted p-3">
         <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-          Entregas marcadas
+          Cobros marcados
         </p>
         <div className="mt-2 divide-y divide-border">
           {state.undoable.slice(0, 5).map((delivery) => (
@@ -550,7 +550,7 @@ function MarkedDeliveries({
                 className="h-11 w-full shrink-0 sm:h-8 sm:w-auto"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-                Deshacer esta entrega
+                Deshacer este cobro
               </Button>
             </div>
             {/* Una por una: un lote puede tener unas bien y otras mal. */}
@@ -605,8 +605,8 @@ export function PendingWorkList({
       <div className="space-y-4">
         <EmptyState
           icon={PartyPopper}
-          title="No le debemos nada"
-          description="Todas sus operaciones de este par están cubiertas."
+          title="Nada pendiente"
+          description="Todas sus operaciones de este par están saldadas."
         />
         <MarkedDeliveries state={state} actions={actions} />
       </div>
@@ -634,10 +634,15 @@ export function PendingWorkList({
           ahí en ≥lg; en móvil baja aquí, que es donde el diseño lo pone. */}
       {state.mode === 'select' ? (
         <div className="flex items-center justify-between gap-2">
-          <Button variant="outline" size="sm" onClick={() => actions.setMode('distribute')}>
-            <HandCoins className="h-4 w-4" />
-            Repartir un monto
-          </Button>
+          {/* Repartir un monto es cobrar efectivo: sin filas de efectivo no hay qué repartir. */}
+          {state.selectable.length > 0 ? (
+            <Button variant="outline" size="sm" onClick={() => actions.setMode('distribute')}>
+              <HandCoins className="h-4 w-4" />
+              Repartir un monto
+            </Button>
+          ) : (
+            <span />
+          )}
           {pairs.length > 0 && onPairChange ? (
             <Select
               value={pair === '' ? ALL_PAIRS : pair}
@@ -684,12 +689,12 @@ export function PendingWorkList({
                 checked={allSelected}
                 indeterminate={someSelected}
                 disabled={visibleSelectable.length === 0}
-                label="Seleccionar las operaciones entregables de esta página"
+                label="Seleccionar las operaciones por cobrar de esta página"
                 onChange={allSelected ? actions.clearSelection : actions.selectAll}
               />
               <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
                 Seleccionar {visibleSelectable.length === 1 ? 'la' : 'las'} {visibleSelectable.length}{' '}
-                {visibleSelectable.length === 1 ? 'entregable' : 'entregables'} de esta página
+                por cobrar de esta página
               </span>
               {blockedCount > 0 ? (
                 <span className="shrink-0 text-xs text-muted-foreground">
@@ -757,7 +762,7 @@ export function PendingWorkList({
             </p>
             <p className="text-xs opacity-70 tabular-nums">
               Quedarían {state.rows.length - state.selectedRows.length} ops ·{' '}
-              {formatPendingBreakdown(state.remainingEntries)} por entregar
+              {formatPendingBreakdown(state.remainingEntries)} pendientes
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:shrink-0 sm:flex-row-reverse">
@@ -768,7 +773,7 @@ export function PendingWorkList({
             >
               {state.working
                 ? 'Marcando…'
-                : `Marcar ${state.selectedRows.length} como ${state.selectedRows.length === 1 ? 'entregada' : 'entregadas'}`}
+                : `Marcar ${state.selectedRows.length} como ${state.selectedRows.length === 1 ? 'cobrada' : 'cobradas'}`}
             </Button>
             <div className="flex gap-2">
               <Button

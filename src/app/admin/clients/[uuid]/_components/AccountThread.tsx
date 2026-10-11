@@ -133,7 +133,10 @@ function OperationRow({
     ? 'Parcial'
     : state === 'delivered' && operation.settles_in_cash
       ? 'Cobrada'
-      : STATE_LABEL[state];
+      : // En efectivo lo pendiente es lo que NOS debe, no lo que le debemos.
+        state === 'pending' && operation.settles_in_cash
+        ? 'Por cobrar'
+        : STATE_LABEL[state];
 
   return (
     <div className={cn(GRID, 'border-b border-border px-2 py-2 last:border-b-0 sm:px-3')}>
@@ -431,7 +434,7 @@ export function AccountThread({
             {chosen.length === 1 ? 'operación seleccionada' : 'operaciones seleccionadas'}
             {!unmarkable ? (
               <span className="block text-xs text-muted-foreground">
-                Sólo se pueden desmarcar las que se marcaron como entregadas o cobradas.
+                Sólo se pueden desmarcar las que se marcaron como cobradas.
               </span>
             ) : null}
           </span>

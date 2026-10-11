@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { OperationData } from '@/types/operation';
-import { blockedReason } from './useClientPending';
+import { blockedReason, isMarkable } from './useClientPending';
 
 function op(overrides: Partial<OperationData> = {}): OperationData {
   return {
@@ -47,5 +47,20 @@ describe('blockedReason', () => {
     it('y tampoco lo traba que el nombre sea ambiguo', () => {
       expect(blockedReason(efectivo({ beneficiary_ambiguous: true }))).toBe(null);
     });
+  });
+});
+
+describe('isMarkable', () => {
+  // Sólo el efectivo (USD-VES) se marca a mano; los demás pares se saldan con su comprobante.
+  it('una de efectivo pendiente se marca', () => {
+    expect(isMarkable(op({ settles_in_cash: true, client_pending: true }))).toBe(true);
+  });
+
+  it('una por transacción no se marca aunque se deba', () => {
+    expect(isMarkable(op({ settles_in_cash: false, client_pending: true }))).toBe(false);
+  });
+
+  it('lo que ya no está en la cola tampoco', () => {
+    expect(isMarkable(op({ settles_in_cash: true, client_pending: false }))).toBe(false);
   });
 });

@@ -19,6 +19,7 @@ import {
 function op(overrides: Partial<OperationData>): OperationData {
   return {
     status: 'PENDING',
+    client_pending: true,
     pending_amount: 100,
     first_incoming_payment_at: '2026-08-30T00:00:00Z',
     settles_in_cash: false,
@@ -35,21 +36,33 @@ function op(overrides: Partial<OperationData>): OperationData {
 }
 
 describe('isPendingOperation', () => {
-  it('no le debemos nada mientras su dinero no haya entrado', () => {
-    // El caso que rompía la pantalla: la operación existe y no está cubierta, pero el
-    // cliente no ha pagado. Ahí el que debe es él, y la cuenta decía «Le debemos».
-    const sinPagar = op({ uuid: 'sin-pagar', first_incoming_payment_at: null });
-
-    expect(isPendingOperation(sinPagar)).toBe(false);
-    expect(pendingByPair([sinPagar])).toEqual([]);
-  });
-
-  it('con su comprobante entrante sí es deuda', () => {
+  // La regla vive en el servidor (`ClientPendingService`, con sus tests): aquí sólo se lee
+  // el veredicto que trae cada operación.
+  it('lo que el servidor puso en la cola es deuda', () => {
     expect(isPendingOperation(op({ uuid: 'pagada' }))).toBe(true);
   });
 
-  it('una cotización no es deuda ni con dinero entrado', () => {
-    expect(isPendingOperation(op({ uuid: 'q', status: 'QUOTED' }))).toBe(false);
+  it('lo que el servidor dejó fuera no lo es, falte lo que falte', () => {
+    const fuera = op({ uuid: 'fuera', client_pending: false, pending_amount: 100 });
+
+    expect(isPendingOperation(fuera)).toBe(false);
+    expect(pendingByPair([fuera])).toEqual([]);
+  });
+
+  it('sin veredicto del servidor no se adivina', () => {
+    expect(isPendingOperation(op({ uuid: 'sin-dato', client_pending: undefined }))).toBe(false);
+  });
+
+  it('la cifra y la fecha del servidor mandan sobre las de la operación', () => {
+    const cola = op({
+      uuid: 'cola',
+      pending_amount: 100,
+      outstanding_amount: 35,
+      pending_since: '2026-07-01T00:00:00Z',
+    });
+
+    expect(outstandingAmount(cola)).toBe(35);
+    expect(pendingSince(cola)).toBe('2026-07-01T00:00:00Z');
   });
 });
 
@@ -253,7 +266,6 @@ describe('pares que se cambian en efectivo', () => {
 
     expect(op.pending_amount).toBe(0);
     expect(outstandingAmount(op)).toBe(100);
-    expect(isPendingOperation(op)).toBe(true);
     expect(pendingByPair([op])[0].amount).toBe(100);
   });
 
@@ -265,33 +277,13 @@ describe('pares que se cambian en efectivo', () => {
     expect(pendingByPair([media])[0].amount).toBe(40);
   });
 
-  it('cobrada del todo sale de la cola', () => {
-    expect(isPendingOperation(efectivo({ collected_amount: 100, to_collect: 0 }))).toBe(false);
-  });
-
   it('en un par normal se sigue mirando lo que no hemos cubierto', () => {
     expect(outstandingAmount(op({ uuid: 'normal', pending_amount: 70 }))).toBe(70);
-  });
-
-  it('sin comprobante entrante sigue siendo deuda', () => {
-    // Exigirlo aquí borraba el par entero: en producción eran 134 operaciones sin cuadrar
-    // y cero comprobantes de entrada, así que la pantalla salía vacía.
-    expect(isPendingOperation(efectivo())).toBe(true);
-    expect(pendingByPair([efectivo()])).toHaveLength(1);
-  });
-
-  it('una cotización tampoco cuenta en efectivo', () => {
-    expect(isPendingOperation(efectivo({ status: 'QUOTED' }))).toBe(false);
   });
 
   it('el par viaja en la agrupación, que es lo que decide el rótulo', () => {
     expect(pendingByPair([efectivo()])[0].settles_in_cash).toBe(true);
     expect(pendingByPair([op({ uuid: 'normal' })])[0].settles_in_cash).toBe(false);
-  });
-
-  it('no indulta a las operaciones de los demás pares', () => {
-    const normalSinPagar = op({ uuid: 'normal', first_incoming_payment_at: null });
-    expect(isPendingOperation(normalSinPagar)).toBe(false);
   });
 
   it('la antigüedad se cae a la fecha de la operación, que es la única que hay', () => {

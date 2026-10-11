@@ -62,15 +62,15 @@ export function ClientsFilters({
         </div>
       </div>
 
-      <div className="flex flex-col gap-1.5 sm:min-w-[190px]">
+      <div className="flex flex-col gap-1.5 sm:min-w-[220px]">
         <Label
           htmlFor="clients-pending-filter"
           className={cn(
             'text-[10px] font-bold uppercase tracking-wider',
-            filters.pending === 'YES' ? 'text-primary' : 'text-muted-foreground',
+            filters.pending !== 'ALL' ? 'text-primary' : 'text-muted-foreground',
           )}
         >
-          Por entregar
+          Deudas
         </Label>
         <Select
           value={filters.pending}
@@ -79,8 +79,8 @@ export function ClientsFilters({
           <SelectTrigger
             id="clients-pending-filter"
             className={cn(
-              'h-10 w-full sm:w-[190px]',
-              filters.pending === 'YES' ? 'border-primary ring-3 ring-primary/10' : '',
+              'h-10 w-full sm:w-[220px]',
+              filters.pending !== 'ALL' ? 'border-primary ring-3 ring-primary/10' : '',
             )}
           >
             <SelectValue placeholder="Todos" />
@@ -88,6 +88,8 @@ export function ClientsFilters({
           <SelectContent>
             <SelectItem value="ALL">Todos</SelectItem>
             <SelectItem value="YES">Con pendiente</SelectItem>
+            <SelectItem value="OWES">Nos deben (por cobrar)</SelectItem>
+            <SelectItem value="OWED">Le debemos (por entregar)</SelectItem>
             <SelectItem value="NO">Sin pendiente</SelectItem>
           </SelectContent>
         </Select>

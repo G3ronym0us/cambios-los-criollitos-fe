@@ -1,26 +1,41 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { clientService } from '@/services/clientService';
 import { ClientData } from '@/types/client';
-import { pendingTotals, type PendingTotals } from '../_lib/pending';
+import { isCashDebt, pendingTotals, type PendingTotals } from '../_lib/pending';
 
 export type BoolFilter = 'ALL' | 'YES' | 'NO';
+
+/**
+ * Qué deuda buscar. Son dos direcciones y no se mezclan: en un par normal lo pendiente es
+ * lo que LE DEBEMOS (su dinero entró y no hemos pagado); en uno de efectivo
+ * (`settles_in_cash`) es lo que NOS DEBE (los bolívares salieron y falta su efectivo).
+ * `YES` es cualquiera de las dos.
+ */
+export type PendingFilter = BoolFilter | 'OWED' | 'OWES';
 
 /** Cómo se ordena la lista. Por monto sólo tiene sentido con el filtro de pendiente. */
 export type ClientsSort = 'amount' | 'age' | 'name';
 
 export interface ClientsFilters {
   search: string;
-  /** «Con pendiente»: sólo los clientes a los que les debemos algo. */
-  pending: BoolFilter;
+  /** Con pendiente (cualquiera), sólo lo que le debemos, sólo lo que nos debe, o sin nada. */
+  pending: PendingFilter;
   /** Símbolo del par al que acotar la deuda ("USD/VES"), o `''` para todos. */
   pair: string;
 }
 
 const emptyFilters: ClientsFilters = { search: '', pending: 'ALL', pair: '' };
+
+/**
+ * Cómo abre la lista: lo que NOS DEBEN, que es lo que se persigue a diario. Es el efectivo
+ * de USD-VES —el único par que se cambia en efectivo—; el par concreto se pone en cuanto
+ * llegan los datos (ver `loadClients`), porque su símbolo lo dice el servidor.
+ */
+const defaultFilters: ClientsFilters = { ...emptyFilters, pending: 'OWES' };
 
 export function useClients() {
   const searchParams = useSearchParams();
@@ -30,14 +45,14 @@ export function useClients() {
   const [error, setError] = useState<string | null>(null);
   // La home enlaza aquí con `?pending=1`: la tarjeta de «por entregar» pulsada allá debe
   // llegar con el filtro ya puesto, no obligar a un segundo toque sobre el desplegable.
+  const fromHome = searchParams.get('pending') === '1';
   const [filters, setFilters] = useState<ClientsFilters>(() =>
-    searchParams.get('pending') === '1' ? { ...emptyFilters, pending: 'YES' } : emptyFilters,
+    fromHome ? { ...emptyFilters, pending: 'YES' } : defaultFilters,
   );
-  // Con el filtro ya aplicado desde la home, el orden por defecto es el de deuda: igual
-  // que al tocar «Con pendiente» a mano (ver `applyFilters` más abajo).
-  const [sort, setSort] = useState<ClientsSort>(() =>
-    searchParams.get('pending') === '1' ? 'amount' : 'name',
-  );
+  // Abre como lista de trabajo —con deuda—, así que el orden por defecto es el de monto.
+  const [sort, setSort] = useState<ClientsSort>('amount');
+  // Si el operador ya tocó los filtros, la carga no se los pisa.
+  const touched = useRef(fromHome);
 
 
   const loadClients = useCallback(async () => {
@@ -47,6 +62,12 @@ export function useClients() {
     if (result.success && result.data) {
       const items = result.data.items || [];
       setClients(items);
+      if (!touched.current) {
+        const cashPair = items
+          .flatMap((client) => client.pending_by_pair ?? [])
+          .find((entry) => entry.settles_in_cash)?.pair_symbol;
+        if (cashPair) setFilters((current) => ({ ...current, pair: cashPair }));
+      }
       setTotal(result.data.total ?? items.length);
     } else {
       setError(result.error || 'Error al cargar los clientes');
@@ -63,6 +84,7 @@ export function useClients() {
   }, [loadClients]);
 
   const resetFilters = useCallback(() => {
+    touched.current = true;
     setFilters(emptyFilters);
     setSort('name');
   }, []);
@@ -78,20 +100,25 @@ export function useClients() {
   const decorated = useMemo(() => {
     return clients.map((client) => {
       const entries = client.pending_by_pair ?? [];
-      const scoped = filters.pair
-        ? entries.filter((entry) => entry.pair_symbol === filters.pair)
-        : entries;
+      // Igual que el par, la dirección recorta lo que se ve: con «Nos deben» puesto, un
+      // cliente al que además le debemos algo enseña sólo lo que él nos debe.
+      const scoped = entries.filter(
+        (entry) =>
+          (!filters.pair || entry.pair_symbol === filters.pair) &&
+          (filters.pending !== 'OWED' || !entry.settles_in_cash) &&
+          (filters.pending !== 'OWES' || entry.settles_in_cash),
+      );
       return {
         client: { ...client, pending_by_pair: scoped } satisfies ClientData,
         totals: pendingTotals(scoped),
       };
     });
-  }, [clients, filters.pair]);
+  }, [clients, filters.pair, filters.pending]);
 
   const filtered = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
     return decorated.filter(({ client, totals }) => {
-      if (filters.pending !== 'ALL' && (totals.operations > 0) !== (filters.pending === 'YES')) {
+      if (filters.pending !== 'ALL' && (totals.operations > 0) !== (filters.pending !== 'NO')) {
         return false;
       }
       // Pedir un par es pedir deuda en ese par: un cliente sin nada ahí no pinta nada.
@@ -127,8 +154,16 @@ export function useClients() {
   /** El resumen de la franja: sólo cuenta lo que está a la vista tras los filtros. */
   const pendingSummary = useMemo(() => {
     const withDebt = sorted.filter((row) => row.totals.operations > 0);
-    const totals: PendingTotals = pendingTotals(withDebt.flatMap((row) => row.client.pending_by_pair ?? []));
-    return { clients: withDebt.length, totals };
+    const entries = withDebt.flatMap((row) => row.client.pending_by_pair ?? []);
+    const totals: PendingTotals = pendingTotals(entries);
+    // El rótulo depende de qué se está sumando: efectivo que nos deben, plata que debemos,
+    // o una mezcla de las dos que no admite ninguno de los dos nombres.
+    const label = isCashDebt(entries)
+      ? 'por cobrar'
+      : entries.some((entry) => entry.settles_in_cash)
+        ? 'pendiente'
+        : 'por entregar';
+    return { clients: withDebt.length, totals, label };
   }, [sorted]);
 
   /**
@@ -175,8 +210,10 @@ export function useClients() {
    */
   const applyFilters = useCallback(
     (next: ClientsFilters) => {
-      if (next.pending !== filters.pending) {
-        setSort(next.pending === 'YES' ? 'amount' : 'name');
+      touched.current = true;
+      const working = (pending: PendingFilter) => pending !== 'ALL' && pending !== 'NO';
+      if (working(next.pending) !== working(filters.pending)) {
+        setSort(working(next.pending) ? 'amount' : 'name');
       }
       setFilters(next);
     },
