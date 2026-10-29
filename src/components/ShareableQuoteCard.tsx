@@ -11,6 +11,7 @@ interface ShareableQuoteCardProps {
   bcvAmount?: string;
   bcvMode?: "usd" | "eur";
   generatedAt?: Date;
+  historicalAt?: string;
 }
 
 const currencyLabel: Record<string, string> = {
@@ -56,7 +57,7 @@ const BrandLogo = ({ size = 40 }: { size?: number }) => (
 
 const ShareableQuoteCard = React.forwardRef<HTMLDivElement, ShareableQuoteCardProps>(
   (
-    { fromAmount, toAmount, fromCurrency, toCurrency, rate, inversePercentage = false, bcvAmount, bcvMode = "usd", generatedAt },
+    { fromAmount, toAmount, fromCurrency, toCurrency, rate, inversePercentage = false, bcvAmount, bcvMode = "usd", generatedAt, historicalAt },
     ref
   ) => {
     const date = generatedAt ?? new Date();
@@ -102,6 +103,7 @@ const ShareableQuoteCard = React.forwardRef<HTMLDivElement, ShareableQuoteCardPr
           <div style={{ fontSize: 11, color: BRAND.inkSoft, textAlign: "right" }}>
             <div style={{ letterSpacing: 1, textTransform: "uppercase", fontWeight: 600 }}>Cotización</div>
             <div>{dateStr}</div>
+            {historicalAt && <div style={{ marginTop: 4, fontWeight: 600, color: BRAND.orangeDeep }}>Histórica: {new Date(historicalAt).toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" })}</div>}
           </div>
         </div>
 

@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import HistoricalRateControl from "./HistoricalRateControl";
+import { useHistoricalRate } from "../hooks/useHistoricalRate";
 import CurrencySelector from "./CurrencySelector";
 import CurrencyInputFields from "./CurrencyInputFields";
 import ShareableQuoteCard from "./ShareableQuoteCard";
@@ -19,6 +21,7 @@ interface Rate {
   percentage?: number | null;
   inverse_percentage: boolean;
   currency_pair_uuid?: string;
+  created_at?: string;
   // Redondeo configurado en el par. Llega en `/rates`; sin aplicarlo la
   // calculadora muestra una tasa distinta a la que cotiza el bot.
   rounding_mode?: string | null;
@@ -53,7 +56,9 @@ interface BCVRate {
   lastUpdated: string;
 }
 
-const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, onRateUpdated }) => {
+const NO_RATES: Rate[] = [];
+
+const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates: liveRates, user, onRateUpdated }) => {
   const [calculator, setCalculator] = useState<CalculatorState>({
     amount: 1,
     fromCurrency: "ZELLE",
@@ -62,6 +67,13 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
     rate: null,
     bcvAmount: "",
   });
+
+  const isPrivileged = user?.role === Role.MODERATOR || user?.role === Role.ROOT;
+  const selectedPair = liveRates.find(r => r.from_currency === calculator.fromCurrency && r.to_currency === calculator.toCurrency);
+  const history = useHistoricalRate(isPrivileged, selectedPair?.currency_pair_uuid);
+  const rates = React.useMemo(() => history.at ? history.rate ? [history.rate] : NO_RATES : liveRates, [history.at, history.rate, liveRates]);
+  const historyBlocked = !!history.at && (!history.rate || history.loading);
+  const initialized = useRef(false);
 
   // Último campo de monto editado por el usuario; define qué lado queda fijo al ajustar el porcentaje
   const [lastEdited, setLastEdited] = useState<'from' | 'to'>('from');
@@ -75,8 +87,6 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
   const [shareMessage, setShareMessage] = useState<string>('');
   const shareCardRef = useRef<HTMLDivElement>(null);
   const bcvService = BCVService.getInstance();
-
-  const isPrivileged = user?.role === Role.MODERATOR || user?.role === Role.ROOT;
 
   const calcPreviewRate = (baseRate: number, pct: number, isInverse: boolean) => {
     const factor = 1 - pct / 100;
@@ -115,7 +125,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
   // Obtener monedas disponibles
   const getAvailableCurrencies = () => {
     const currencies = new Set<string>();
-    rates.forEach((rate) => {
+    liveRates.forEach((rate) => {
       currencies.add(rate.from_currency);
       currencies.add(rate.to_currency);
     });
@@ -224,7 +234,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
     }
 
     // Calcular equivalente BCV usando la tasa activa (USD o EUR según bcvMode)
-    const activeRate = bcvMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
+    const activeRate = history.at ? undefined : bcvMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
     const amountBCV = getBCVAmount(
       finalFromAmount,
       finalToAmount,
@@ -263,7 +273,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
   // Rellenar el equivalente BCV cuando ya hay conversión pero el campo quedó vacío
   // (en la primera carga, las tasas BCV y las del par llegan en orden no determinista)
   useEffect(() => {
-    const activeRate = bcvMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
+    const activeRate = history.at ? undefined : bcvMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
     if (!activeRate) return;
     setCalculator((prev) => {
       if (prev.bcvAmount || prev.result == null || prev.amount === undefined) {
@@ -281,39 +291,30 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bcvRate, euroRate, bcvMode, calculator.result]);
 
-  const firstCalculation = useCallback(() => {
-    // Par por defecto ZELLE→VES; si no existe, cae a la primera tasa disponible.
-    const directRate =
-      rates.find(
-        (rate) => rate.from_currency === "ZELLE" && rate.to_currency === "VES"
-      ) ?? rates[0];
-
-    if (directRate) {
-      const quote = quotePair(
-        1,
-        directRate.rate,
-        directRate.inverse_percentage,
-        'SEND',
-        pairRoundingFrom(directRate)
-      );
-      setCalculator((prev) => ({
-        ...prev,
-        fromCurrency: directRate.from_currency,
-        toCurrency: directRate.to_currency,
-        amount: 1,
-        result: quote.toAmount,
-        rate: quote.rate,
-        rateInverse: quote.inverse,
-      }));
-      setSliderValue(directRate.percentage ?? 0);
-    }
+  // Al cambiar la fuente de la tasa, conservar el último monto editado y el par.
+  useEffect(() => {
+    const directRate = rates.find(r => r.from_currency === calculator.fromCurrency && r.to_currency === calculator.toCurrency)
+      ?? (!initialized.current ? rates[0] : undefined);
+    if (!directRate) return;
+    initialized.current = true;
+    const receive = lastEdited === 'to' && calculator.result != null;
+    const amount = receive ? calculator.result! : calculator.amount;
+    setSliderValue(directRate.percentage ?? 0);
+    if (amount === undefined) return;
+    const quote = quotePair(amount, directRate.rate, directRate.inverse_percentage, receive ? 'RECEIVE' : 'SEND', pairRoundingFrom(directRate));
+    setCalculator(prev => ({
+      ...prev,
+      fromCurrency: directRate.from_currency,
+      toCurrency: directRate.to_currency,
+      amount: receive ? roundToDecimals(quote.fromAmount, 2) : amount,
+      result: receive ? amount : roundToDecimals(quote.toAmount, 2),
+      rate: quote.rate,
+      rateInverse: quote.inverse,
+      bcvAmount: undefined,
+    }));
+    // Los cambios de montos/monedas se calculan en sus handlers; este efecto responde a la fuente.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rates]);
-
-  React.useEffect(() => {
-    if (rates.length > 0) {
-      firstCalculation();
-    }
-  }, [firstCalculation, rates]);
 
   // Intercambiar monedas recalculando con la tasa del par invertido.
   const swapCurrencies = () => {
@@ -341,7 +342,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
       clamped,
       currentRate.inverse_percentage
     );
-    const activeRate = bcvMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
+    const activeRate = history.at ? undefined : bcvMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
     // El redondeo del par también aplica sobre la tasa de vista previa: es la
     // que se va a cotizar si se guarda el porcentaje.
     const rounding = pairRoundingFrom(currentRate);
@@ -402,7 +403,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
   };
 
   const handleSavePercentage = async () => {
-    if (!currentRate?.currency_pair_uuid) return;
+    if (!isPrivileged || history.at || !currentRate?.currency_pair_uuid) return;
     setSaving(true);
     setSaveError('');
     const result = await adminService.updatePairPercentage(
@@ -438,11 +439,12 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
       const v = oriented.value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
       lines.push(`Tasa: ${v}`);
     }
+    if (history.at) lines.push(`Tasa histórica al ${new Date(history.at).toLocaleString('es-ES')}`);
     return lines.join('\n');
   };
 
   const handleShare = async () => {
-    if (!shareCardRef.current || calculator.result == null) return;
+    if (historyBlocked || !shareCardRef.current || calculator.result == null) return;
     setSharing(true);
     setShareMessage('');
     try {
@@ -523,7 +525,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
   const handleBCVAmountChange = (bcvAmount: string) => {
     setCalculator((prev) => ({ ...prev, bcvAmount }));
 
-    const activeRate = bcvMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
+    const activeRate = history.at ? undefined : bcvMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
     if (!activeRate || !bcvAmount) return;
 
     const bcvValue = parseFloat(bcvAmount);
@@ -572,194 +574,201 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
           onSwap={swapCurrencies}
         />
 
-        {/* Campos de entrada */}
-        <CurrencyInputFields
-          fromAmount={calculator.amount?.toString() || ""}
-          toAmount={calculator.result?.toString() || ""}
-          fromCurrency={calculator.fromCurrency}
-          toCurrency={calculator.toCurrency}
-          onFromAmountChange={handleFromAmountChange}
-          onToAmountChange={handleToAmountChange}
-          bcvRate={bcvRate?.rate}
-          euroRate={euroRate?.rate}
-          bcvMode={bcvMode}
-          onBCVModeToggle={handleBCVModeToggle}
-          bcvAmount={calculator.bcvAmount}
-          onBCVAmountChange={handleBCVAmountChange}
-        />
+        {isPrivileged && <HistoricalRateControl history={history} />}
 
-        {/* Tasa pública — solo el valor (sin porcentaje) */}
-        {currentRate && calculator.rate != null && (
-          <div className="mt-4 flex items-center justify-center gap-2 rounded-lg border border-border bg-muted/40 px-4 py-2.5">
-            <TrendingUp className="h-4 w-4 text-primary" aria-hidden />
-            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tasa</span>
-            <span className="text-base font-bold tabular-nums text-foreground">
-              {orientRateForDisplay(
-                calculator.rate,
-                calculator.rateInverse ?? currentRate.inverse_percentage,
-                calculator.fromCurrency,
-                calculator.toCurrency
-              ).value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
-            </span>
-          </div>
-        )}
+        {!historyBlocked && (
+          <>
+            {/* Campos de entrada */}
+            <CurrencyInputFields
+              fromAmount={calculator.amount?.toString() || ""}
+              toAmount={calculator.result?.toString() || ""}
+              fromCurrency={calculator.fromCurrency}
+              toCurrency={calculator.toCurrency}
+              onFromAmountChange={handleFromAmountChange}
+              onToAmountChange={handleToAmountChange}
+              bcvRate={history.at ? undefined : bcvRate?.rate}
+              euroRate={history.at ? undefined : euroRate?.rate}
+              bcvMode={bcvMode}
+              onBCVModeToggle={handleBCVModeToggle}
+              bcvAmount={calculator.bcvAmount}
+              onBCVAmountChange={handleBCVAmountChange}
+            />
 
-        {/* Botón compartir cotización */}
-        {calculator.result != null && calculator.amount !== undefined && (
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-            {shareMessage && (
-              <p role="status" aria-live="polite" className="text-xs text-muted-foreground sm:mr-auto">
-                {shareMessage}
-              </p>
+            {/* Tasa pública — solo el valor (sin porcentaje) */}
+            {currentRate && calculator.rate != null && (
+              <div className="mt-4 flex items-center justify-center gap-2 rounded-lg border border-border bg-muted/40 px-4 py-2.5">
+                <TrendingUp className="h-4 w-4 text-primary" aria-hidden />
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tasa</span>
+                <span className="text-base font-bold tabular-nums text-foreground">
+                  {orientRateForDisplay(
+                    calculator.rate,
+                    calculator.rateInverse ?? currentRate.inverse_percentage,
+                    calculator.fromCurrency,
+                    calculator.toCurrency
+                  ).value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                </span>
+              </div>
             )}
-            <button
-              type="button"
-              onClick={handleShare}
-              disabled={sharing}
-              aria-busy={sharing}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 touch-manipulation"
-            >
-              <svg aria-hidden="true" className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-              </svg>
-              {sharing ? 'Generando…' : 'Compartir'}
-            </button>
-          </div>
-        )}
 
-        {/* Ajuste de porcentaje — solo MODERATOR/ROOT con par que tenga base_rate */}
-        {isPrivileged && currentRate?.base_rate != null && (
-          <div className="mt-4 space-y-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
-            {/* Header */}
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <TrendingUp className="h-3.5 w-3.5" aria-hidden />
-                <span>Tasa base (<span translate="no">Binance</span>)</span>
-              </div>
-              <span className="font-semibold tabular-nums text-foreground">
-                {orientRateForDisplay(currentRate.base_rate, currentRate.inverse_percentage, calculator.fromCurrency, calculator.toCurrency).value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
-              </span>
-            </div>
-
-            {/* Percentage controls */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <label htmlFor="pct-input" className="text-xs font-semibold uppercase tracking-wide text-foreground">
-                  Porcentaje de ganancia
-                </label>
-                <span className="text-xs text-muted-foreground">Rango: 0% – 20%</span>
-              </div>
-
-              <div className="flex items-stretch gap-2">
+            {/* Botón compartir cotización */}
+            {calculator.result != null && calculator.amount !== undefined && (
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                {shareMessage && (
+                  <p role="status" aria-live="polite" className="text-xs text-muted-foreground sm:mr-auto">
+                    {shareMessage}
+                  </p>
+                )}
                 <button
                   type="button"
-                  onClick={() => updatePercentage(parseFloat((sliderValue - 0.1).toFixed(1)))}
-                  disabled={sliderValue <= 0}
-                  className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border bg-card text-xl font-bold text-primary transition-colors hover:bg-accent active:bg-accent disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 touch-manipulation"
-                  aria-label="Disminuir 0.1%"
+                  onClick={handleShare}
+                  disabled={sharing}
+                  aria-busy={sharing}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 touch-manipulation"
                 >
-                  −
+                  <svg aria-hidden="true" className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                  </svg>
+                  {sharing ? 'Generando…' : 'Compartir'}
                 </button>
-                <div className="relative flex-1">
+              </div>
+            )}
+
+            {/* Ajuste de porcentaje — solo MODERATOR/ROOT con par que tenga base_rate */}
+            {isPrivileged && !history.at && currentRate?.base_rate != null && (
+              <div className="mt-4 space-y-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
+                {/* Header */}
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <TrendingUp className="h-3.5 w-3.5" aria-hidden />
+                    <span>Tasa base (<span translate="no">Binance</span>)</span>
+                  </div>
+                  <span className="font-semibold tabular-nums text-foreground">
+                    {orientRateForDisplay(currentRate.base_rate, currentRate.inverse_percentage, calculator.fromCurrency, calculator.toCurrency).value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+                  </span>
+                </div>
+
+                {/* Percentage controls */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="pct-input" className="text-xs font-semibold uppercase tracking-wide text-foreground">
+                      Porcentaje de ganancia
+                    </label>
+                    <span className="text-xs text-muted-foreground">Rango: 0% – 20%</span>
+                  </div>
+
+                  <div className="flex items-stretch gap-2">
+                    <button
+                      type="button"
+                      onClick={() => updatePercentage(parseFloat((sliderValue - 0.1).toFixed(1)))}
+                      disabled={sliderValue <= 0}
+                      className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border bg-card text-xl font-bold text-primary transition-colors hover:bg-accent active:bg-accent disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 touch-manipulation"
+                      aria-label="Disminuir 0.1%"
+                    >
+                      −
+                    </button>
+                    <div className="relative flex-1">
+                      <input
+                        id="pct-input"
+                        type="number"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        min={0}
+                        max={20}
+                        step={0.1}
+                        value={Number(sliderValue.toFixed(1))}
+                        onChange={(e) => updatePercentage(parseFloat(e.target.value))}
+                        onFocus={(e) => e.target.select()}
+                        className="h-full min-h-11 w-full rounded-lg border border-input bg-card px-3 py-2 pr-8 text-center text-lg font-bold tabular-nums text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      />
+                      <span aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 font-semibold text-muted-foreground">
+                        %
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => updatePercentage(parseFloat((sliderValue + 0.1).toFixed(1)))}
+                      disabled={sliderValue >= 20}
+                      className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border bg-card text-xl font-bold text-primary transition-colors hover:bg-accent active:bg-accent disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 touch-manipulation"
+                      aria-label="Aumentar 0.1%"
+                    >
+                      +
+                    </button>
+                  </div>
+
                   <input
-                    id="pct-input"
-                    type="number"
-                    inputMode="decimal"
-                    autoComplete="off"
+                    type="range"
                     min={0}
                     max={20}
                     step={0.1}
-                    value={Number(sliderValue.toFixed(1))}
+                    value={sliderValue}
                     onChange={(e) => updatePercentage(parseFloat(e.target.value))}
-                    onFocus={(e) => e.target.select()}
-                    className="h-full min-h-11 w-full rounded-lg border border-input bg-card px-3 py-2 pr-8 text-center text-lg font-bold tabular-nums text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="w-full rounded accent-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 touch-manipulation"
+                    aria-label="Ajuste de porcentaje con slider"
                   />
-                  <span aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 font-semibold text-muted-foreground">
-                    %
-                  </span>
+
+                  {/* Presets */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {[0, 0.5, 1, 1.5, 2, 3, 5, 10].map((preset) => {
+                      const isActive = Math.abs(sliderValue - preset) < 0.001;
+                      return (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => updatePercentage(preset)}
+                          aria-pressed={isActive}
+                          className={`rounded-md px-2.5 py-1 text-xs font-medium tabular-nums transition-colors motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ${
+                            isActive
+                              ? 'bg-primary text-primary-foreground shadow-sm'
+                              : 'border border-border bg-card text-foreground hover:bg-accent'
+                          }`}
+                        >
+                          {preset}%
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => updatePercentage(parseFloat((sliderValue + 0.1).toFixed(1)))}
-                  disabled={sliderValue >= 20}
-                  className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border bg-card text-xl font-bold text-primary transition-colors hover:bg-accent active:bg-accent disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 touch-manipulation"
-                  aria-label="Aumentar 0.1%"
-                >
-                  +
-                </button>
+
+                {/* Preview + Save */}
+                <div className="flex items-center justify-between gap-3 border-t border-primary/20 pt-3">
+                  <div className="min-w-0" aria-live="polite" aria-atomic="true">
+                    <p className="text-xs font-medium text-muted-foreground">Nueva tasa</p>
+                    <p className="truncate text-base font-bold tabular-nums text-foreground sm:text-lg">
+                      {(() => {
+                        const preview = calcPreviewRate(currentRate.base_rate, sliderValue, currentRate.inverse_percentage);
+                        const o = orientRateForDisplay(preview, currentRate.inverse_percentage, calculator.fromCurrency, calculator.toCurrency);
+                        return (
+                          <>
+                            {o.value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}{' '}
+                            <span className="text-sm font-medium text-primary">{o.manyCurrency}</span>
+                          </>
+                        );
+                      })()}
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleSavePercentage}
+                    disabled={saving || Math.abs(sliderValue - (currentRate.percentage ?? 0)) < 0.05}
+                    aria-busy={saving}
+                    className="min-h-11 shrink-0 px-4"
+                  >
+                    {saving ? 'Guardando…' : 'Guardar'}
+                  </Button>
+                </div>
+
+                {saveError && (
+                  <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {saveError}
+                  </p>
+                )}
               </div>
-
-              <input
-                type="range"
-                min={0}
-                max={20}
-                step={0.1}
-                value={sliderValue}
-                onChange={(e) => updatePercentage(parseFloat(e.target.value))}
-                className="w-full rounded accent-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 touch-manipulation"
-                aria-label="Ajuste de porcentaje con slider"
-              />
-
-              {/* Presets */}
-              <div className="flex flex-wrap gap-1.5">
-                {[0, 0.5, 1, 1.5, 2, 3, 5, 10].map((preset) => {
-                  const isActive = Math.abs(sliderValue - preset) < 0.001;
-                  return (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => updatePercentage(preset)}
-                      aria-pressed={isActive}
-                      className={`rounded-md px-2.5 py-1 text-xs font-medium tabular-nums transition-colors motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ${
-                        isActive
-                          ? 'bg-primary text-primary-foreground shadow-sm'
-                          : 'border border-border bg-card text-foreground hover:bg-accent'
-                      }`}
-                    >
-                      {preset}%
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Preview + Save */}
-            <div className="flex items-center justify-between gap-3 border-t border-primary/20 pt-3">
-              <div className="min-w-0" aria-live="polite" aria-atomic="true">
-                <p className="text-xs font-medium text-muted-foreground">Nueva tasa</p>
-                <p className="truncate text-base font-bold tabular-nums text-foreground sm:text-lg">
-                  {(() => {
-                    const preview = calcPreviewRate(currentRate.base_rate, sliderValue, currentRate.inverse_percentage);
-                    const o = orientRateForDisplay(preview, currentRate.inverse_percentage, calculator.fromCurrency, calculator.toCurrency);
-                    return (
-                      <>
-                        {o.value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}{' '}
-                        <span className="text-sm font-medium text-primary">{o.manyCurrency}</span>
-                      </>
-                    );
-                  })()}
-                </p>
-              </div>
-              <Button
-                onClick={handleSavePercentage}
-                disabled={saving || Math.abs(sliderValue - (currentRate.percentage ?? 0)) < 0.05}
-                aria-busy={saving}
-                className="min-h-11 shrink-0 px-4"
-              >
-                {saving ? 'Guardando…' : 'Guardar'}
-              </Button>
-            </div>
-
-            {saveError && (
-              <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                {saveError}
-              </p>
             )}
-          </div>
+
+          </>
         )}
 
         {/* Mensaje si no hay conversión disponible */}
-        {calculator.amount &&
+        {!history.at && calculator.amount &&
           calculator.fromCurrency &&
           calculator.toCurrency &&
           !calculator.result && (
@@ -776,7 +785,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
           )}
 
         {/* Conversiones rápidas sugeridas */}
-        {availableCurrencies.length > 0 && (
+        {!history.at && availableCurrencies.length > 0 && (
           <div className="mt-6">
             <p className="mb-3 text-sm font-medium text-muted-foreground">
               Conversiones rápidas:
@@ -820,7 +829,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
         aria-hidden="true"
         style={{ position: 'fixed', top: -99999, left: -99999, pointerEvents: 'none' }}
       >
-        {calculator.result != null && calculator.amount !== undefined && calculator.rate != null && (
+        {!historyBlocked && calculator.result != null && calculator.amount !== undefined && calculator.rate != null && (
           <ShareableQuoteCard
             ref={shareCardRef}
             fromAmount={calculator.amount}
@@ -829,8 +838,9 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates, user, on
             toCurrency={calculator.toCurrency}
             rate={calculator.rate}
             inversePercentage={calculator.rateInverse ?? currentRate?.inverse_percentage ?? false}
-            bcvAmount={calculator.bcvAmount}
+            bcvAmount={history.at ? undefined : calculator.bcvAmount}
             bcvMode={bcvMode}
+            historicalAt={history.at ?? undefined}
           />
         )}
       </div>
