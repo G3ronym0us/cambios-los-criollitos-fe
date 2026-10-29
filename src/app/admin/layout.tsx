@@ -30,7 +30,7 @@ import NotificationBell from '@/components/admin/NotificationBell';
 import { ConfirmProvider } from '@/hooks/useConfirm';
 import { ThemeToggle } from '@/components/shared/ThemeToggle';
 import { LoadingState } from '@/components/shared/LoadingState';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const navigation = [
@@ -218,6 +218,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </div>
 
               <div className="ml-auto flex items-center gap-2">
+                <Link
+                  href="/"
+                  className={cn(buttonVariants({ variant: 'outline' }), 'min-h-11 gap-2 px-3')}
+                  aria-label="Ir a la calculadora"
+                >
+                  <Calculator className="h-4 w-4" aria-hidden />
+                  <span>Calculadora</span>
+                </Link>
                 <ThemeToggle />
                 <NotificationBell />
               </div>
