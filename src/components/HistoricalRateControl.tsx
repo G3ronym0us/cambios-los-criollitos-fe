@@ -53,7 +53,7 @@ export default function HistoricalRateControl({ history }: { history: ReturnType
               <p className="text-xs text-muted-foreground">Tasa registrada el {formatDate(history.rate.created_at)}.</p>
             ) : null}
           </div>
-          <p className="text-xs leading-relaxed text-muted-foreground">El equivalente BCV y el ajuste de porcentaje están disponibles al volver a la tasa actual.</p>
+          <p className="text-xs leading-relaxed text-muted-foreground">El equivalente BCV se calcula con la tasa oficial registrada a esa fecha. El ajuste de porcentaje se hace sobre la tasa actual.</p>
           <Button type="button" variant="outline" onClick={history.reset} className="min-h-11 w-full sm:w-auto">
             <RotateCcw className="h-4 w-4" aria-hidden /> Volver a tasa actual
           </Button>

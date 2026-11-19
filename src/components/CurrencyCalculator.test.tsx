@@ -6,10 +6,23 @@ import CurrencyCalculator from './CurrencyCalculator';
 import { ratesService } from '@/services/ratesService';
 import type { ExchangeRateResponse } from '@/types/currency';
 
+const bcv = vi.hoisted(() => ({
+  historical: { USD: 240 as number | null, EUR: null as number | null },
+  calls: [] as Array<{ at: string; currency: 'USD' | 'EUR' }>,
+}));
+
 vi.mock('@/services/ratesService', () => ({ ratesService: { getHistoricalRate: vi.fn() } }));
 vi.mock('@/services/adminService', () => ({ adminService: { updatePairPercentage: vi.fn() } }));
 vi.mock('@/services/bcvService', () => {
-  const service = { getBCVRate: async () => ({ rate: 30, lastUpdated: '' }), getEuroRate: async () => null };
+  const service = {
+    getBCVRate: async () => ({ rate: 30, lastUpdated: '' }),
+    getEuroRate: async () => null,
+    getHistoricalBCVRate: async (at: string, currency: 'USD' | 'EUR' = 'USD') => {
+      bcv.calls.push({ at, currency });
+      const rate = bcv.historical[currency];
+      return rate == null ? null : { rate, lastUpdated: at };
+    },
+  };
   return { default: { getInstance: () => service } };
 });
 const rates = [{
@@ -22,12 +35,18 @@ const rates = [{
 }] as ExchangeRateResponse[];
 const historic = { ...rates[0], rate: 40, created_at: '2025-06-10T10:00:00Z' };
 const request = vi.mocked(ratesService.getHistoricalRate);
-afterEach(() => { cleanup(); vi.resetAllMocks(); });
+afterEach(() => {
+  cleanup();
+  vi.resetAllMocks();
+  bcv.historical = { USD: 240, EUR: null };
+  bcv.calls = [];
+});
 const changeDate = () => {
   fireEvent.click(screen.getByRole('button', { name: 'Consultar tasa histórica' }));
   fireEvent.change(screen.getByLabelText('Fecha y hora'), { target: { value: '2025-06-10T14:30' } });
 };
 const amount = (container: HTMLElement, side: string) => container.querySelector<HTMLInputElement>(`#amount-${side}`)!;
+const bcvAmount = (container: HTMLElement) => container.querySelector<HTMLInputElement>('#amount-bcv');
 
 describe('pantalla de la calculadora histórica', () => {
   it('mantiene el formulario recogido hasta que el administrador elige consultar el histórico', async () => {
@@ -51,11 +70,42 @@ describe('pantalla de la calculadora histórica', () => {
     await waitFor(() => expect(amount(container, 'to')?.value).toBe('4000'));
     expect(amount(container, 'from').value).toBe('100');
     expect(screen.queryByText('Porcentaje de ganancia')).toBeNull();
-    expect(screen.queryByLabelText('Equivalente en $BCV')).toBeNull();
+    // El BCV acompaña a la tasa histórica: 4000 VES / 240 = 16,67 $BCV.
+    await waitFor(() => expect(bcvAmount(container)?.value).toBe('16.67'));
+    expect(screen.getAllByText('1 $BCV = 240.00 VES').length).toBeGreaterThan(0);
     expect(screen.getByText(/Tasa registrada el/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Volver a tasa actual' }));
     await waitFor(() => expect(amount(container, 'to')?.value).toBe('5000'));
+    // De vuelta a la tasa actual, el equivalente usa el BCV vigente (5000 / 30).
+    await waitFor(() => expect(bcvAmount(container)?.value).toBe('166.67'));
     expect(screen.getByText('Porcentaje de ganancia')).toBeTruthy();
+  });
+
+  it('consulta el BCV de la misma fecha que la tasa del par', async () => {
+    request.mockResolvedValue({ success: true, data: historic });
+    render(<CurrencyCalculator rates={rates} user={{ role: 'ROOT' }} />);
+    changeDate();
+    fireEvent.click(screen.getByRole('button', { name: 'Cargar tasa histórica' }));
+
+    await waitFor(() => expect(bcv.calls.length).toBeGreaterThan(0));
+    const iso = new Date('2025-06-10T14:30').toISOString();
+    expect(bcv.calls).toEqual(expect.arrayContaining([
+      { at: iso, currency: 'USD' },
+      { at: iso, currency: 'EUR' },
+    ]));
+  });
+
+  it('sin BCV registrado a esa fecha oculta el equivalente sin romper la cotización', async () => {
+    bcv.historical.USD = null;
+    request.mockResolvedValue({ success: true, data: historic });
+    const { container } = render(<CurrencyCalculator rates={rates} user={{ role: 'ROOT' }} />);
+    fireEvent.change(amount(container, 'from'), { target: { value: '100' } });
+    changeDate();
+    fireEvent.click(screen.getByRole('button', { name: 'Cargar tasa histórica' }));
+
+    await waitFor(() => expect(amount(container, 'to')?.value).toBe('4000'));
+    expect(screen.queryByLabelText('Equivalente en $BCV')).toBeNull();
+    expect(screen.getByText(/Tasa registrada el/)).toBeTruthy();
   });
 
   it('conserva el monto a recibir cuando fue el último editado', async () => {

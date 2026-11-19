@@ -39,11 +39,11 @@ All API calls go through a **singleton** `HttpInterceptor` (`src/utils/httpInter
 - `userService.ts` — commission user management
 - `transactionService.ts` — create/read/update transactions, profit reports
 - `commissionConfigService.ts` — commission split configuration
-- `bcvService.ts` — BCV rate data
+- `bcvService.ts` — BCV rate data from the backend (`/bcv` current, `/bcv/historical` for a given instant, per currency USD/EUR)
 
 ### Currency Calculator Flow
 
-`CurrencyCalculator` fetches available pairs from the backend, lets the user pick a pair via `CurrencySelector`, then computes conversion using the rate from the pair. When `inverse_percentage` is set on a rate, the calculation is inverted. BCV rates are integrated for VES conversions.
+`CurrencyCalculator` fetches available pairs from the backend, lets the user pick a pair via `CurrencySelector`, then computes conversion using the rate from the pair. When `inverse_percentage` is set on a rate, the calculation is inverted. BCV rates are integrated for VES conversions and, when an admin looks up a historical pair rate, the BCV equivalent uses the rate that was in force at that same instant (never today's).
 
 ### Admin Section
 
