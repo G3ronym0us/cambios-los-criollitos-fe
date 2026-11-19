@@ -80,6 +80,10 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates: liveRate
   const [bcvRate, setBcvRate] = useState<BCVRate | null>(null);
   const [euroRate, setEuroRate] = useState<BCVRate | null>(null);
   const [bcvMode, setBcvMode] = useState<'usd' | 'eur'>('usd');
+  // Tasa BCV de la fecha consultada: `undefined` = todavía cargando, `null` = no
+  // hay registro para esa moneda en ese momento.
+  const [historicalBcvRate, setHistoricalBcvRate] = useState<number | null | undefined>(undefined);
+  const [historicalEuroRate, setHistoricalEuroRate] = useState<number | null | undefined>(undefined);
   const [sliderValue, setSliderValue] = useState<number>(0);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>('');
@@ -87,6 +91,15 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates: liveRate
   const [shareMessage, setShareMessage] = useState<string>('');
   const shareCardRef = useRef<HTMLDivElement>(null);
   const bcvService = BCVService.getInstance();
+
+  // BCV que corresponde al cálculo: el de la fecha consultada si hay histórico
+  // activo, o el vigente. Nunca se mezclan los dos.
+  const rateForMode = (mode: 'usd' | 'eur' = bcvMode): number | undefined => {
+    if (history.at) {
+      return (mode === 'usd' ? historicalBcvRate : historicalEuroRate) ?? undefined;
+    }
+    return mode === 'usd' ? bcvRate?.rate : euroRate?.rate;
+  };
 
   const calcPreviewRate = (baseRate: number, pct: number, isInverse: boolean) => {
     const factor = 1 - pct / 100;
@@ -234,7 +247,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates: liveRate
     }
 
     // Calcular equivalente BCV usando la tasa activa (USD o EUR según bcvMode)
-    const activeRate = history.at ? undefined : bcvMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
+    const activeRate = rateForMode();
     const amountBCV = getBCVAmount(
       finalFromAmount,
       finalToAmount,
@@ -270,10 +283,50 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates: liveRate
     loadRates();
   }, [bcvService]);
 
+  // Tasas BCV de la fecha consultada. Se piden ambas monedas a la vez para que
+  // el selector USD/EUR no dependa del orden en que responda el backend.
+  useEffect(() => {
+    if (!history.at) {
+      setHistoricalBcvRate(undefined);
+      setHistoricalEuroRate(undefined);
+      return;
+    }
+
+    let cancelled = false;
+    const at = history.at;
+    setHistoricalBcvRate(undefined);
+    setHistoricalEuroRate(undefined);
+
+    Promise.all([
+      bcvService.getHistoricalBCVRate(at, 'USD'),
+      bcvService.getHistoricalBCVRate(at, 'EUR'),
+    ])
+      .then(([usd, eur]) => {
+        if (cancelled) return;
+        setHistoricalBcvRate(usd?.rate ?? null);
+        setHistoricalEuroRate(eur?.rate ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setHistoricalBcvRate(null);
+        setHistoricalEuroRate(null);
+      });
+
+    return () => { cancelled = true; };
+  }, [history.at, bcvService]);
+
+  // Sin serie de euros para esa fecha no hay nada que mostrar en modo EUR:
+  // volver a USD evita que el campo BCV desaparezca.
+  useEffect(() => {
+    if (history.at && bcvMode === 'eur' && historicalEuroRate === null) {
+      setBcvMode('usd');
+    }
+  }, [history.at, bcvMode, historicalEuroRate]);
+
   // Rellenar el equivalente BCV cuando ya hay conversión pero el campo quedó vacío
   // (en la primera carga, las tasas BCV y las del par llegan en orden no determinista)
   useEffect(() => {
-    const activeRate = history.at ? undefined : bcvMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
+    const activeRate = rateForMode();
     if (!activeRate) return;
     setCalculator((prev) => {
       if (prev.bcvAmount || prev.result == null || prev.amount === undefined) {
@@ -289,7 +342,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates: liveRate
       return bcv !== undefined ? { ...prev, bcvAmount: bcv.toString() } : prev;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bcvRate, euroRate, bcvMode, calculator.result]);
+  }, [bcvRate, euroRate, historicalBcvRate, historicalEuroRate, bcvMode, calculator.result]);
 
   // Al cambiar la fuente de la tasa, conservar el último monto editado y el par.
   useEffect(() => {
@@ -342,7 +395,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates: liveRate
       clamped,
       currentRate.inverse_percentage
     );
-    const activeRate = history.at ? undefined : bcvMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
+    const activeRate = rateForMode();
     // El redondeo del par también aplica sobre la tasa de vista previa: es la
     // que se va a cotizar si se guarda el porcentaje.
     const rounding = pairRoundingFrom(currentRate);
@@ -525,7 +578,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates: liveRate
   const handleBCVAmountChange = (bcvAmount: string) => {
     setCalculator((prev) => ({ ...prev, bcvAmount }));
 
-    const activeRate = history.at ? undefined : bcvMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
+    const activeRate = rateForMode();
     if (!activeRate || !bcvAmount) return;
 
     const bcvValue = parseFloat(bcvAmount);
@@ -546,7 +599,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates: liveRate
     const nextMode = bcvMode === 'usd' ? 'eur' : 'usd';
     setBcvMode(nextMode);
     // Recalcular el campo BCV con la nueva tasa
-    const activeRate = nextMode === 'usd' ? bcvRate?.rate : euroRate?.rate;
+    const activeRate = rateForMode(nextMode);
     if (!activeRate || !calculator.amount) return;
     const { fromCurrency, toCurrency, amount, result } = calculator;
     let vesAmount: number | undefined;
@@ -586,8 +639,8 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates: liveRate
               toCurrency={calculator.toCurrency}
               onFromAmountChange={handleFromAmountChange}
               onToAmountChange={handleToAmountChange}
-              bcvRate={history.at ? undefined : bcvRate?.rate}
-              euroRate={history.at ? undefined : euroRate?.rate}
+              bcvRate={rateForMode('usd')}
+              euroRate={rateForMode('eur')}
               bcvMode={bcvMode}
               onBCVModeToggle={handleBCVModeToggle}
               bcvAmount={calculator.bcvAmount}
@@ -838,7 +891,7 @@ const CurrencyCalculator: React.FC<CurrencyCalculatorProps> = ({ rates: liveRate
             toCurrency={calculator.toCurrency}
             rate={calculator.rate}
             inversePercentage={calculator.rateInverse ?? currentRate?.inverse_percentage ?? false}
-            bcvAmount={history.at ? undefined : calculator.bcvAmount}
+            bcvAmount={calculator.bcvAmount}
             bcvMode={bcvMode}
             historicalAt={history.at ?? undefined}
           />
